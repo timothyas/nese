@@ -1,0 +1,44 @@
+name: nesse
+channels:
+  - conda-forge
+dependencies:
+  - python=3.13
+  # Base array ops
+  - numpy
+  - scipy
+  - seaborn
+  # xarray and files
+  - xarray
+  - pandas
+  - cf_xarray
+  - cftime
+  - netCDF4
+  - h5netcdf
+  - zarr<3
+  - cfgrib
+  - bottleneck
+  - flox
+  - dask[complete]
+  - fsspec
+  # jupyter and plotting
+  - jupyter
+  - matplotlib
+  - cartopy
+  - cmocean
+  - ipython
+  - ipykernel
+  - jupyeterlab_vim
+  # gridding
+  - xesmf
+  - healpy
+  # data access
+  - copernicusmarine
+  # developer
+  - setuptools_scm>=8
+  - pytest
+  - pytest-dependency
+  - coverage
+  - pip
+  - pip:
+    - xmovie @ git+https://github.com/timothyas/xmovie.git@21f4c541ba46b88bb14e98c52f1d57f0d61c0508
+    - nnja-ai[complete]>=1.0.0

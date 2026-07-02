@@ -1,3 +1,16 @@
+# Data
+*.zarr
+*.nc
+*.tar.gz
+*.gz
+*.csv
+
+# Figures
+*.png
+*.pdf
+*.jpeg
+*.jpg
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
