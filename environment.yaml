@@ -1,4 +1,4 @@
-name: nesse
+name: nese
 channels:
   - conda-forge
 dependencies:
