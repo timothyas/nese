@@ -27,12 +27,14 @@ dependencies:
   - cmocean
   - ipython
   - ipykernel
-  - jupyeterlab_vim
+  - jupyterlab_vim
   # gridding
   - xesmf
   - healpy
   # data access
   - copernicusmarine
+  # Other NESE related
+  - omegaconf
   # developer
   - setuptools_scm>=8
   - pytest
