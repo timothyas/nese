@@ -21,15 +21,15 @@ transforms:
 
 target:
   name: base
-  path: ${oc.env:PWD}/data/hpx6
+  path: ${oc.env:PWD}/data/hpx6-mpi
   rename: null
   precision:
   store_float64_as_float32: true
   compression: blosc_zstd
 
 logistics:
-  cache_dir: ${oc.env:PWD}/cache
   log_dir: ${target.path}/logs
+  use_mpi: true
 
 attrs:
   something: good
