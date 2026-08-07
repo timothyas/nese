@@ -1,0 +1,57 @@
+source:
+  name: cmems_l3_sla
+  time:
+    start: 2000-01-01
+    #end: 2010-12-31
+    end: 2001-12-31
+    freq: 24h
+  variables:
+    - sla_filtered
+  groups:
+    - topex_poseidon
+    - ers_1
+    - ers_1_geodetic
+    - ers_2
+    - gfo
+    - jason_1
+    - envisat
+    - topex_poseidon_interleaved
+    - jason_2
+    - jason_1_interleaved
+    - cryosat_2
+    - envisat_new_orbit
+    - jason_1_geodetic
+    - saral
+    - haiyang_2a
+    - saral_geodetic
+    - haiyang_2a_geodetic
+    - jason_3
+    - sentinel_3a
+    - jason_2_interleaved
+    - jason_2_geodetic
+    - sentinel_3b
+    - haiyang_2b
+    - cryosat_2_interleaved
+    - sentinel_6a
+    - jason_3_interleaved
+    - swot_nadir_calval
+    - swot_nadir
+    - jason_3_geodetic
+
+transforms:
+  bin_to_healpix:
+    hpx_level: 6
+    ordering_nested: true
+    sparse: false
+    binning:
+      method: gaussian_kernel
+      kernel_length: null
+
+target:
+  name: anemoi
+  store_dir: ${oc.env:PWD}/anemoi-hpx6-24h
+  store_float64_as_float32: true
+  compression: blosc_zstd
+
+logistics:
+  use_mpi: true

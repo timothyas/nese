@@ -4,6 +4,7 @@
 *.tar.gz
 *.gz
 *.csv
+*.pt
 
 # Figures
 *.png
