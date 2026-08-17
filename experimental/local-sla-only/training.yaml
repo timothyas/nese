@@ -2,12 +2,7 @@ data:
   format: zarr
   frequency: 24h
   datasets:
-    data:
-      # Every channel gets an explicit role, so `prognostic` (the leftover default) is
-      # empty. That makes model.input and model.output fully disjoint: the model
-      # consumes per-mission observations and emits a single merged `sla` estimate.
-      # With prognostic empty the residual add in encoder_processor_decoder.py:158 is a
-      # silent no-op on empty index tensors, and the rollout machinery is inert.
+    ocean:
       forcing:
       - sla_filtered_ers_2
       - sla_filtered_gfo
@@ -22,9 +17,9 @@ data:
       diagnostic:
       - sla
 
-      # Loss targets only: present in data.output, excluded from model.output, so this
-      # does not change what the model emits. The counts are listed here because
-      # LossVariableMapper resolves target_variables in data.output space, and
+      # Loss targets only: present in <data>.output, excluded from model.output.
+      # The counts are listed here because
+      # LossVariableMapper resolves target_variables in <data>.output space, and
       # CountMaskedMSE needs each mission's count alongside its observations.
       target:
       - sla_filtered_ers_2
@@ -55,13 +50,13 @@ data:
           _target_: anemoi.models.preprocessing.normalizer.InputNormalizer
           config:
             default: mean-std
-            # `max` is x/maximum with no additive shift, so a zero count stays zero
-            # after normalisation. CountMaskedMSE relies on that to recover "this
-            # mission observed this cell" from the target tensor.
             max:
-            - obs_count_ers_2
-            - obs_count_gfo
-            - obs_count_topex_poseidon
+              - obs_count_ers_2
+              - obs_count_gfo
+              - obs_count_topex_poseidon
+              - elevation
+            none:
+              - land_fraction
 
 dataloader:
   prefetch_factor: 2
@@ -165,16 +160,17 @@ task:
 graph:
   overwrite: false
   nodes:
-    # Observations are already binned onto this mesh, so model input and state estimate
-    # share one node set. Separate obs/grid node sets only become necessary once
-    # observations stay at their native locations -- and that is not configurable:
-    # encoder_processor_decoder.py:44,81 build encoder from (dataset_name -> hidden) and
-    # decoder from (hidden -> dataset_name), the same node set both ways.
     data:
       node_builder:
         _target_: anemoi.graphs.nodes.HEALPixNodes
         resolution: 6   # nside=64, 49152 cells, ~0.9 deg
-      attributes: ${graph.attributes.nodes}
+      attributes:
+        area_weight: ${graph.attributes.nodes.area_weight}
+        sea_mask:
+          _target_: nese_training.graph_attributes.DatasetVariableBelow
+          dataset: ${system.input.elevation_dataset}
+          variable: land_fraction
+          threshold: 0.1 # keep edges with land_fraction < threshold
 
     hidden:
       node_builder:
@@ -185,14 +181,16 @@ graph:
   - source_name: data
     target_name: hidden
     edge_builders:
-    - _target_: anemoi.graphs.edges.KNNEdges
-      num_nearest_neighbours: 12
+    - _target_: anemoi.graphs.edges.CutOffEdges
+      cutoff_distance_km: 200
+      source_mask_attr_name: sea_mask
     attributes: ${graph.attributes.edges}
   - source_name: hidden
     target_name: data
     edge_builders:
     - _target_: anemoi.graphs.edges.KNNEdges
       num_nearest_neighbours: 3
+      target_mask_attr_name: sea_mask
     attributes: ${graph.attributes.edges}
   attributes:
     nodes:
@@ -203,7 +201,7 @@ graph:
     edges:
       edge_length:
         _target_: anemoi.graphs.edges.attributes.EdgeLength
-        norm: unit-std
+        norm: unit-max
       edge_dirs:
         _target_: anemoi.graphs.edges.attributes.EdgeDirection
         norm: unit-std
