@@ -33,6 +33,17 @@ data:
       # inverse. Imputation must come first because InputImputer fills with raw-space
       # statistics.
       processors:
+        # Listed first so that, with the inverse chain reversed, it runs last: after
+        # denormalising and after the imputer's de-imputation, on raw-space values. Its
+        # forward pass is a no-op, so the imputer still sees the NaNs it has to fill.
+        obs_nan_restorer:
+          _target_: nese_training.processors.ObsCountNaNRestorer
+          masked_by:
+            sla_filtered_ers_2: obs_count_ers_2
+            sla_filtered_gfo: obs_count_gfo
+            sla_filtered_topex_poseidon: obs_count_topex_poseidon
+            # sla is a copy of sla_filtered_topex_poseidon, so it shares that coverage.
+            sla: obs_count_topex_poseidon
         imputer:
           _target_: anemoi.models.preprocessing.imputer.InputImputer
           config:
@@ -159,7 +170,7 @@ task:
   validation_rollout: null
 
 graph:
-  overwrite: false
+  overwrite: true
   nodes:
     ocean:
       node_builder:
@@ -208,9 +219,9 @@ graph:
       edge_dirs:
         _target_: anemoi.graphs.edges.attributes.EdgeDirection
         norm: unit-std
-  post_processors:
-    - _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
-      nodes_name: ocean
+  post_processors: []
+  #  - _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
+  #    nodes_name: ocean
 
 model:
   num_channels: 64
@@ -517,7 +528,7 @@ diagnostics:
 
 system:
   output:
-    root: /Users/timith/work/nese/experimental/local-sla-only
+    root: /Users/timith/work/nese/experimental/local-sla-only/runs/no-removed-nodes
     logs:
       root: logs
       wandb: wandb
@@ -531,10 +542,11 @@ system:
     plots: plots
     profiler: profiler
   input:
-    dataset: ${system.output.root}/anemoi-hpx6-24h/dataset.zarr
-    obs_count_dataset: ${system.output.root}/anemoi-hpx6-24h/obs_count_f32.zarr
-    elevation_dataset: ${system.output.root}/gebco-anemoi-hpx6/dataset.zarr
-    graph: ${system.output.root}/graph.pt
+    root: /Users/timith/work/nese/experimental/local-sla-only
+    dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
+    obs_count_dataset: ${system.input.root}/anemoi-hpx6-24h/obs_count_f32.zarr
+    elevation_dataset: ${system.input.root}/gebco-anemoi-hpx6/dataset.zarr
+    graph: ${system.input.root}/graph.pt
     loss_matrices_path: null
     truncation: null
     truncation_inv: null
