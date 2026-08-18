@@ -54,6 +54,7 @@ data:
               - obs_count_ers_2
               - obs_count_gfo
               - obs_count_topex_poseidon
+            min-max:
               - elevation
             none:
               - land_fraction
@@ -71,8 +72,8 @@ dataloader:
     validation: 1
     test: 1
   limit_batches:
-    training: null
-    validation: null
+    training: 20
+    validation: 20
     test: 1
 
   # The two stores nese-dataprep writes are joined here rather than on disk.
@@ -112,7 +113,7 @@ dataloader:
 
   training:
     datasets:
-      data:
+      ocean:
         dataset_config:
           dataset: ${dataloader.dataset}
           frequency: ${data.frequency}
@@ -120,7 +121,7 @@ dataloader:
         end: '2001-06-30'
   validation:
     datasets:
-      data:
+      ocean:
         dataset_config:
           dataset: ${dataloader.dataset}
           frequency: ${data.frequency}
@@ -128,7 +129,7 @@ dataloader:
         end: '2001-12-31'
   test:
     datasets:
-      data:
+      ocean:
         dataset_config:
           dataset: ${dataloader.dataset}
           frequency: ${data.frequency}
@@ -160,10 +161,11 @@ task:
 graph:
   overwrite: false
   nodes:
-    data:
+    ocean:
       node_builder:
         _target_: anemoi.graphs.nodes.HEALPixNodes
         resolution: 6   # nside=64, 49152 cells, ~0.9 deg
+        nest_ordering: true
       attributes:
         area_weight: ${graph.attributes.nodes.area_weight}
         sea_mask:
@@ -176,9 +178,10 @@ graph:
       node_builder:
         _target_: anemoi.graphs.nodes.HEALPixNodes
         resolution: 5   # nside=32, 12288 cells, ~1.8 deg
+        nest_ordering: false
       attributes: ${graph.attributes.nodes}
   edges:
-  - source_name: data
+  - source_name: ocean
     target_name: hidden
     edge_builders:
     - _target_: anemoi.graphs.edges.CutOffEdges
@@ -186,7 +189,7 @@ graph:
       source_mask_attr_name: sea_mask
     attributes: ${graph.attributes.edges}
   - source_name: hidden
-    target_name: data
+    target_name: ocean
     edge_builders:
     - _target_: anemoi.graphs.edges.KNNEdges
       num_nearest_neighbours: 3
@@ -205,7 +208,9 @@ graph:
       edge_dirs:
         _target_: anemoi.graphs.edges.attributes.EdgeDirection
         norm: unit-std
-  post_processors: []
+  post_processors:
+    - _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
+      nodes_name: ocean
 
 model:
   num_channels: 64
@@ -247,7 +252,6 @@ model:
     use_rotary_embeddings: false
     layer_kernels: ${model.layer_kernels}
 
-  # graph_attention_backend is pyg rather than triton: triton is CUDA-only.
   encoder:
     _target_: anemoi.models.layers.mapper.GraphTransformerForwardMapper
     trainable_size: ${model.trainable_parameters.data2hidden}
@@ -262,6 +266,7 @@ model:
     layer_kernels: ${model.layer_kernels}
     shard_strategy: edges
     graph_attention_backend: pyg
+
   decoder:
     _target_: anemoi.models.layers.mapper.GraphTransformerBackwardMapper
     trainable_size: ${model.trainable_parameters.hidden2data}
@@ -278,8 +283,7 @@ model:
     shard_strategy: edges
     graph_attention_backend: pyg
 
-  # Inert with prognostic empty -- the add indexes empty tensors -- but SkipConnection
-  # still slices and broadcasts a full tensor to feed it.
+  # Residual data connection does nothing if our predicted state is diagnostic
   residual:
     _target_: anemoi.models.layers.residual.SkipConnection
     step: -1
@@ -297,18 +301,13 @@ model:
     - edge_length
     - edge_dirs
     nodes: []
-  compile: []          # torch.compile of GraphTransformerConv is not worth it on CPU
-  bounding: []         # the stock bounding clamps `tp`, which does not exist here
+  compile: []
+  bounding: []
 
 training:
   scalers:
     datasets:
-      data:
-        # The stock global scalers are ERA5-shaped: pressure-level scaling needs a `pl`
-        # variable group, and general_variable weights name q/t/u/v/z. Neither applies
-        # to a single sea-level channel. Coverage weighting lives inside CountMaskedMSE,
-        # since it needs per-mission counts at the target time and scaler callbacks
-        # never see the batch.
+      ocean:
         node_weights:
           _target_: anemoi.training.losses.scalers.GraphNodeAttributeScaler
           nodes_attribute_name: area_weight
@@ -345,7 +344,7 @@ training:
   deterministic: false
   precision: 32-true #16-mixed slower on mac
   accum_grad_batches: 1
-  num_sanity_val_steps: 0
+  num_sanity_val_steps: 2
   gradient_clip:
     val: 32.0
     algorithm: value
@@ -368,7 +367,7 @@ training:
   # loss_mask_training from nan_locations[:, 0], the oldest input bin, not the target.
   training_loss:
     datasets:
-      data:
+      ocean:
         _target_: anemoi.training.losses.combined.CombinedLoss
         loss_weights: [1, 1, 1]
         losses:
@@ -391,15 +390,15 @@ training:
   # loss is the same CountMaskedMSE and is reported anyway.
   validation_metrics:
     datasets:
-      data: {}
+      ocean: {}
 
   variable_groups:
     datasets:
-      data:
+      ocean:
         default: sfc
   metrics:
     datasets:
-      data: []
+      ocean: []
   max_epochs: null
   max_steps: 100
   submodules_to_freeze: []
@@ -430,7 +429,68 @@ diagnostics:
   # -- with a single rollout step it adds nothing but its own assumptions, and its
   # assertion at callbacks/evaluation.py:72 assumes a contiguous [inputs..., outputs...]
   # time axis.
-  plot: null
+  plot:
+    settings:
+      asynchronous: true
+      projection_kind: equirectangular # TODO
+      datashader: true
+      precip_and_related_fields: []
+      colormaps:
+        default:
+          _target_: anemoi.training.utils.custom_colormaps.MatplotlibColormap
+          name: plasma
+        # in order to use distinctipy, you need to install the package
+        # default:
+        #   _target_: anemoi.training.utils.custom_colormaps.DistinctipyColormap
+        #   n_colors: 8
+        error:
+          _target_: anemoi.training.utils.custom_colormaps.MatplotlibColormap
+          name: RdBu_r
+
+    sample_idx: 0
+    parameters:
+      - sla
+    datasets_to_plot:
+      - ocean
+    focus_areas:
+      europe:
+        latlon_bbox: [30.0, -20.0, 60.0, 40.0]
+    frequency:
+      batch: 5
+      epoch: 1
+    callbacks:
+      - _target_: anemoi.training.diagnostics.callbacks.plot.GraphFeaturePlot
+        every_n_epochs: ${diagnostics.plot.frequency.epoch}
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+
+      - _target_: anemoi.training.diagnostics.callbacks.plot.LossCurvePlot
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+        parameter_groups: []
+        every_n_batches: ${diagnostics.plot.frequency.batch}
+
+      - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
+        tag_infix: sample
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+        sample_idx: ${diagnostics.plot.sample_idx}
+        parameters: ${diagnostics.plot.parameters}
+        every_n_batches: ${diagnostics.plot.frequency.batch}
+        with_auxiliary: true
+        focus_area: null
+        plot_fn:
+          _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.sample_plot_fn
+          _partial_: true
+
+      - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
+        tag_infix: histo
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+        sample_idx: ${diagnostics.plot.sample_idx}
+        every_n_batches: ${diagnostics.plot.frequency.batch}
+        parameters: ${diagnostics.plot.parameters}
+        plot_fn:
+          _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.histogram_plot_fn
+          _partial_: true
+          # Optional overrides (shown with defaults):
+          # log_scale: false
   callbacks: []
   debug:
     anomaly_detection: false

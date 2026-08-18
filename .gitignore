@@ -5,6 +5,7 @@
 *.gz
 *.csv
 *.pt
+*.ckpt
 
 # Figures
 *.png

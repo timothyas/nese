@@ -14,7 +14,7 @@ nese-dataprep create gebco.yaml
 ## Train the model
 
 ```
-anemoi-training train --config-name=training
+MPLBACKEND=Agg anemoi-training train --config-name=training
 ```
 
 ## Create graphs

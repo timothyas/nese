@@ -24,26 +24,38 @@ def main(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst)
     store = zarr.open(str(dst), mode="a")
     counts = store["data"]
+    src_dtype = counts.dtype
 
-    if counts.dtype == "float32":
-        print(f"{dst} already float32")
-        return
+    if src_dtype != "float32":
+        tmp = store.create_dataset(
+            "data_f32",
+            shape=counts.shape,
+            chunks=counts.chunks,
+            dtype="float32",
+            compressor=counts.compressor,
+            overwrite=True,
+        )
+        # create_dataset makes a bare array, so the source attributes have to be
+        # carried over explicitly. _ARRAY_DIMENSIONS is what names the axes for
+        # xarray; without it xarray refuses the store entirely.
+        tmp.attrs.update(dict(counts.attrs))
 
-    tmp = store.create_dataset(
-        "data_f32",
-        shape=counts.shape,
-        chunks=counts.chunks,
-        dtype="float32",
-        compressor=counts.compressor,
-        overwrite=True,
-    )
-    for i in range(counts.shape[0]):
-        tmp[i] = counts[i].astype("float32")
+        for i in range(counts.shape[0]):
+            tmp[i] = counts[i].astype("float32")
 
-    del store["data"]
-    store.move("data_f32", "data")
+        del store["data"]
+        store.move("data_f32", "data")
 
-    print(f"{dst}: {counts.dtype} -> {zarr.open(str(dst), mode='r')['data'].dtype}")
+    # copytree brought the source .zmetadata along, and neither create_dataset nor
+    # move updates it, so the consolidated metadata still advertises the old dtype.
+    # Readers that trust it -- xarray.open_zarr defaults to consolidated=True -- then
+    # decode the float32 chunks as int32 and hand back integers. Rewrite it last, so
+    # the consolidated view matches the .zarray files on disk.
+    zarr.consolidate_metadata(store.store)
+
+    check = zarr.open_consolidated(str(dst), mode="r")["data"].dtype
+    print(f"{dst}: {src_dtype} -> {check} (consolidated metadata rewritten)")
+    assert check == "float32", f"{dst}: consolidated dtype is {check}, expected float32"
 
 
 if __name__ == "__main__":

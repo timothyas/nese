@@ -4,6 +4,7 @@ nodes:
     node_builder:
       _target_: anemoi.graphs.nodes.HEALPixNodes
       resolution: 6
+      nest_ordering: true
     attributes:
       area_weight:
         _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
@@ -18,6 +19,7 @@ nodes:
     node_builder:
       _target_: anemoi.graphs.nodes.HEALPixNodes
       resolution: 5
+      nest_ordering: false
     attributes:
       area_weight:
         _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
@@ -65,4 +67,6 @@ attributes:
     edge_dirs:
       _target_: anemoi.graphs.edges.attributes.EdgeDirection
       norm: unit-std
-post_processors: []
+post_processors:
+- _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
+  nodes_name: data
