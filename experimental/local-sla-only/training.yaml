@@ -444,7 +444,7 @@ diagnostics:
     settings:
       asynchronous: true
       projection_kind: equirectangular # TODO
-      datashader: true
+      datashader: false
       precip_and_related_fields: []
       colormaps:
         default:
@@ -466,6 +466,9 @@ diagnostics:
     focus_areas:
       europe:
         latlon_bbox: [30.0, -20.0, 60.0, 40.0]
+      nordic_seas:
+        name: nordic_seas
+        latlon_bbox: [55.0, 0.0, 82.0, 40.0]
     frequency:
       batch: 5
       epoch: 1
@@ -486,7 +489,7 @@ diagnostics:
         parameters: ${diagnostics.plot.parameters}
         every_n_batches: ${diagnostics.plot.frequency.batch}
         with_auxiliary: true
-        focus_area: null
+        focus_area: ${diagnostics.plot.focus_areas.nordic_seas}
         plot_fn:
           _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.sample_plot_fn
           _partial_: true
