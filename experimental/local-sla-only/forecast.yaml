@@ -1,8 +1,9 @@
-root_dir: runs/no-removed-nodes
-run_id: e3a8ff96-1290-46fa-881e-d03ba14e82a9
-checkpoint: ${root_dir}/checkpoint/${run_id}/inference-last.ckpt
+debugging_info:
+  root_dir: runs/no-removed-nodes
+  run_id: e3a8ff96-1290-46fa-881e-d03ba14e82a9
+checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 output:
-  netcdf: ${root_dir}/inference/${date}.nc
+  netcdf: ${debugging_info.root_dir}/inference/${date}.nc
 date: 2000-07-02T12
 lead_time: 24h
 allow_nans: true
