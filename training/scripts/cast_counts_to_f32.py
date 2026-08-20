@@ -1,13 +1,14 @@
 """Rewrite an anemoi obs_count store with a float32 data array.
 
-nese-dataprep writes counts as int32, which is right for the data but wrong for the
-join: numpy promotes int32 + float32 to float64, so the joined dataset hands the model
-a float64 batch. anemoi overrides transfer_batch_to_device to only move the tensor, not
+A migration tool for stores written before nese-dataprep's Anemoi target switched its
+counts to float32. Stores produced after that change need no conversion; check the
+dtype of `<store>/data` before reaching for this.
+
+The problem it solves: int32 counts are right for the data but wrong for the join, where
+numpy promotes int32 + float32 to float64, so the joined dataset hands the model a
+float64 batch. anemoi overrides transfer_batch_to_device to only move the tensor, not
 cast it, so Lightning's precision plugin never intervenes and the first Linear fails
 with "mat1 and mat2 must have the same dtype".
-
-The permanent fix belongs in nese-dataprep (write the counts float32). This converts an
-existing store so the pipeline can run without re-binning from source.
 """
 
 import shutil
@@ -34,6 +35,13 @@ def main(src: Path, dst: Path) -> None:
             dtype="float32",
             compressor=counts.compressor,
             overwrite=True,
+            # Same hazard the store itself guards against, and it only appears once the
+            # array is float: zarr defaults fill_value to the dtype's zero, and xarray
+            # reads fill_value as _FillValue and CF-decodes every match. Without this,
+            # every zero count -- the vast majority of cells -- comes back NaN from
+            # xr.open_zarr. anemoi reads through the raw zarr API and is unaffected,
+            # which is exactly what makes it easy to miss.
+            fill_value=None,
         )
         # create_dataset makes a bare array, so the source attributes have to be
         # carried over explicitly. _ARRAY_DIMENSIONS is what names the axes for

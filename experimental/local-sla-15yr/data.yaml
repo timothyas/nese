@@ -20,7 +20,10 @@ source:
     - jason_1_geodetic
     - saral
     - haiyang_2a
-    # Only available during validation period, skip for now to avoid potential nan issues
+    # Only available during validation period,
+    # skip because this would create NaNs, since
+    # max normalization of the obs_count results in
+    # a divide-by-zero situation ...
     #- saral_geodetic
 
 transforms:
