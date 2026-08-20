@@ -173,7 +173,7 @@ dataloader:
   pin_memory: true
   read_group_size: ${system.hardware.num_gpus_per_model}
   num_workers:
-    training: 1
+    training: 2
     validation: 1
     test: 1
   batch_size:
@@ -283,7 +283,7 @@ dataloader:
 # Offsets come out as [-𝚫t, 0] -> [+𝚫t].
 task:
   _target_: anemoi.training.tasks.Forecaster
-  multistep_input: 2
+  multistep_input: 3
   multistep_output: 1
   timestep: 24H
   rollout:
@@ -467,9 +467,9 @@ training:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
       t_initial: ${training.max_steps}
-      warmup_t: 20 #500
+      warmup_t: 500
       t_in_epochs: false
-    lr: 1.0e-04
+    lr: 5.0e-04
     pl_lr_scheduler:
       interval: step
 
@@ -530,7 +530,7 @@ training:
     datasets:
       ocean: []
   max_epochs: null
-  max_steps: 100 #3000
+  max_steps: 3000
   submodules_to_freeze: []
 
 diagnostics:
@@ -558,7 +558,7 @@ diagnostics:
   plot:
     settings:
       asynchronous: true
-      projection_kind: equirectangular # TODO
+      projection_kind: equirectangular
       datashader: false
       precip_and_related_fields: []
       colormaps:
@@ -576,12 +576,13 @@ diagnostics:
       - ocean
     focus_areas:
       europe:
+        name: europe
         latlon_bbox: [30.0, -20.0, 60.0, 40.0]
       nordic_seas:
         name: nordic_seas
         latlon_bbox: [55.0, 0.0, 82.0, 40.0]
     frequency:
-      batch: 5
+      batch: 300
       epoch: 1
     callbacks:
       - _target_: anemoi.training.diagnostics.callbacks.plot.GraphFeaturePlot
@@ -600,7 +601,7 @@ diagnostics:
         parameters: ${diagnostics.plot.parameters}
         every_n_batches: ${diagnostics.plot.frequency.batch}
         with_auxiliary: true
-        focus_area: ${diagnostics.plot.focus_areas.nordic_seas}
+        focus_area: ${diagnostics.plot.focus_areas.europe}
         plot_fn:
           _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.sample_plot_fn
           _partial_: true
@@ -621,11 +622,22 @@ diagnostics:
     anomaly_detection: false
   log:
     interval: 10
-    # base_schema.py:218 reads diagnostics.log.mlflow.enabled unconditionally, so the
-    # key must exist even with the logger off.
+    # base_schema.py:218-222 reads diagnostics.log.mlflow.enabled and .save_dir
+    # unconditionally, so both keys must exist even with the logger off.
+    #
+    # save_dir is then overwritten with the expanded ${system.output.logs.mlflow}, and
+    # that happens with config_validation off too -- UnvalidatedBaseSchema inherits the
+    # same SchemaCommonMixin.model_post_init. The value here is only a placeholder for a
+    # key that has to be present.
     mlflow:
-      enabled: false
+      enabled: true
       save_dir: ${system.output.logs.mlflow}
+      _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
+      offline: true
+      experiment_name: sea-mask-in-model
+      project_name: local-sla-15yr
+      terminal: false
+      system: false
     wandb:
       enabled: false
   enable_progress_bar: true
@@ -642,7 +654,7 @@ diagnostics:
 
 system:
   output:
-    root: /Users/timith/work/nese/experimental/local-sla-15yr/runs/no-removed-nodes
+    root: /Users/timith/work/nese/experimental/local-sla-15yr/runs/${diagnostics.log.mlflow.experiment_name}
     logs:
       root: logs
       wandb: wandb
@@ -679,3 +691,10 @@ system:
 # Note `anemoi-training config validate` ignores this flag by design and will still
 # report the loss as invalid.
 config_validation: false
+
+# MLFLOW_ALLOW_FILE_STORE: mlflow 3.x refuses a filesystem tracking backend unless set
+hydra:
+  job:
+    env_set:
+      MLFLOW_ALLOW_FILE_STORE: "true"
+      #MPLBACKEND: Agg # for some reason this doesn't work
