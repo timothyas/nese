@@ -73,6 +73,7 @@ data:
         # Listed first so that, with the inverse chain reversed, it runs last: after
         # denormalising and after the imputer's de-imputation, on raw-space values. Its
         # forward pass is a no-op, so the imputer still sees the NaNs it has to fill.
+        # Note that this obs_nan_restorer is just to make the training diagnostic plots sensible.
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
@@ -89,10 +90,18 @@ data:
             sla_filtered_saral: obs_count_saral
             sla_filtered_topex_poseidon: obs_count_topex_poseidon
             sla_filtered_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
-            # sla is a copy of sla_filtered_jason_2, so it shares that coverage.
-            sla: obs_count_jason_2
+          # `sla` is not masked to one mission: its truth column is rebuilt from every
+          # mission that observed the bin, count-weighted. The column on disk is a copy of
+          # one mission only because anemoi needs a diagnostic to exist there -- merging
+          # the missions in nese-dataprep would pre-empt what the model is being trained
+          # to do. Same spec as the loss, so the mission list stays in one place.
+          composed: ${training.training_loss.datasets.ocean.observations}
         imputer:
-          _target_: anemoi.models.preprocessing.imputer.InputImputer
+          # Pooled so the fill agrees with the normaliser: an unobserved cell is filled in
+          # raw space and centred afterwards, so a per-mission fill under a pooled centre
+          # would sit up to 0.25 sigma off zero, varying by mission and so by era.
+          _target_: nese_training.processors.PooledObservationImputer
+          pool: ${training.training_loss.datasets.ocean.observations}
           config:
             default: none
             # Unobserved cells are NaN. Fill with the field mean; CountMaskedMSE (etc) zeroes
@@ -113,7 +122,16 @@ data:
             - sla_filtered_topex_poseidon_interleaved
             - sla
         normalizer:
-          _target_: anemoi.models.preprocessing.normalizer.InputNormalizer
+          # One mean/stdev for `sla` and all 13 `sla_filtered_*`. Per-mission statistics
+          # look neutral but are not: a mission's mean is the sea level of the years it
+          # flew (the means track observation epoch at r=0.99, 2.6 mm/yr), so per-mission
+          # centring subtracts the trend and leaves the one predicted field scored against
+          # targets whose zero points sit 0.44 sigma apart.
+          #
+          # `pool` reuses the loss's own `observations` spec, so the mission list is
+          # recovered from one place and cannot drift between loss and normaliser.
+          _target_: nese_training.processors.PooledObservationNormalizer
+          pool: ${training.training_loss.datasets.ocean.observations}
           config:
             default: mean-std
             max:

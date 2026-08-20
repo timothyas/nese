@@ -1,7 +1,12 @@
 """Preprocessors for observation-supervised state estimation."""
 
 import torch
+from anemoi.models.preprocessing.imputer import InputImputer
+from anemoi.models.preprocessing.normalizer import InputNormalizer
 from torch import nn
+
+from nese_training.observations import pool_statistics
+from nese_training.observations import resolve_groups
 
 
 class ObsCountNaNRestorer(nn.Module):
@@ -26,6 +31,13 @@ class ObsCountNaNRestorer(nn.Module):
     Only tensors shaped like ``data.output.full`` are touched, because only those carry
     the count columns. Model-output tensors pass through untouched, so predictions stay
     dense and only the truth regains its gaps -- which is the comparison the plots want.
+
+    ``composed`` additionally rebuilds a predicted field's truth column as the count-
+    weighted mean of every mission that observed the bin; see :meth:`_compose`. Without
+    it that column holds a single mission, which for this archive means a blank truth
+    panel on 56% of dates and a sixth of the coverage the loss actually scores against.
+    Both settings take the same spec as the loss's ``observations``, so one config block
+    feeds the loss, the pooled statistics and this.
     """
 
     def __init__(
@@ -33,9 +45,11 @@ class ObsCountNaNRestorer(nn.Module):
         masked_by: dict[str, str],
         data_indices=None,  # noqa: ANN001
         statistics: dict | None = None,
+        composed: dict | None = None,
     ) -> None:
         super().__init__()
         self.masked_by = dict(masked_by)
+        self.composed = dict(composed or {})
         self.data_indices = data_indices
 
     def forward(self, x: torch.Tensor, in_place: bool = True, inverse: bool = False, **_kwargs) -> torch.Tensor:
@@ -62,4 +76,83 @@ class ObsCountNaNRestorer(nn.Module):
             observed = x[..., count_col] > 0
             x[..., value_col] = torch.where(observed, x[..., value_col], torch.nan)
 
+        return self._compose(x, column, name_to_index)
+
+    def _compose(self, x: torch.Tensor, column: dict, name_to_index: dict) -> torch.Tensor:
+        """Fill a predicted field's truth column from every mission that observed the bin.
+
+        The column arrives holding one mission's observations, which is what the dataset
+        can offer -- anemoi needs a diagnostic to exist on disk, and merging the missions
+        there would pre-empt the thing the model is being trained to do. So the merge
+        happens here, on the way out, where it reaches the plots and nothing else.
+
+        Weighting is by obs count, and the missions being combined are simultaneous, so
+        they are measuring one sea state rather than different epochs of a rising one
+        (co-located same-day pairs differ by 0.21 sigma, against 0.44 sigma between the
+        record's extreme eras). Cells nobody saw stay NaN, so the truth keeps its gaps
+        and only the prediction is dense.
+        """
+        for field, spec in self.composed.items():
+            field_col = column.get(name_to_index.get(field))
+            if field_col is None:
+                continue
+
+            weighted = torch.zeros_like(x[..., field_col])
+            weights = torch.zeros_like(weighted)
+            for group in resolve_groups(spec, name_to_index, type(self).__name__):
+                value_col = column.get(name_to_index.get(f"{spec['observed_as']}_{group}"))
+                count_col = column.get(name_to_index.get(spec["count"].format(group=group)))
+                if value_col is None or count_col is None:
+                    continue
+                count = x[..., count_col].clamp_min(0)
+                observed = count > 0
+                # The gaps are NaN by now, and NaN*0 is NaN rather than 0, so they have to
+                # be cleared before they enter the sum rather than masked after.
+                value = torch.nan_to_num(x[..., value_col], nan=0.0)
+                weighted = weighted + torch.where(observed, value * count, torch.zeros_like(count))
+                weights = weights + torch.where(observed, count, torch.zeros_like(count))
+
+            seen = weights > 0
+            x[..., field_col] = torch.where(
+                seen,
+                weighted / torch.where(seen, weights, torch.ones_like(weights)),
+                torch.full_like(weighted, torch.nan),
+            )
+
         return x
+
+
+class _PooledStatistics:
+    """Constructor mixin for processors that share one map across a field's groups.
+
+    ``pool`` takes the same spec as the loss's ``observations``, so both recover the
+    mission list from the same names and cannot drift apart. Omitting it leaves the
+    processor behaving exactly as its anemoi base class.
+    """
+
+    def __init__(self, config=None, data_indices=None, statistics=None, pool=None) -> None:
+        if pool:
+            statistics = pool_statistics(
+                pool, data_indices.data.input.name_to_index, statistics, type(self).__name__
+            )
+        super().__init__(config, data_indices, statistics)
+
+
+class PooledObservationNormalizer(_PooledStatistics, InputNormalizer):
+    """``InputNormalizer`` giving a field and its observing groups one mean and stdev.
+
+    See :func:`nese_training.observations.pool_statistics` for why the per-mission
+    default is wrong here -- in short, a mission's mean is the sea level of the years it
+    flew, so per-mission centring subtracts the very trend the model should learn.
+    """
+
+
+class PooledObservationImputer(_PooledStatistics, InputImputer):
+    """``InputImputer`` filling from the same pooled statistics as the normaliser.
+
+    Needed for the pair to agree. The imputer fills an unobserved cell in raw space and
+    the normaliser then centres it, so if the imputer used the mission's own mean while
+    the normaliser used the pooled one, the fill would land up to 0.25 sigma off zero --
+    varying by mission, and therefore by era, across the ~77% of cells that are
+    unobserved. Sharing the pooled mean puts every filled cell at exactly zero.
+    """

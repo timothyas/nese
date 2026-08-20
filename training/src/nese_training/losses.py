@@ -9,6 +9,9 @@ from anemoi.training.losses.base import LossFactoryContextKey
 from anemoi.training.utils.enums import TensorDim
 from anemoi.training.utils.index_space import IndexSpace
 
+from nese_training.observations import normalise_spec
+from nese_training.observations import resolve_groups
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -134,8 +137,6 @@ class ObservationMaskedMSE(FunctionalLoss):
     name: str = "observation_masked_mse"
     factory_context_keys = frozenset({LossFactoryContextKey.DATA_INDICES})
 
-    DEFAULT_COUNT = "obs_count_{group}"
-
     def __init__(
         self,
         observations: dict[str, Any],
@@ -154,28 +155,10 @@ class ObservationMaskedMSE(FunctionalLoss):
         if data_indices is not None:
             self.set_data_indices(data_indices)
 
-    @staticmethod
-    def _normalise_spec(spec: str | dict) -> dict:
-        if isinstance(spec, str):
-            spec = {"observed_as": spec}
-        spec = dict(spec)
-        if "observed_as" not in spec:
-            msg = f"Observation spec {spec!r} is missing 'observed_as'."
-            raise ValueError(msg)
-        spec.setdefault("groups", "auto")
-        spec.setdefault("count", ObservationMaskedMSE.DEFAULT_COUNT)
-        return spec
+    _normalise_spec = staticmethod(normalise_spec)
 
     def _resolve_groups(self, spec: dict, available: dict[str, int]) -> list[str]:
-        prefix = f"{spec['observed_as']}_"
-        groups = spec["groups"]
-        if groups == "auto":
-            found = [(pos, name[len(prefix) :]) for name, pos in available.items() if name.startswith(prefix)]
-            if not found:
-                msg = f"No variables matching '{prefix}*' are available to {type(self).__name__}."
-                raise ValueError(msg)
-            return [group for _, group in sorted(found)]
-        return list(groups)
+        return resolve_groups(spec, available, type(self).__name__)
 
     def set_data_indices(self, data_indices: Any) -> "ObservationMaskedMSE":  # noqa: ANN401
         """Resolve every (variable, group) pair into paired column indices."""
