@@ -4,12 +4,32 @@ data:
   datasets:
     ocean:
       forcing:
+      - sla_filtered_cryosat_2
+      - sla_filtered_envisat
+      - sla_filtered_envisat_new_orbit
       - sla_filtered_ers_2
       - sla_filtered_gfo
+      - sla_filtered_haiyang_2a
+      - sla_filtered_jason_1
+      - sla_filtered_jason_1_geodetic
+      - sla_filtered_jason_1_interleaved
+      - sla_filtered_jason_2
+      - sla_filtered_saral
       - sla_filtered_topex_poseidon
+      - sla_filtered_topex_poseidon_interleaved
+      - obs_count_cryosat_2
+      - obs_count_envisat
+      - obs_count_envisat_new_orbit
       - obs_count_ers_2
       - obs_count_gfo
+      - obs_count_haiyang_2a
+      - obs_count_jason_1
+      - obs_count_jason_1_geodetic
+      - obs_count_jason_1_interleaved
+      - obs_count_jason_2
+      - obs_count_saral
       - obs_count_topex_poseidon
+      - obs_count_topex_poseidon_interleaved
       - elevation
       - land_fraction
 
@@ -18,16 +38,33 @@ data:
       - sla
 
       # Loss targets only: present in <data>.output, excluded from model.output.
-      # The counts are listed here because
-      # LossVariableMapper resolves target_variables in <data>.output space, and
-      # CountMaskedMSE needs each mission's count alongside its observations.
       target:
+      - sla_filtered_cryosat_2
+      - sla_filtered_envisat
+      - sla_filtered_envisat_new_orbit
       - sla_filtered_ers_2
       - sla_filtered_gfo
+      - sla_filtered_haiyang_2a
+      - sla_filtered_jason_1
+      - sla_filtered_jason_1_geodetic
+      - sla_filtered_jason_1_interleaved
+      - sla_filtered_jason_2
+      - sla_filtered_saral
       - sla_filtered_topex_poseidon
+      - sla_filtered_topex_poseidon_interleaved
+      - obs_count_cryosat_2
+      - obs_count_envisat
+      - obs_count_envisat_new_orbit
       - obs_count_ers_2
       - obs_count_gfo
+      - obs_count_haiyang_2a
+      - obs_count_jason_1
+      - obs_count_jason_1_geodetic
+      - obs_count_jason_1_interleaved
+      - obs_count_jason_2
+      - obs_count_saral
       - obs_count_topex_poseidon
+      - obs_count_topex_poseidon_interleaved
 
       # Order matters: impute then normalise on the forward pass, reversed on the
       # inverse. Imputation must come first because InputImputer fills with raw-space
@@ -39,32 +76,60 @@ data:
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
+            sla_filtered_cryosat_2: obs_count_cryosat_2
+            sla_filtered_envisat: obs_count_envisat
+            sla_filtered_envisat_new_orbit: obs_count_envisat_new_orbit
             sla_filtered_ers_2: obs_count_ers_2
             sla_filtered_gfo: obs_count_gfo
+            sla_filtered_haiyang_2a: obs_count_haiyang_2a
+            sla_filtered_jason_1: obs_count_jason_1
+            sla_filtered_jason_1_geodetic: obs_count_jason_1_geodetic
+            sla_filtered_jason_1_interleaved: obs_count_jason_1_interleaved
+            sla_filtered_jason_2: obs_count_jason_2
+            sla_filtered_saral: obs_count_saral
             sla_filtered_topex_poseidon: obs_count_topex_poseidon
-            # sla is a copy of sla_filtered_topex_poseidon, so it shares that coverage.
-            sla: obs_count_topex_poseidon
+            sla_filtered_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
+            # sla is a copy of sla_filtered_jason_2, so it shares that coverage.
+            sla: obs_count_jason_2
         imputer:
           _target_: anemoi.models.preprocessing.imputer.InputImputer
           config:
             default: none
-            # Unobserved cells are NaN. Fill with the field mean; CountMaskedMSE zeroes
-            # their weight, so the fill value never reaches the loss. Preprocessing also
-            # asserts no NaN survives (preprocessing/__init__.py:201), on the first
-            # batch only.
+            # Unobserved cells are NaN. Fill with the field mean; CountMaskedMSE (etc) zeroes
+            # their weight, so the fill value never reaches the loss.
             mean:
+            - sla_filtered_cryosat_2
+            - sla_filtered_envisat
+            - sla_filtered_envisat_new_orbit
             - sla_filtered_ers_2
             - sla_filtered_gfo
+            - sla_filtered_haiyang_2a
+            - sla_filtered_jason_1
+            - sla_filtered_jason_1_geodetic
+            - sla_filtered_jason_1_interleaved
+            - sla_filtered_jason_2
+            - sla_filtered_saral
             - sla_filtered_topex_poseidon
+            - sla_filtered_topex_poseidon_interleaved
             - sla
         normalizer:
           _target_: anemoi.models.preprocessing.normalizer.InputNormalizer
           config:
             default: mean-std
             max:
+              - obs_count_cryosat_2
+              - obs_count_envisat
+              - obs_count_envisat_new_orbit
               - obs_count_ers_2
               - obs_count_gfo
+              - obs_count_haiyang_2a
+              - obs_count_jason_1
+              - obs_count_jason_1_geodetic
+              - obs_count_jason_1_interleaved
+              - obs_count_jason_2
+              - obs_count_saral
               - obs_count_topex_poseidon
+              - obs_count_topex_poseidon_interleaved
             min-max:
               - elevation
             none:
@@ -89,36 +154,61 @@ dataloader:
 
   # The two stores nese-dataprep writes are joined here rather than on disk.
   # `sla` is a duplicate of one mission's column: under the combined loss its values are
-  # never a target, only its statistics reach the normaliser, so which mission it copies
-  # does not matter yet. It is named to sort last among the channels.
-  #
-  # Only ers_2, gfo and topex_poseidon flew in 2000-2001; the other 26 missions in the
-  # store have NaN statistics over this window and would poison the normaliser.
+  # never a target, only its statistics reach the normaliser. It copies jason_2, which is
+  # the only mission live across both the training and validation windows for their full
+  # extent (2008-10 onwards); the per-mission statistics are near-identical anyway. It is
+  # named to sort last among the channels.
   dataset:
     join:
     - dataset: ${system.input.dataset}
       select:
+      - sla_filtered_cryosat_2
+      - sla_filtered_envisat
+      - sla_filtered_envisat_new_orbit
       - sla_filtered_ers_2
       - sla_filtered_gfo
+      - sla_filtered_haiyang_2a
+      - sla_filtered_jason_1
+      - sla_filtered_jason_1_geodetic
+      - sla_filtered_jason_1_interleaved
+      - sla_filtered_jason_2
+      - sla_filtered_saral
       - sla_filtered_topex_poseidon
-    # float32 rather than the int32 nese-dataprep writes: numpy promotes int32+float32
-    # to float64, and anemoi's transfer_batch_to_device moves without casting, so the
-    # model would get a float64 batch and the first Linear would fail. The permanent fix
-    # belongs in nese-dataprep. See scripts/cast_counts_to_f32.py.
+      - sla_filtered_topex_poseidon_interleaved
     - dataset: ${system.input.obs_count_dataset}
       select:
+      - cryosat_2
+      - envisat
+      - envisat_new_orbit
       - ers_2
       - gfo
+      - haiyang_2a
+      - jason_1
+      - jason_1_geodetic
+      - jason_1_interleaved
+      - jason_2
+      - saral
       - topex_poseidon
+      - topex_poseidon_interleaved
       rename:
+        cryosat_2: obs_count_cryosat_2
+        envisat: obs_count_envisat
+        envisat_new_orbit: obs_count_envisat_new_orbit
         ers_2: obs_count_ers_2
         gfo: obs_count_gfo
+        haiyang_2a: obs_count_haiyang_2a
+        jason_1: obs_count_jason_1
+        jason_1_geodetic: obs_count_jason_1_geodetic
+        jason_1_interleaved: obs_count_jason_1_interleaved
+        jason_2: obs_count_jason_2
+        saral: obs_count_saral
         topex_poseidon: obs_count_topex_poseidon
+        topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
     - dataset: ${system.input.dataset}
       select:
-      - sla_filtered_topex_poseidon
+      - sla_filtered_jason_2
       rename:
-        sla_filtered_topex_poseidon: sla
+        sla_filtered_jason_2: sla
     # elevation / bathymetry as static forcing, plus land fraction for inputs and masking
     - dataset: ${system.input.elevation_dataset}
 
@@ -380,6 +470,7 @@ training:
     datasets:
       ocean:
         _target_: nese_training.losses.ObservationMaskedMSE
+        scalers: ["node_weights"] # no need for "time_steps" unless multi-step predictions
         observations:
           sla:
             observed_as: sla_filtered
@@ -510,7 +601,7 @@ diagnostics:
 
 system:
   output:
-    root: /Users/timith/work/nese/experimental/local-sla-only/runs/no-removed-nodes
+    root: /Users/timith/work/nese/experimental/local-sla-15yr/runs/no-removed-nodes
     logs:
       root: logs
       wandb: wandb
@@ -524,7 +615,7 @@ system:
     plots: plots
     profiler: profiler
   input:
-    root: /Users/timith/work/nese/experimental/local-sla-only
+    root: /Users/timith/work/nese/experimental/local-sla-15yr
     dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
     obs_count_dataset: ${system.input.root}/anemoi-hpx6-24h/obs_count_f32.zarr
     elevation_dataset: ${system.input.root}/gebco-anemoi-hpx6/dataset.zarr
@@ -540,7 +631,7 @@ system:
     num_gpus_per_model: 1
 
 # `training.training_loss._target_` is validated against a closed enum of built-in
-# losses (schemas/training.py), so CountMaskedMSE cannot pass. The task does not need
+# losses (schemas/training.py), so CountMaskedMSE, etc cannot pass. The task does not need
 # this escape hatch -- stock Forecaster validates fine -- but validation is
 # all-or-nothing. A small upstream PR adding the loss to that enum would restore it.
 #
