@@ -1,0 +1,20 @@
+source:
+  name: gebco
+  variables:
+    - elevation
+    - land_fraction
+  time:
+    start: 2000-01-01
+    end: 2015-12-31
+    freq: 24h
+  options:
+    uri: /Users/timith/work/nese-dataprep/data/GEBCO_2026.nc
+
+transforms:
+  regrid_to_healpix:
+    hpx_level: 6
+
+target:
+  name: anemoi
+  store_dir: ${oc.env:PWD}/gebco-anemoi-hpx6
+  compression: blosc_zstd

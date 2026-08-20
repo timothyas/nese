@@ -1,0 +1,549 @@
+data:
+  format: zarr
+  frequency: 24h
+  datasets:
+    ocean:
+      forcing:
+      - sla_filtered_ers_2
+      - sla_filtered_gfo
+      - sla_filtered_topex_poseidon
+      - obs_count_ers_2
+      - obs_count_gfo
+      - obs_count_topex_poseidon
+      - elevation
+      - land_fraction
+
+      # The one channel the model emits.
+      diagnostic:
+      - sla
+
+      # Loss targets only: present in <data>.output, excluded from model.output.
+      # The counts are listed here because
+      # LossVariableMapper resolves target_variables in <data>.output space, and
+      # CountMaskedMSE needs each mission's count alongside its observations.
+      target:
+      - sla_filtered_ers_2
+      - sla_filtered_gfo
+      - sla_filtered_topex_poseidon
+      - obs_count_ers_2
+      - obs_count_gfo
+      - obs_count_topex_poseidon
+
+      # Order matters: impute then normalise on the forward pass, reversed on the
+      # inverse. Imputation must come first because InputImputer fills with raw-space
+      # statistics.
+      processors:
+        # Listed first so that, with the inverse chain reversed, it runs last: after
+        # denormalising and after the imputer's de-imputation, on raw-space values. Its
+        # forward pass is a no-op, so the imputer still sees the NaNs it has to fill.
+        obs_nan_restorer:
+          _target_: nese_training.processors.ObsCountNaNRestorer
+          masked_by:
+            sla_filtered_ers_2: obs_count_ers_2
+            sla_filtered_gfo: obs_count_gfo
+            sla_filtered_topex_poseidon: obs_count_topex_poseidon
+            # sla is a copy of sla_filtered_topex_poseidon, so it shares that coverage.
+            sla: obs_count_topex_poseidon
+        imputer:
+          _target_: anemoi.models.preprocessing.imputer.InputImputer
+          config:
+            default: none
+            # Unobserved cells are NaN. Fill with the field mean; CountMaskedMSE zeroes
+            # their weight, so the fill value never reaches the loss. Preprocessing also
+            # asserts no NaN survives (preprocessing/__init__.py:201), on the first
+            # batch only.
+            mean:
+            - sla_filtered_ers_2
+            - sla_filtered_gfo
+            - sla_filtered_topex_poseidon
+            - sla
+        normalizer:
+          _target_: anemoi.models.preprocessing.normalizer.InputNormalizer
+          config:
+            default: mean-std
+            max:
+              - obs_count_ers_2
+              - obs_count_gfo
+              - obs_count_topex_poseidon
+            min-max:
+              - elevation
+            none:
+              - land_fraction
+
+dataloader:
+  prefetch_factor: 1
+  pin_memory: true
+  read_group_size: ${system.hardware.num_gpus_per_model}
+  num_workers:
+    training: 2
+    validation: 2
+    test: 1
+  batch_size:
+    training: 8
+    validation: 1
+    test: 1
+  limit_batches:
+    training: null
+    validation: null
+    test: 1
+
+  # The two stores nese-dataprep writes are joined here rather than on disk.
+  # `sla` is a duplicate of one mission's column: under the combined loss its values are
+  # never a target, only its statistics reach the normaliser, so which mission it copies
+  # does not matter yet. It is named to sort last among the channels.
+  #
+  # Only ers_2, gfo and topex_poseidon flew in 2000-2001; the other 26 missions in the
+  # store have NaN statistics over this window and would poison the normaliser.
+  dataset:
+    join:
+    - dataset: ${system.input.dataset}
+      select:
+      - sla_filtered_ers_2
+      - sla_filtered_gfo
+      - sla_filtered_topex_poseidon
+    # float32 rather than the int32 nese-dataprep writes: numpy promotes int32+float32
+    # to float64, and anemoi's transfer_batch_to_device moves without casting, so the
+    # model would get a float64 batch and the first Linear would fail. The permanent fix
+    # belongs in nese-dataprep. See scripts/cast_counts_to_f32.py.
+    - dataset: ${system.input.obs_count_dataset}
+      select:
+      - ers_2
+      - gfo
+      - topex_poseidon
+      rename:
+        ers_2: obs_count_ers_2
+        gfo: obs_count_gfo
+        topex_poseidon: obs_count_topex_poseidon
+    - dataset: ${system.input.dataset}
+      select:
+      - sla_filtered_topex_poseidon
+      rename:
+        sla_filtered_topex_poseidon: sla
+    # elevation / bathymetry as static forcing, plus land fraction for inputs and masking
+    - dataset: ${system.input.elevation_dataset}
+
+  training:
+    datasets:
+      ocean:
+        dataset_config:
+          dataset: ${dataloader.dataset}
+          frequency: ${data.frequency}
+        start: '2000-01-01'
+        end: '2014-12-31'
+  validation:
+    datasets:
+      ocean:
+        dataset_config:
+          dataset: ${dataloader.dataset}
+          frequency: ${data.frequency}
+        start: '2015-01-01'
+        end: '2015-12-31'
+  test:
+    datasets:
+      ocean:
+        dataset_config:
+          dataset: ${dataloader.dataset}
+          frequency: ${data.frequency}
+        start: '2015-01-01'
+        end: '2015-12-31'
+
+# Observations are bin averages at discrete timestamps, so "estimate at t from the
+# window (t-48h, t]" would make the target bin one of the input bins -- and the loss
+# would then carry no gradient at unobserved cells, which is the whole quantity of
+# interest. Supervising against the *next* bin sidesteps that: satellite ground tracks
+# shift between bins, so ~55% of the target bin's observed cells are unobserved in the
+# two input bins. That held-out supervision is free.
+#
+# With rollout.maximum=1, Forecaster.steps() yields a single element, so the
+# `if i < len(task_steps) - 1` guard in train/methods/single.py never fires and
+# advance_input -- the only forecast-specific code in the task -- never executes.
+# Offsets come out as [-𝚫t, 0] -> [+𝚫t].
+task:
+  _target_: anemoi.training.tasks.Forecaster
+  multistep_input: 2
+  multistep_output: 1
+  timestep: 24H
+  rollout:
+    start: 1
+    epoch_increment: 0
+    maximum: 1
+  validation_rollout: null
+
+graph:
+  overwrite: true
+  nodes:
+    ocean:
+      node_builder:
+        _target_: anemoi.graphs.nodes.HEALPixNodes
+        resolution: 6   # nside=64, 49152 cells, ~0.9 deg
+        nest_ordering: true
+      attributes:
+        area_weight: ${graph.attributes.nodes.area_weight}
+        sea_mask:
+          _target_: nese_training.graph_attributes.DatasetVariableBelow
+          dataset: ${system.input.elevation_dataset}
+          variable: land_fraction
+          threshold: 0.1 # keep edges with land_fraction < threshold
+
+    hidden:
+      node_builder:
+        _target_: anemoi.graphs.nodes.HEALPixNodes
+        resolution: 5   # nside=32, 12288 cells, ~1.8 deg
+        nest_ordering: false
+      attributes: ${graph.attributes.nodes}
+  edges:
+  - source_name: ocean
+    target_name: hidden
+    edge_builders:
+    - _target_: anemoi.graphs.edges.CutOffEdges
+      cutoff_distance_km: 200
+      source_mask_attr_name: sea_mask
+    attributes: ${graph.attributes.edges}
+  - source_name: hidden
+    target_name: ocean
+    edge_builders:
+    - _target_: anemoi.graphs.edges.KNNEdges
+      num_nearest_neighbours: 3
+      target_mask_attr_name: sea_mask
+    attributes: ${graph.attributes.edges}
+  attributes:
+    nodes:
+      area_weight:
+        _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
+        norm: unit-max
+        fill_value: 0
+    edges:
+      edge_length:
+        _target_: anemoi.graphs.edges.attributes.EdgeLength
+        norm: unit-max
+      edge_dirs:
+        _target_: anemoi.graphs.edges.attributes.EdgeDirection
+        norm: unit-std
+  post_processors: []
+  #  - _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
+  #    nodes_name: ocean
+
+model:
+  num_channels: 128
+  cpu_offload: false
+  keep_batch_sharded: true
+  model:
+    _target_: anemoi.models.models.AnemoiModelEncProcDec
+    hidden_nodes_name: hidden
+    latent_skip: true
+  layer_kernels:
+    LayerNorm:
+      _target_: torch.nn.LayerNorm
+    Linear:
+      _target_: torch.nn.Linear
+    Activation:
+      _target_: torch.nn.GELU
+    QueryNorm:
+      _target_: anemoi.models.layers.normalization.AutocastLayerNorm
+      bias: false
+    KeyNorm:
+      _target_: anemoi.models.layers.normalization.AutocastLayerNorm
+      bias: false
+
+  processor:
+    _target_: anemoi.models.layers.processor.TransformerProcessor
+    num_layers: 4
+    num_chunks: 1
+    mlp_hidden_ratio: 4
+    mlp_implementation: mlp
+    num_heads: 4
+    window_size: 512
+    dropout_p: 0.0
+    attention_implementation: scaled_dot_product_attention
+    qk_norm: false
+    softcap: 0.0
+    use_alibi_slopes: false
+    cpu_offload: ${model.cpu_offload}
+    gradient_checkpointing: false
+    use_rotary_embeddings: false
+    layer_kernels: ${model.layer_kernels}
+
+  encoder:
+    _target_: anemoi.models.layers.mapper.GraphTransformerForwardMapper
+    trainable_size: ${model.trainable_parameters.data2hidden}
+    sub_graph_edge_attributes: ${model.attributes.edges}
+    num_chunks: 1
+    mlp_hidden_ratio: 4
+    mlp_implementation: mlp
+    num_heads: 4
+    qk_norm: false
+    cpu_offload: ${model.cpu_offload}
+    gradient_checkpointing: false
+    layer_kernels: ${model.layer_kernels}
+    shard_strategy: edges
+    graph_attention_backend: pyg
+
+  decoder:
+    _target_: anemoi.models.layers.mapper.GraphTransformerBackwardMapper
+    trainable_size: ${model.trainable_parameters.hidden2data}
+    sub_graph_edge_attributes: ${model.attributes.edges}
+    num_chunks: 1
+    mlp_hidden_ratio: 4
+    mlp_implementation: mlp
+    num_heads: 4
+    initialise_data_extractor_zero: false
+    qk_norm: false
+    cpu_offload: ${model.cpu_offload}
+    gradient_checkpointing: false
+    layer_kernels: ${model.layer_kernels}
+    shard_strategy: edges
+    graph_attention_backend: pyg
+
+  # Residual data connection does nothing if our predicted state is diagnostic
+  residual:
+    _target_: anemoi.models.layers.residual.SkipConnection
+    step: -1
+
+  output_mask:
+    _target_: anemoi.training.utils.masks.NoOutputMask
+  trainable_parameters:
+    data: 4
+    hidden: 4
+    data2hidden: 4
+    hidden2data: 4
+    hidden2hidden: 4
+  attributes:
+    edges:
+    - edge_length
+    - edge_dirs
+    nodes: []
+  compile: []
+  bounding: []
+
+training:
+  scalers:
+    datasets:
+      ocean:
+        node_weights:
+          _target_: anemoi.training.losses.scalers.GraphNodeAttributeScaler
+          nodes_attribute_name: area_weight
+          norm: unit-sum
+        time_steps:
+          _target_: anemoi.training.losses.scalers.UniformTimeStepScaler
+
+  optimization:
+    optimizer:
+      _target_: torch.optim.AdamW
+      betas:
+      - 0.9
+      - 0.95
+    lr_scheduler:
+      _target_: timm.scheduler.CosineLRScheduler
+      lr_min: 3.0e-07
+      t_initial: ${training.max_steps}
+      warmup_t: 500
+      t_in_epochs: false
+    lr: 1.0e-04
+    pl_lr_scheduler:
+      interval: step
+
+  run_id: null
+  fork_run_id: null
+  transfer_learning: false
+  load_weights_only: false
+  update_ds_stats_on_ckpt_load:
+    states: false
+    tendencies: true
+  check_variables_compatibility:
+    ignore_units: true
+    ignore_processing_period: true
+  deterministic: false
+  precision: 32-true #16-mixed slower on mac
+  accum_grad_batches: 1
+  num_sanity_val_steps: 2
+  gradient_clip:
+    val: 32.0
+    algorithm: value
+  method:
+    _target_: anemoi.training.train.methods.SingleTraining
+  strategy:
+    _target_: anemoi.training.distributed.strategy.DDPGroupStrategy
+    num_gpus_per_model: ${system.hardware.num_gpus_per_model}
+    read_group_size: ${dataloader.read_group_size}
+    use_local_synchronization: true
+  loss_gradient_scaling: false
+
+  # One term per live mission. Each maps the single predicted `sla` field onto that
+  # mission's observations, paired with its count so the term can mask itself to the
+  # cells that mission actually saw in the target bin.
+  #
+  # The mask cannot live in a scaler: on_batch_start receives (model, dataset_name) and
+  # never the batch, and scalers are keyed on model-output variables, of which there is
+  # exactly one. NaNMaskScaler is also wrong here regardless -- imputer.py:210 builds
+  # loss_mask_training from nan_locations[:, 0], the oldest input bin, not the target.
+  training_loss:
+    datasets:
+      ocean:
+        _target_: nese_training.losses.ObservationMaskedMSE
+        observations:
+          sla:
+            observed_as: sla_filtered
+            groups: auto
+            count: "obs_count_{group}"
+
+  validation_metrics:
+    datasets:
+      ocean: {}
+
+  variable_groups:
+    datasets:
+      ocean:
+        default: sfc
+  metrics:
+    datasets:
+      ocean: []
+  max_epochs: null
+  max_steps: 3000
+  submodules_to_freeze: []
+
+diagnostics:
+  benchmark_profiler:
+    memory:
+      enabled: true
+      steps: 5
+      warmup: 2
+      extra_plots: false
+      trace_rank0_only: false
+    time:
+      enabled: true
+      verbose: false
+    speed:
+      enabled: true
+    system:
+      enabled: true
+    model_summary:
+      enabled: true
+    snapshot:
+      enabled: true
+      steps: 4
+      warmup: 0
+
+  plot:
+    settings:
+      asynchronous: true
+      projection_kind: equirectangular # TODO
+      datashader: false
+      precip_and_related_fields: []
+      colormaps:
+        default:
+          _target_: anemoi.training.utils.custom_colormaps.MatplotlibColormap
+          name: RdBu_r
+        error:
+          _target_: anemoi.training.utils.custom_colormaps.MatplotlibColormap
+          name: RdBu_r
+
+    sample_idx: 0
+    parameters:
+      - sla
+    datasets_to_plot:
+      - ocean
+    focus_areas:
+      europe:
+        latlon_bbox: [30.0, -20.0, 60.0, 40.0]
+      nordic_seas:
+        name: nordic_seas
+        latlon_bbox: [55.0, 0.0, 82.0, 40.0]
+    frequency:
+      batch: 5
+      epoch: 1
+    callbacks:
+      - _target_: anemoi.training.diagnostics.callbacks.plot.GraphFeaturePlot
+        every_n_epochs: ${diagnostics.plot.frequency.epoch}
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+
+      - _target_: anemoi.training.diagnostics.callbacks.plot.LossCurvePlot
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+        parameter_groups: []
+        every_n_batches: ${diagnostics.plot.frequency.batch}
+
+      - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
+        tag_infix: sample
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+        sample_idx: ${diagnostics.plot.sample_idx}
+        parameters: ${diagnostics.plot.parameters}
+        every_n_batches: ${diagnostics.plot.frequency.batch}
+        with_auxiliary: true
+        focus_area: ${diagnostics.plot.focus_areas.nordic_seas}
+        plot_fn:
+          _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.sample_plot_fn
+          _partial_: true
+
+      - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
+        tag_infix: histo
+        dataset_names: ${diagnostics.plot.datasets_to_plot}
+        sample_idx: ${diagnostics.plot.sample_idx}
+        every_n_batches: ${diagnostics.plot.frequency.batch}
+        parameters: ${diagnostics.plot.parameters}
+        plot_fn:
+          _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.histogram_plot_fn
+          _partial_: true
+          # Optional overrides (shown with defaults):
+          # log_scale: false
+  callbacks: []
+  debug:
+    anomaly_detection: false
+  log:
+    interval: 10
+    # base_schema.py:218 reads diagnostics.log.mlflow.enabled unconditionally, so the
+    # key must exist even with the logger off.
+    mlflow:
+      enabled: false
+      save_dir: ${system.output.logs.mlflow}
+    wandb:
+      enabled: false
+  enable_progress_bar: true
+  progress_bar:
+    _target_: pytorch_lightning.callbacks.TQDMProgressBar
+    refresh_rate: 1
+  enable_checkpointing: true
+  checkpoint:
+    every_n_epochs:
+      save_frequency: 1
+      num_models_saved: 2
+  check_val_every_n_epoch: 1
+  print_memory_summary: false
+
+system:
+  output:
+    root: /Users/timith/work/nese/experimental/local-sla-only/runs/no-removed-nodes
+    logs:
+      root: logs
+      wandb: wandb
+      mlflow: mlflow
+      tensorboard: tensorboard
+    checkpoints:
+      root: checkpoint
+      every_n_epochs: anemoi-by_epoch-epoch_{epoch:03d}-step_{step:06d}
+      every_n_train_steps: anemoi-by_step-epoch_{epoch:03d}-step_{step:06d}
+      every_n_minutes: anemoi-by_time-epoch_{epoch:03d}-step_{step:06d}
+    plots: plots
+    profiler: profiler
+  input:
+    root: /Users/timith/work/nese/experimental/local-sla-only
+    dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
+    obs_count_dataset: ${system.input.root}/anemoi-hpx6-24h/obs_count_f32.zarr
+    elevation_dataset: ${system.input.root}/gebco-anemoi-hpx6/dataset.zarr
+    graph: ${system.input.root}/graph.pt
+    loss_matrices_path: null
+    truncation: null
+    truncation_inv: null
+    warm_start: null
+  hardware:
+    accelerator: cpu     # local Mac bring-up; no CUDA
+    num_gpus_per_node: 1
+    num_nodes: 1
+    num_gpus_per_model: 1
+
+# `training.training_loss._target_` is validated against a closed enum of built-in
+# losses (schemas/training.py), so CountMaskedMSE cannot pass. The task does not need
+# this escape hatch -- stock Forecaster validates fine -- but validation is
+# all-or-nothing. A small upstream PR adding the loss to that enum would restore it.
+#
+# Note `anemoi-training config validate` ignores this flag by design and will still
+# report the loss as invalid.
+config_validation: false
