@@ -158,8 +158,8 @@ dataloader:
   pin_memory: true
   read_group_size: ${system.hardware.num_gpus_per_model}
   num_workers:
-    training: 2
-    validation: 2
+    training: 1
+    validation: 1
     test: 1
   batch_size:
     training: 8
@@ -167,7 +167,7 @@ dataloader:
     test: 1
   limit_batches:
     training: null
-    validation: null
+    validation: 50
     test: 1
 
   # The two stores nese-dataprep writes are joined here rather than on disk.
@@ -356,7 +356,7 @@ model:
   processor:
     _target_: anemoi.models.layers.processor.TransformerProcessor
     num_layers: 4
-    num_chunks: 1
+    num_chunks: 4
     mlp_hidden_ratio: 4
     mlp_implementation: mlp
     num_heads: 4
@@ -367,7 +367,7 @@ model:
     softcap: 0.0
     use_alibi_slopes: false
     cpu_offload: ${model.cpu_offload}
-    gradient_checkpointing: false
+    gradient_checkpointing: true
     use_rotary_embeddings: false
     layer_kernels: ${model.layer_kernels}
 
@@ -375,7 +375,7 @@ model:
     _target_: anemoi.models.layers.mapper.GraphTransformerForwardMapper
     trainable_size: ${model.trainable_parameters.data2hidden}
     sub_graph_edge_attributes: ${model.attributes.edges}
-    num_chunks: 1
+    num_chunks: 4
     mlp_hidden_ratio: 4
     mlp_implementation: mlp
     num_heads: 4
@@ -390,7 +390,7 @@ model:
     _target_: anemoi.models.layers.mapper.GraphTransformerBackwardMapper
     trainable_size: ${model.trainable_parameters.hidden2data}
     sub_graph_edge_attributes: ${model.attributes.edges}
-    num_chunks: 1
+    num_chunks: 4
     mlp_hidden_ratio: 4
     mlp_implementation: mlp
     num_heads: 4
@@ -410,11 +410,11 @@ model:
   output_mask:
     _target_: anemoi.training.utils.masks.NoOutputMask
   trainable_parameters:
-    data: 4
-    hidden: 4
-    data2hidden: 4
-    hidden2data: 4
-    hidden2hidden: 4
+    data: 2
+    hidden: 2
+    data2hidden: 2
+    hidden2data: 2
+    hidden2hidden: 2
   attributes:
     edges:
     - edge_length
@@ -444,7 +444,7 @@ training:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
       t_initial: ${training.max_steps}
-      warmup_t: 500
+      warmup_t: 20 #500
       t_in_epochs: false
     lr: 1.0e-04
     pl_lr_scheduler:
@@ -507,7 +507,7 @@ training:
     datasets:
       ocean: []
   max_epochs: null
-  max_steps: 3000
+  max_steps: 100 #3000
   submodules_to_freeze: []
 
 diagnostics:
