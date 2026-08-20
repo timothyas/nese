@@ -106,7 +106,7 @@ class ObservationMaskedMSE(FunctionalLoss):
     Assumptions:
         * Data on HEALPix so area weighting is free with summation
         * ``nese-dataprep`` naming: observations are ``{observed_as}_{group}`` and their
-          counts are ``obs_count_{group}``
+          counts are ``obs_count_{group}`` (default, also changeable)
 
     This loss function avoids creating a ``CombinedLoss`` entry for every variable and
     every observing platform. Instead, this loss assumes a naming convention to
@@ -116,6 +116,7 @@ class ObservationMaskedMSE(FunctionalLoss):
           sla:
             observed_as: sla_filtered
             groups: auto
+            count: obs_count_sla_{group} # <- this resets the default obs_count_{group} spec
 
     ``groups: auto`` recovers the set from the variables the model was given. For example,
     a dataset with ``sla_filtered_topex_poseidon``, ``sla_filtered_jason_2`` will recognize
@@ -125,8 +126,9 @@ class ObservationMaskedMSE(FunctionalLoss):
     The per-group loss is unchanged from ``CountMaskedAndWeightedMSE``, but when aggregated
     per-variable (e.g., when all groups are aggregated to get the SLA loss) only currently
     live missions are taken into account for the given time. On the other hand,
-    ``CountMaskedAndWeightedMSE`` averages over the total number of observing missions no
-    matter how many were live for the current loss sample.
+    ``CountMaskedAndWeightedMSE`` averages over the total number of observing missions
+    no matter how many were live for the current loss sample
+    (via BaseLoss.reduce, over the entire ``variable`` dimension of the array).
     """
 
     name: str = "observation_masked_mse"
