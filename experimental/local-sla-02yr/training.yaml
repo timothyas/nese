@@ -531,7 +531,7 @@ diagnostics:
 
 system:
   output:
-    root: /Users/timith/work/nese/experimental/local-sla-only/runs/no-removed-nodes
+    root: /Users/timith/work/nese/experimental/local-sla-02yr/runs/no-removed-nodes
     logs:
       root: logs
       wandb: wandb
@@ -545,7 +545,7 @@ system:
     plots: plots
     profiler: profiler
   input:
-    root: /Users/timith/work/nese/experimental/local-sla-only
+    root: /Users/timith/work/nese/experimental/local-sla-02yr
     dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
     obs_count_dataset: ${system.input.root}/anemoi-hpx6-24h/obs_count_f32.zarr
     elevation_dataset: ${system.input.root}/gebco-anemoi-hpx6/dataset.zarr

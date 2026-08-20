@@ -12,7 +12,7 @@ nodes:
         fill_value: 0
       sea_mask:
         _target_: nese_training.graph_attributes.DatasetVariableBelow
-        dataset: /Users/timith/work/nese/experimental/local-sla-only/gebco-anemoi-hpx6/dataset.zarr
+        dataset: /Users/timith/work/nese/experimental/local-sla-02yr/gebco-anemoi-hpx6/dataset.zarr
         variable: land_fraction
         threshold: 0.1
   hidden:
