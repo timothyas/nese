@@ -19,12 +19,14 @@ from nese_training.losses import CountMaskedMSE
 GRID = 64
 
 
-def make_loss(cls: type = CountMaskedMSE) -> CountMaskedMSE:
+def make_loss(cls: type = CountMaskedMSE, weights: torch.Tensor | None = None) -> CountMaskedMSE:
     loss = cls()
     # Matches the node_weights scaler in config/training/scalers/nese.yaml, which uses
     # norm: unit-sum. BaseLoss.reduce sums over the grid, so the weights must sum to 1
     # for the reduction to read as a mean.
-    loss.add_scaler(dimension=TensorDim.GRID.value, scaler=torch.ones(GRID) / GRID, name="node_weights")
+    if weights is None:
+        weights = torch.ones(GRID) / GRID
+    loss.add_scaler(dimension=TensorDim.GRID.value, scaler=weights, name="node_weights")
     return loss
 
 
@@ -108,3 +110,27 @@ def test_odd_column_count_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="paired"):
         loss(pred, target)
+
+
+@pytest.mark.parametrize("n_unweighted", [0, 4, 12, 24])
+def test_weighted_loss_is_invariant_when_some_observed_cells_carry_no_weight(n_unweighted: int) -> None:
+    """The coastal case, which is what turning on the output mask creates.
+
+    An observed cell whose node weight is zero contributes nothing to the reduction, so it
+    must not enter the coverage divisor either. Normalising by ``mean(mask)`` counts it
+    anyway, which both mis-scales the loss and -- because the observed-but-unweighted
+    fraction moves from sample to sample -- puts back the coverage dependence this loss
+    exists to remove.
+    """
+    weighted = torch.zeros(GRID, dtype=torch.bool)
+    weighted[: GRID // 2] = True
+    weights = weighted.to(torch.float32) / int(weighted.sum())
+
+    observed = torch.zeros(GRID, dtype=torch.bool)
+    observed[:16] = True  # inside the weighted region, held fixed
+    observed[GRID // 2 : GRID // 2 + n_unweighted] = True  # outside it, varied
+
+    loss = make_loss(CountMaskedAndWeightedMSE, weights=weights)
+    pred, target = make_batch(observed)
+
+    assert torch.allclose(loss(pred, target), torch.tensor(0.25), atol=1e-5)

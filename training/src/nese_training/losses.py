@@ -15,6 +15,35 @@ from nese_training.observations import resolve_groups
 LOGGER = logging.getLogger(__name__)
 
 
+def _coverage_divisor(loss: FunctionalLoss, mask: torch.Tensor, eps: float) -> torch.Tensor:
+    """The grid-weighted coverage of ``mask``, i.e. what ``reduce`` will actually sum to.
+
+    ``BaseLoss.reduce`` computes ``sum_i(d_i * w_i)`` over the grid, so a constant per-cell
+    error ``e`` scored through ``d_i = e**2 * m_i / s`` gives ``e**2 * sum(m_i w_i) / s``.
+    Coverage invariance therefore needs ``s = sum_i(m_i * w_i)``, not ``mean(m)``.
+
+    The two agree exactly while ``w`` is uniform over every cell, which is why ``mean(m)``
+    was right until the output mask arrived: HEALPix cells are equal-area, so unit-sum
+    ``area_weight`` gives ``w_i = 1/N``. Masking land renormalises ``w`` over the sea cells
+    alone, and ``mean(m)`` then both mis-scales the loss and reintroduces the coverage
+    dependence this division exists to remove -- it counts observations on land that carry
+    zero weight, and that fraction moves from sample to sample.
+
+    Falls back to ``mean(m)`` when no grid scaler is attached, so the loss stays usable on
+    its own.
+    """
+    weights = loss.scaler.subset_by_dim(TensorDim.GRID.value).tensors
+    if not weights:
+        return mask.mean(dim=TensorDim.GRID, keepdim=True).clamp_min(eps)
+
+    grid_weight = None
+    for _, tensor in weights.values():
+        grid_weight = tensor if grid_weight is None else grid_weight * tensor
+
+    grid_weight = grid_weight.to(device=mask.device, dtype=mask.dtype).reshape(-1, 1)
+    return (mask * grid_weight).sum(dim=TensorDim.GRID, keepdim=True).clamp_min(eps)
+
+
 class CountMaskedMSE(FunctionalLoss):
     """MSE scored only where a mission actually observed, at the target time.
 
@@ -98,7 +127,7 @@ class CountMaskedAndWeightedMSE(FunctionalLoss):
         predicted = pred[..., 0::2]
 
         mask = (counts > 0).to(pred.dtype)
-        mask = mask / mask.mean(dim=TensorDim.GRID, keepdim=True).clamp_min(self.eps)
+        mask = mask / _coverage_divisor(self, mask, self.eps)
 
         return torch.square(predicted - values) * mask
 
@@ -258,7 +287,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         predicted = pred[..., 0::2]
 
         mask = (counts > 0).to(pred.dtype)
-        mask = mask / mask.mean(dim=TensorDim.GRID, keepdim=True).clamp_min(self.eps)
+        mask = mask / _coverage_divisor(self, mask, self.eps)
 
         # reduce() averages the variable dimension over every declared group; rescale so
         # the divisor counts only the groups that observed something in this sample.

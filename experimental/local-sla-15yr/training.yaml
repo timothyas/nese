@@ -74,6 +74,21 @@ data:
         # denormalising and after the imputer's de-imputation, on raw-space values. Its
         # forward pass is a no-op, so the imputer still sees the NaNs it has to fill.
         # Note that this obs_nan_restorer is just to make the training diagnostic plots sensible.
+        #
+        # sea-masking is listed first so the reversed inverse chain runs it last, on raw denormalised
+        # values. Land nodes are cut from both edge sets, so nothing informs them, but the
+        # decoder still maps their trainable embedding to a confident-looking number.
+        # Masking keeps this from happening by marking the model's output invalid there.
+        # We use a "data processor" rather than
+        # `model.output_mask` because processors are pickled into the inference checkpoint
+        # and applied inside predict_step, so the marking holds at inference too --
+        # anemoi-inference only uses output_mask to gate LAM boundary forcings, never to
+        # NaN anything.
+        sea_mask:
+          _target_: nese_training.processors.SeaMaskPostprocessor
+          dataset: ${system.input.elevation_dataset}
+          variable: ${graph.nodes.ocean.attributes.sea_mask.variable}
+          threshold: ${graph.nodes.ocean.attributes.sea_mask.threshold}
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
@@ -407,8 +422,15 @@ model:
     _target_: anemoi.models.layers.residual.SkipConnection
     step: -1
 
+  # the model.output_mask
+  # * zeroes the node-weight scaler off-sea, and
+  # * NaNs the diagnostic plots appropriately
+  # The loss then stops scoring the ~2730 coastal cells that carry
+  # observations but have no decoder edges, where the model
+  # was memorizing a per-cell constant.
   output_mask:
-    _target_: anemoi.training.utils.masks.NoOutputMask
+    _target_: anemoi.training.utils.masks.Boolean1DMask
+    attribute_name: sea_mask
   trainable_parameters:
     data: 2
     hidden: 2

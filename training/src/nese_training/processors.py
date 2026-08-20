@@ -5,6 +5,7 @@ from anemoi.models.preprocessing.imputer import InputImputer
 from anemoi.models.preprocessing.normalizer import InputNormalizer
 from torch import nn
 
+from nese_training.masks import variable_below
 from nese_training.observations import pool_statistics
 from nese_training.observations import resolve_groups
 
@@ -120,6 +121,61 @@ class ObsCountNaNRestorer(nn.Module):
             )
 
         return x
+
+
+class SeaMaskPostprocessor(nn.Module):
+    """NaN the model's output wherever the graph gave it nothing to predict from.
+
+    Land nodes are excluded from both edge sets (``source_mask_attr_name`` on the encoder,
+    ``target_mask_attr_name`` on the decoder), so they have zero in-degree and no
+    information reaches them. They are still nodes, though, and the decoder still maps
+    their trainable embedding to a number -- a confident-looking one: in an earlier
+    forecast the land mean was 0.0398 m against a sea mean of 0.0176 m. Anything reading
+    the output has no way to tell that apart from a real prediction.
+
+    This runs on the inverse pass only. The forward pass must stay NaN-free: preprocessing
+    asserts as much (``preprocessing/__init__.py:205``) and a NaN in the forward graph
+    would poison gradients. Being a processor rather than a training-side mask is what
+    makes it travel -- ``post_processors`` are part of the model, pickled into the
+    inference checkpoint and applied inside ``predict_step``, so the mask holds wherever
+    the model is used rather than only in the training plots.
+
+    The mask comes from :func:`nese_training.masks.variable_below`, the same function the
+    graph attribute uses, so the two cannot disagree about what sea is.
+    """
+
+    def __init__(
+        self,
+        dataset: str | dict,
+        variable: str,
+        threshold: float,
+        data_indices=None,  # noqa: ANN001
+        statistics: dict | None = None,
+    ) -> None:
+        super().__init__()
+        sea = torch.from_numpy(variable_below(dataset, variable, threshold))
+        # A buffer, not a plain attribute: this is what carries the mask into the
+        # inference checkpoint and onto the accelerator with the rest of the model.
+        self.register_buffer("sea", sea)
+        self.data_indices = data_indices
+
+    def forward(self, x: torch.Tensor, in_place: bool = True, inverse: bool = False, **_kwargs) -> torch.Tensor:
+        if not inverse:
+            return x if in_place else x.clone()
+        return self.inverse_transform(x, in_place=in_place)
+
+    def inverse_transform(self, x: torch.Tensor, in_place: bool = True, **_kwargs) -> torch.Tensor:
+        # Only the model's own output. The truth tensor is wider and is left alone: its
+        # land cells are either already NaN or a real coastal observation, and hiding
+        # those would be losing data rather than marking the absence of a prediction.
+        n_predicted = len(self.data_indices.model.output.full)
+        if x.shape[-1] != n_predicted or x.shape[-2] != self.sea.numel():
+            return x if in_place else x.clone()
+
+        if not in_place:
+            x = x.clone()
+
+        return torch.where(self.sea.unsqueeze(-1), x, torch.nan)
 
 
 class _PooledStatistics:

@@ -1,9 +1,10 @@
 """Graph node attributes for observation-supervised state estimation."""
 
 import torch
-from anemoi.datasets import open_dataset
 from anemoi.graphs.nodes.attributes.base_attributes import BooleanBaseNodeAttribute
 from torch_geometric.data.storage import NodeStorage
+
+from nese_training.masks import variable_below
 
 
 class DatasetVariableBelow(BooleanBaseNodeAttribute):
@@ -17,8 +18,6 @@ class DatasetVariableBelow(BooleanBaseNodeAttribute):
     ``hp.pix2ang(64, ..., nest=True)`` and nese-dataprep writes the same ordering -- an
     exact match on both latitude and longitude -- but nothing in the graph enforces it,
     so the node count is checked.
-
-    Only the first timestep is read; the intended variables are static.
     """
 
     def __init__(self, dataset: str | dict, variable: str, threshold: float) -> None:
@@ -28,13 +27,13 @@ class DatasetVariableBelow(BooleanBaseNodeAttribute):
         self.threshold = threshold
 
     def get_raw_values(self, nodes: NodeStorage, **kwargs) -> torch.Tensor:
-        values = open_dataset(self.dataset, select=self.variable)[0].squeeze()
+        below = variable_below(self.dataset, self.variable, self.threshold)
 
-        if values.shape[0] != nodes.x.shape[0]:
+        if below.shape[0] != nodes.x.shape[0]:
             msg = (
-                f"{type(self).__name__}: '{self.variable}' has {values.shape[0]} points "
+                f"{type(self).__name__}: '{self.variable}' has {below.shape[0]} points "
                 f"but the node set has {nodes.x.shape[0]}."
             )
             raise ValueError(msg)
 
-        return torch.from_numpy(values < self.threshold)
+        return torch.from_numpy(below)
