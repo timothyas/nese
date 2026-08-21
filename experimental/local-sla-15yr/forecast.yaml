@@ -1,0 +1,73 @@
+debugging_info:
+  root_dir: runs/sea-mask-in-model
+  run_id: 7a74d146c6cf4206a51f2217fad5bdeb
+checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
+
+# multistep_input: 3
+# so start is first day with all inputs in validation period
+dates:
+  start: 2015-01-03T12
+  end: 2015-12-31T12
+  freq: 24h
+
+output:
+  netcdf: ${debugging_info.root_dir}/inference-validation/${date}.nc
+lead_time: 24h
+allow_nans: true
+initial_state_categories: [dynamic_forcings]
+precision: "32"
+device: cpu
+
+input:
+  dataset:
+    join:
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+        select:
+          - sla_filtered_cryosat_2
+          - sla_filtered_envisat
+          - sla_filtered_envisat_new_orbit
+          - sla_filtered_ers_2
+          - sla_filtered_gfo
+          - sla_filtered_haiyang_2a
+          - sla_filtered_jason_1
+          - sla_filtered_jason_1_geodetic
+          - sla_filtered_jason_1_interleaved
+          - sla_filtered_jason_2
+          - sla_filtered_saral
+          - sla_filtered_topex_poseidon
+          - sla_filtered_topex_poseidon_interleaved
+      - dataset: anemoi-hpx6-24h/obs_count_f32.zarr
+        select:
+          - cryosat_2
+          - envisat
+          - envisat_new_orbit
+          - ers_2
+          - gfo
+          - haiyang_2a
+          - jason_1
+          - jason_1_geodetic
+          - jason_1_interleaved
+          - jason_2
+          - saral
+          - topex_poseidon
+          - topex_poseidon_interleaved
+        rename:
+          cryosat_2: obs_count_cryosat_2
+          envisat: obs_count_envisat
+          envisat_new_orbit: obs_count_envisat_new_orbit
+          ers_2: obs_count_ers_2
+          gfo: obs_count_gfo
+          haiyang_2a: obs_count_haiyang_2a
+          jason_1: obs_count_jason_1
+          jason_1_geodetic: obs_count_jason_1_geodetic
+          jason_1_interleaved: obs_count_jason_1_interleaved
+          jason_2: obs_count_jason_2
+          saral: obs_count_saral
+          topex_poseidon: obs_count_topex_poseidon
+          topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+        select:
+          - sla_filtered_jason_2
+        rename:
+          sla_filtered_jason_2: sla
+      - dataset: gebco-anemoi-hpx6/dataset.zarr
