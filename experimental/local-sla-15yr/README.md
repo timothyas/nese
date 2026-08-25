@@ -19,10 +19,11 @@ Uses:
     * Encoder & Decoder:
         * 4 attention heads
 
-
 ## Version 0
 
 * No forcings (e.g., cos/sin julian day, insolation)
+    * Note that cos & sin lat & lon are used for the GraphTransformer operators,
+      but they are not explicitly added as features
 * No dropout
 * `trainable_size = 2` for all (data, hidden, data2hidden, hidden2data)
 
@@ -38,3 +39,21 @@ Model size: **~1.79 M trainable parameters, 7.2 MB of weights (fp32)**.
 
 On top of the weights there are 1.50 M non-trainable buffers (6.8 MB): edge
 lengths/directions and the fixed node coordinate features.
+
+
+
+## Step-by-step
+
+### Pull in the data
+
+```
+HYDRA_IFACE=lo0 FI_PROVIDER=tcp mpirun -n 8 nese-dataprep create data.yaml
+nese-dataprep create gebco.yaml
+```
+
+
+### Train the model
+
+```
+MPLBACKEND=Agg anemoi-training train --config-name=training
+```
