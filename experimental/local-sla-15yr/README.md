@@ -20,7 +20,7 @@ Uses:
         * 4 attention heads
 
 
-## Prototype 1: sea-mask-in-model
+## Version 0
 
 * No forcings (e.g., cos/sin julian day, insolation)
 * No dropout

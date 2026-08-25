@@ -1,5 +1,5 @@
 debugging_info:
-  root_dir: runs/sea-mask-in-model
+  root_dir: runs/v0
   run_id: 7a74d146c6cf4206a51f2217fad5bdeb
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 

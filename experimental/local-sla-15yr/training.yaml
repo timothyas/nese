@@ -634,7 +634,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: sea-mask-in-model
+      experiment_name: v0
       project_name: local-sla-15yr
       terminal: false
       system: false
