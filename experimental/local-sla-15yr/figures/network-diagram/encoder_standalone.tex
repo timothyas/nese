@@ -1,0 +1,21 @@
+% The encoder figure alone, tight-cropped, for \includegraphics into a paper.
+% Shares its preamble intent with network_diagram.tex -- keep the two in sync.
+\documentclass[border=6pt]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+
+\definecolor{trapfill}{HTML}{E8E8E8}
+\definecolor{trapline}{HTML}{0E2841}
+\definecolor{dataclr}{HTML}{4C72B0}
+\definecolor{edgeclr}{HTML}{D95F02}
+\definecolor{latentclr}{HTML}{55A868}
+\colorlet{attnfill}{latentclr!8}
+
+\input{notation}
+
+\begin{document}
+\input{encoder_figure}
+\end{document}

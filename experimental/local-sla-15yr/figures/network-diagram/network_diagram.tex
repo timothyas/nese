@@ -1,0 +1,207 @@
+% Encoder architecture of the local-sla-15yr AnemoiModelEncProcDec.
+%
+%   page 1  the encoder wire diagram, drawn entirely in symbols
+%   page 2  the notation table, with the values read out of the checkpoint
+%
+% Build:  make            (regenerates dims.tex / symbols_table.tex first)
+%         latexmk -pdf network_diagram.tex
+%
+% To drop the figure alone into a paper, \input{encoder_figure} inside a
+% tikzpicture-capable preamble, or use the standalone build: make figure.
+
+\documentclass[11pt,landscape]{article}
+\usepackage[a4paper,landscape,margin=1.2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{booktabs}
+\usepackage{multicol}
+\usepackage{enumitem}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc}
+
+% Fonts: plain Latin Modern by default.  To match a preprint built on
+% preprint.sty (as figures/nested-illustration does), swap in:
+%     \usepackage{XCharter}
+%     \usepackage[charter,smallerops]{newtxmath}
+
+% --- palette ---------------------------------------------------------------
+% Structural greys from the pptx theme used in nested_illustration.tex; one
+% accent per lane from the notebooks/nice.mplstyle prop_cycle.
+\definecolor{trapfill}{HTML}{E8E8E8}
+\definecolor{trapline}{HTML}{0E2841}
+\definecolor{dataclr}{HTML}{4C72B0}
+\definecolor{edgeclr}{HTML}{D95F02}
+\definecolor{latentclr}{HTML}{55A868}
+\colorlet{attnfill}{latentclr!8}
+
+\input{notation}
+\input{dims}
+\input{symbols_table}
+
+\pagestyle{empty}
+
+\begin{document}
+
+% ============================== page 1 =====================================
+\vspace*{\fill}
+\begin{center}
+  \resizebox{\textwidth}{!}{\input{encoder_figure}}
+\end{center}
+\vspace*{\fill}
+
+{\footnotesize
+    \textbf{Encoder.}\;
+    \texttt{GraphTransformerForwardMapper} maps the data-space
+    state onto the latent mesh.
+    Shapes are given for a single batch element and a
+    single ensemble member; the batch and ensemble axes are flattened into the node
+    axis before the encoder is called.
+    Three residual paths act on the latent
+    stream and none on the data stream: the source nodes are returned unchanged
+    (\texttt{update\_src\_nodes = False}) and are discarded by the caller.
+    The embedded edge attributes $\edgeemb$ enter the
+    attention twice: into the key, where they steer the weight, and into the value,
+    where they steer the payload.
+    The softmax runs over the incoming edges of each
+    latent node separately and per head --- not over all $\Nx\!\times\!\Nz$ pairs.
+    The mapper's chunking
+    (\texttt{num\_chunks}) partitions the latent nodes and, because the edge index
+    is sorted by destination, is exact --- it is a memory optimisation only and is
+    not drawn.
+\par}
+
+\clearpage
+
+% ============================== page 2 =====================================
+\begin{center}
+  \begin{minipage}{0.72\textwidth}
+    \section*{Notation}
+
+    Lowercase letters denote variables and functions; integer counts are written
+    $N_{\text{quantity}}$.  Values are read directly from the checkpoint by
+    \texttt{extract\_dims.py}, so they cannot drift from the trained model.
+
+    \medskip
+    \begin{tabular}{@{}llr@{}}
+      \toprule
+      symbol & meaning & value \\
+      \midrule
+      \symbolrows
+      \bottomrule
+    \end{tabular}
+
+    \medskip
+    {\footnotesize
+    $\|$ denotes concatenation along the feature axis.  The attribute widths
+    split as (sin/cos lat-lon) $\|$ (trainable), and the edge attribute width as
+    (length, direction) $\|$ (trainable); the trainable parts are
+    zero-initialised.  $\NEE$ counts the encoder's data-to-latent edges;
+    $N_{DE}$ is reserved for the decoder's.
+
+    \smallskip
+    Each latent node draws on a small local patch of the data mesh rather than
+    on all of it: in this graph $\nbhd(\coordz_j)$ holds between \valdegmin\ and
+    \valdegmax\ data nodes, \valdegmean\ on average.  It is empty for
+    \valdegzero\ of the \valNz\ latent nodes, which by design receive no data
+    and carry only their attributes and the skip connection into the processor.
+    \par}
+  \end{minipage}
+\end{center}
+
+\clearpage
+
+% ============================== page 3 =====================================
+% Points where this encoder departs from GraphCast-style message passing, from a
+% plain GNN, or from a standard transformer.  Each is grounded in the source; the
+% numbers come from dims.tex so they track the checkpoint.
+\section*{Notes}
+
+Where this encoder departs from GraphCast-style message passing, from a plain GNN,
+or from a standard transformer --- and what each departure might be costing.  Line
+references are to \texttt{anemoi-core}.
+
+\begin{multicols}{2}
+\small\sloppy  % narrow columns; prefer loose lines over overfull ones
+\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.5em}
+
+    \item \textbf{Aggregation is degree-normalised; GraphCast's is not.}
+      The softmax makes $\sum_{i\in\nbhd(\coordz_j)}\attn_{ij}=1$, so a latent
+      node with one neighbour and one with fifteen both emit a unit-weight
+      average.  GraphCast instead \emph{sums} MLP messages over incoming edges,
+      so its aggregate grows with degree.  For a data-assimilation-like problem
+      the observation density \emph{is} much of the signal, and here the
+      attention output carries no magnitude cue for how well observed a patch
+      is.  The \texttt{obs\_count} channels ride in $\inputvec$ and so reach the
+      values, but that is an indirect route --- worth checking whether the model
+      actually exploits it.
+
+    \item \textbf{Edge features are never updated.}
+      GraphCast is an interaction network: each message-passing step rebuilds
+      edge features from (sender, receiver, edge).  Here $\attre$ passes through
+      one Linear into the keys and values and is returned unchanged
+      (\texttt{block.py:1029}), then discarded by the mapper
+      (\texttt{mapper.py:321}).  Edge geometry is a fixed bias, never a state, so
+      it cannot be modulated by the flow it is carrying.
+
+    \item \textbf{The edge embedding enters both the key and the value.}
+      \texttt{conv.py:140} and \texttt{:147}, the same tensor twice.  Inherited
+      from PyG's \texttt{TransformerConv} rather than invented here, but it is
+      distinct both from GraphCast (which concatenates edge features into an MLP)
+      and from a plain transformer (no edge features at all).  One
+      \texttt{lin\_edge} is trained to do two different jobs: shift the logit and
+      shift the payload.
+
+    \item \textbf{There is no self-loop in the softmax.}
+      In standard self-attention a token sits inside its own softmax, so
+      ``attend to myself'' competes with ``attend to my neighbours'' on a
+      normalised scale.  Here the node's own state re-enters outside the softmax,
+      through $\selfv$.  The balance between own-state and neighbour-evidence is
+      therefore set by the learned magnitude of \texttt{lin\_self} and is
+      unbounded --- nothing stops it from swamping, or being swamped by, the
+      aggregated data.
+
+    \item \textbf{$\selfv$ is added \emph{before} the output projection, so it is
+      not a skip connection.}
+      \texttt{block.py:1017} computes \texttt{projection(out + x\_r)}; the
+      genuine pre-norm residual is the separate add on the next line.  A standard
+      transformer adds its residual \emph{after} $W^O$.  Here the self branch is
+      mixed by the projection along with the attention output.
+
+    \item \textbf{The decoder's skip carries raw, un-embedded $\inputvec$.}
+      The mapper returns \texttt{x[0]} untouched (\texttt{mapper.py:597}), and
+      the decoder re-embeds it with its own Linear.  So
+      \texttt{emb\_nodes\_src} serves the keys and values only and never reaches
+      the decoder, and the data-space input is embedded twice by two independent
+      matrices.  GraphCast's decoder consumes the \emph{encoded} grid features
+      instead.  A candidate ablation.
+
+    \item \textbf{\valgraphpct\% of the model's parameters are pinned to
+      specific nodes and edges.}
+      The trainable node and edge attributes total \valgraphparams\
+      (\valnodeparams\ node $+$ \valedgeparams\ edge) against \valencparams\ in
+      the entire encoder module and \valtotalparams\ in the whole model --- so
+      there is roughly $1.5\times$ as much free parameter attached to \emph{this
+      graph} as there is learned weight in the encoder that uses it.  They are
+      zero-initialised, they can memorise per-location behaviour, and none of it
+      transfers to a different graph or resolution.  Worth inspecting their
+      magnitude after training, and worth suspecting first if the model
+      generalises poorly in space.
+
+    \item \textbf{The encoder is a single attention block.}
+      \texttt{self.proc} is one \texttt{Graph\-Transformer\-Mapper\-Block}, not a stack
+      (\texttt{mapper.py:222}); all depth lives in the processor.  GraphCast's
+      encoder is likewise a single message-passing step, so this matches --- but
+      combined with the one-hop neighbourhood it means the entire path from data
+      to latent is one local gather.
+
+    \item \textbf{Multi-dataset latents are summed, not gated.}
+      Every dataset contributes additively with no learned weighting between
+      them, and each carries its own copy of the latent-attribute residual
+      (\texttt{encoder\_\-processor\_\-decoder.py:273}).  Relevant before adding a
+      second dataset whose observation density differs sharply from this one's.
+
+\end{itemize}
+\end{multicols}
+
+\end{document}
