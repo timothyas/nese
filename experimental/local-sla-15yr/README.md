@@ -16,6 +16,7 @@ Uses:
     * Processor:
         * 4 layers
         * 4 attention heads
+        * `dropout_p = 0`
     * Encoder & Decoder:
         * 4 attention heads
 
@@ -40,6 +41,26 @@ Model size: **~1.79 M trainable parameters, 7.2 MB of weights (fp32)**.
 On top of the weights there are 1.50 M non-trainable buffers (6.8 MB): edge
 lengths/directions and the fixed node coordinate features.
 
+## Version 1
+
+* No forcings
+* `trainable_size = 0` ... get rid of these and see how it impacts "lines" in
+  predictions
+
+
+## Version 2
+
+* With forcings
+* Trainable size = TBD
+
+## Version 3
+
+* test removing data at prediction time
+
+## Version 4
+
+... Or maybe a separate fork, consider creating a model that predicts full state
+at multiple time steps, or at least `(t - win , t) -> t` , with removed points
 
 
 ## Step-by-step
