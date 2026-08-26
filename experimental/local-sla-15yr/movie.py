@@ -1,3 +1,4 @@
+import os
 import sys
 
 import numpy as np
@@ -19,7 +20,7 @@ from regions import set_region, projection, draw_cells
 plt.style.use(f"../../nice.mplstyle")
 
 REGION = "global"
-REGIONS_TO_PLOT = ("north_atlantic", "tropical_pacific")
+REGIONS_TO_PLOT = ("tropical_pacific",)
 DATE_FORMAT = "%Y-%m-%dT%H"
 
 # The observations the model is given. The forecast netcdfs only carry the initial time,
@@ -66,6 +67,16 @@ def forecast_paths(config_file="forecast.yaml"):
         config.date = date.strftime(config.get("date_format", DATE_FORMAT))
         paths.append(OmegaConf.to_container(config, resolve=True)["output"]["netcdf"])
     return paths
+
+
+def get_save_dir(config_file="forecast.yaml"):
+    paths = forecast_paths(config_file)
+    inference_dir = os.path.dirname(paths[0])
+    run_dir = os.path.dirname(inference_dir)
+    movie_dir = f"{run_dir}/movies"
+    if not os.path.isdir(movie_dir):
+        os.makedirs(movie_dir)
+    return movie_dir
 
 
 def input_observation_mask(valid_times, sea, dataset=INPUT_DATASET):
@@ -210,6 +221,8 @@ if __name__ == "__main__":
     extend, vmin, vmax = get_vmin_vmax_extend(xds["sla"], vmin=None, vmax=None)
     print(f"Color limits: {vmin:.3f} to {vmax:.3f}, extend={extend}")
 
+    save_dir = get_save_dir()
+
     for region in REGIONS_TO_PLOT:
         width, height = frame_size(region)
         print(f"{region}: {width} x {height}")
@@ -227,8 +240,9 @@ if __name__ == "__main__":
             vmin=vmin,
             vmax=vmax,
         )
+        fname = f"{save_dir}/sla.{region}.mp4"
         mov.save(
-            f"sla.{region}.mp4",
+            fname,
             progress=True,
             overwrite_existing=True,
             remove_frames=True,

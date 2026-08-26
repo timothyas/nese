@@ -47,6 +47,22 @@ lengths/directions and the fixed node coordinate features.
 * `trainable_size = 0` ... get rid of these and see how it impacts "lines" in
   predictions
 
+Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)**.
+
+| Stage | Trainable params | MB |
+|---|---:|---:|
+| Node attributes (no learnable node embeddings) | 0 | 0.00 |
+| Encoder (`GraphTransformerForwardMapper`, no trainable edge attrs) | **227,584** | 0.91 |
+| Processor (4-layer `TransformerProcessor`) | **791,552** | 3.17 |
+| Decoder (`GraphTransformerBackwardMapper`, no trainable edge attrs) | **227,329** | 0.91 |
+| **Total** | **1,246,465** | **4.99** |
+
+Non-trainable buffers are unchanged from version 0 at 1.50 M (6.8 MB): edge
+lengths/directions and the fixed node coordinate features.
+Dropping
+`trainable_size 2->0` removes 540,874 trainable parameters (30% of version 0),
+entirely from the node embeddings and the trainable edge attributes.
+
 
 ## Version 2
 
