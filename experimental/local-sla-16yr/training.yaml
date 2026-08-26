@@ -32,6 +32,13 @@ data:
       - obs_count_topex_poseidon_interleaved
       - elevation
       - land_fraction
+      - cos_latitude
+      - sin_latitude
+      - cos_longitude
+      - sin_longitude
+      - cos_julian_day
+      - sin_julian_day
+      - insolation
 
       # The one channel the model emits.
       diagnostic:
@@ -86,7 +93,7 @@ data:
         # NaN anything.
         sea_mask:
           _target_: nese_training.processors.SeaMaskPostprocessor
-          dataset: ${system.input.elevation_dataset}
+          dataset: ${system.input.dataset}
           variable: ${graph.nodes.ocean.attributes.sea_mask.variable}
           threshold: ${graph.nodes.ocean.attributes.sea_mask.threshold}
         obs_nan_restorer:
@@ -167,6 +174,13 @@ data:
               - elevation
             none:
               - land_fraction
+              - cos_latitude
+              - sin_latitude
+              - cos_longitude
+              - sin_longitude
+              - cos_julian_day
+              - sin_julian_day
+              - insolation
 
 dataloader:
   prefetch_factor: 1
@@ -185,65 +199,16 @@ dataloader:
     validation: 50
     test: 1
 
-  # The two stores nese-dataprep writes are joined here rather than on disk.
-  # `sla` is a duplicate of one mission's column: under the combined loss its values are
-  # never a target, only its statistics reach the normaliser. It copies jason_2, which is
-  # the only mission live across both the training and validation windows for their full
-  # extent (2008-10 onwards); the per-mission statistics are near-identical anyway. It is
-  # named to sort last among the channels.
+  # `sla` is a duplicate of jason_2's column since it is live during training and validation.
+  # under the combined loss sla's values are never a target.
   dataset:
     join:
     - dataset: ${system.input.dataset}
-      select:
-      - sla_filtered_cryosat_2
-      - sla_filtered_envisat
-      - sla_filtered_envisat_new_orbit
-      - sla_filtered_ers_2
-      - sla_filtered_gfo
-      - sla_filtered_haiyang_2a
-      - sla_filtered_jason_1
-      - sla_filtered_jason_1_geodetic
-      - sla_filtered_jason_1_interleaved
-      - sla_filtered_jason_2
-      - sla_filtered_saral
-      - sla_filtered_topex_poseidon
-      - sla_filtered_topex_poseidon_interleaved
-    - dataset: ${system.input.obs_count_dataset}
-      select:
-      - cryosat_2
-      - envisat
-      - envisat_new_orbit
-      - ers_2
-      - gfo
-      - haiyang_2a
-      - jason_1
-      - jason_1_geodetic
-      - jason_1_interleaved
-      - jason_2
-      - saral
-      - topex_poseidon
-      - topex_poseidon_interleaved
-      rename:
-        cryosat_2: obs_count_cryosat_2
-        envisat: obs_count_envisat
-        envisat_new_orbit: obs_count_envisat_new_orbit
-        ers_2: obs_count_ers_2
-        gfo: obs_count_gfo
-        haiyang_2a: obs_count_haiyang_2a
-        jason_1: obs_count_jason_1
-        jason_1_geodetic: obs_count_jason_1_geodetic
-        jason_1_interleaved: obs_count_jason_1_interleaved
-        jason_2: obs_count_jason_2
-        saral: obs_count_saral
-        topex_poseidon: obs_count_topex_poseidon
-        topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
     - dataset: ${system.input.dataset}
       select:
       - sla_filtered_jason_2
       rename:
         sla_filtered_jason_2: sla
-    # elevation / bathymetry as static forcing, plus land fraction for inputs and masking
-    - dataset: ${system.input.elevation_dataset}
 
   training:
     datasets:
@@ -304,7 +269,7 @@ graph:
         area_weight: ${graph.attributes.nodes.area_weight}
         sea_mask:
           _target_: nese_training.graph_attributes.DatasetVariableBelow
-          dataset: ${system.input.elevation_dataset}
+          dataset: ${system.input.dataset}
           variable: land_fraction
           threshold: 0.1 # keep edges with land_fraction < threshold
 
@@ -343,8 +308,6 @@ graph:
         _target_: anemoi.graphs.edges.attributes.EdgeDirection
         norm: unit-std
   post_processors: []
-  #  - _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
-  #    nodes_name: ocean
 
 model:
   num_channels: 128
@@ -583,27 +546,6 @@ diagnostics:
       batch: 300
       epoch: 1
     callbacks:
-      - _target_: anemoi.training.diagnostics.callbacks.plot.GraphFeaturePlot
-        every_n_epochs: ${diagnostics.plot.frequency.epoch}
-        dataset_names: ${diagnostics.plot.datasets_to_plot}
-
-      - _target_: anemoi.training.diagnostics.callbacks.plot.LossCurvePlot
-        dataset_names: ${diagnostics.plot.datasets_to_plot}
-        parameter_groups: []
-        every_n_batches: ${diagnostics.plot.frequency.batch}
-
-      - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
-        tag_infix: sample
-        dataset_names: ${diagnostics.plot.datasets_to_plot}
-        sample_idx: ${diagnostics.plot.sample_idx}
-        parameters: ${diagnostics.plot.parameters}
-        every_n_batches: ${diagnostics.plot.frequency.batch}
-        with_auxiliary: true
-        focus_area: ${diagnostics.plot.focus_areas.tropical_pacific_east}
-        plot_fn:
-          _target_: anemoi.training.diagnostics.evaluation.plotting.batch_output.sample_plot_fn
-          _partial_: true
-
       - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
         tag_infix: histo
         dataset_names: ${diagnostics.plot.datasets_to_plot}
@@ -632,8 +574,8 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v1
-      project_name: local-sla-15yr
+      experiment_name: v2
+      project_name: local-sla-16yr
       terminal: false
       system: false
     wandb:
@@ -652,7 +594,7 @@ diagnostics:
 
 system:
   output:
-    root: /Users/timith/work/nese/experimental/local-sla-15yr/runs/${diagnostics.log.mlflow.experiment_name}
+    root: /Users/timith/work/nese/experimental/local-sla-16yr/runs/${diagnostics.log.mlflow.experiment_name}
     logs:
       root: logs
       wandb: wandb
@@ -666,10 +608,8 @@ system:
     plots: plots
     profiler: profiler
   input:
-    root: /Users/timith/work/nese/experimental/local-sla-15yr
+    root: /Users/timith/work/nese/experimental/local-sla-16yr
     dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
-    obs_count_dataset: ${system.input.root}/anemoi-hpx6-24h/obs_count_f32.zarr
-    elevation_dataset: ${system.input.root}/gebco-anemoi-hpx6/dataset.zarr
     graph: ${system.input.root}/graph.pt
     loss_matrices_path: null
     truncation: null

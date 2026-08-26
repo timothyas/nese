@@ -19,8 +19,9 @@ Uses:
         * `dropout_p = 0`
     * Encoder & Decoder:
         * 4 attention heads
+## Versions
 
-## Version 0
+### Version 0
 
 * No forcings (e.g., cos/sin julian day, insolation)
     * Note that cos & sin lat & lon are used for the GraphTransformer operators,
@@ -41,7 +42,7 @@ Model size: **~1.79 M trainable parameters, 7.2 MB of weights (fp32)**.
 On top of the weights there are 1.50 M non-trainable buffers (6.8 MB): edge
 lengths/directions and the fixed node coordinate features.
 
-## Version 1
+### Version 1
 
 * No forcings
 * `trainable_size = 0` ... get rid of these and see how it impacts "lines" in
@@ -64,19 +65,20 @@ Dropping
 entirely from the node embeddings and the trainable edge attributes.
 
 
-## Version 2
+### Version 2
 
 * With forcings
-* Trainable size = TBD
+* `trainable_size = 0`
 
-## Version 3
+### Version 3
 
-* test removing data at prediction time
+* test removing some fraction of data at prediction time
 
-## Version 4
+### After that ...
 
-... Or maybe a separate fork, consider creating a model that predicts full state
-at multiple time steps, or at least `(t - win , t) -> t` , with removed points
+* Predict full state at multiple time steps, or `obs(t-win, t) -> x(t)` with
+  removed points
+* Tackle some of the network oddities noted when visualizing the architecture
 
 
 ## Step-by-step
@@ -85,9 +87,7 @@ at multiple time steps, or at least `(t - win , t) -> t` , with removed points
 
 ```
 HYDRA_IFACE=lo0 FI_PROVIDER=tcp mpirun -n 8 nese-dataprep create data.yaml
-nese-dataprep create gebco.yaml
 ```
-
 
 ### Train the model
 
