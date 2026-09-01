@@ -510,7 +510,11 @@ diagnostics:
       batch: 300
       epoch: 1
     callbacks:
-      - _target_: anemoi.training.diagnostics.callbacks.plot.BatchOutputPlot
+      # Not the stock BatchOutputPlot: with `target` variables configured, the truth
+      # tensor is wider than the model's output and the index the plot functions use is
+      # right only for the prediction, so the truth panel shows the first target column
+      # -- an obs count -- rather than `sla`. See nese_training.diagnostics.
+      - _target_: nese_training.diagnostics.ObservationBatchOutputPlot
         tag_infix: histo
         dataset_names: ${diagnostics.plot.datasets_to_plot}
         sample_idx: ${diagnostics.plot.sample_idx}

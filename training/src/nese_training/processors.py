@@ -211,4 +211,33 @@ class PooledObservationImputer(_PooledStatistics, InputImputer):
     the normaliser used the pooled one, the fill would land up to 0.25 sigma off zero --
     varying by mission, and therefore by era, across the ~77% of cells that are
     unobserved. Sharing the pooled mean puts every filled cell at exactly zero.
+
+    It also declines to undo its own fill on the way back out; see
+    :meth:`inverse_transform`.
     """
+
+    def inverse_transform(self, x: torch.Tensor, in_place: bool = True, **kwargs) -> torch.Tensor:
+        """Leave the gaps to :class:`ObsCountNaNRestorer` on a ``data.output``-shaped tensor.
+
+        The base class restores NaN from ``nan_locations``, which is captured once per
+        forward pass as ``nan_locations[:, 0]`` (imputer.py:210) -- the *oldest* input bin
+        -- and then stamped over every timestep of whatever it is handed. The tensors that
+        reach the plots span the target bin as well, and satellite tracks move between
+        bins, so most of what a mission saw in the target bin is NaN in the oldest one and
+        is overwritten. Measured on one validation window: 1506 of the store's 14537
+        observations survived, and the composed truth came out 88% exact zeros, because
+        the restorer masks on counts (intact) while the values behind them had already
+        been destroyed.
+
+        Skipping it loses nothing. ``obs_count > 0`` is exactly equivalent to "value is not
+        NaN" in this dataset, so the restorer reproduces every gap from the counts, per bin
+        and without reference to any other one -- the de-imputation is redundant here as
+        well as destructive. With it skipped the composed truth matches a count-weighted
+        mean taken straight from the store in every cell.
+
+        Only the wide tensor is skipped. Model-output-shaped tensors are the imputer's own
+        business and go to the base class untouched.
+        """
+        if x.shape[-1] == len(self.data_indices.data.output.full):
+            return x if in_place else x.clone()
+        return super().inverse_transform(x, in_place=in_place, **kwargs)
