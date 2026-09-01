@@ -95,12 +95,32 @@ processor is untouched, as it only ever sees the 128 hidden channels.
     * Keep `land_fraction` with `min-max` normalization,
       even though this just indicates coastal points
 
+Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)** -- identical to
+version 2.
+
+| Stage | Trainable params | MB |
+|---|---:|---:|
+| Node attributes (no learnable node embeddings) | 0 | 0.00 |
+| Encoder (`GraphTransformerForwardMapper`, no trainable edge attrs) | **230,272** | 0.92 |
+| Processor (4-layer `TransformerProcessor`) | **791,552** | 3.17 |
+| Decoder (`GraphTransformerBackwardMapper`, no trainable edge attrs) | **230,017** | 0.92 |
+| **Total** | **1,251,841** | **5.01** |
+
+Since there are no trainable parameters on the mesh, parameter count doesn't change from
+v2 to v3, since nothing depends on the number of cells in the graph (only goes
+with channel count and latent size).
+Non-trainable buffers change, as there are fewer nodes and no boolean `sea_mask`
+anymore.
+No substantive changes to the graph, just removed dead weight.
+
 
 ### After that ...
 
 * Predict full state at multiple time steps, or `obs(t-win, t) -> x(t)` with
   removed points
 * Tackle some of the network oddities noted when visualizing the architecture
+* Use a "pooled" error metric for the loss, normalizing over observation counts
+  rather than just num missions (probably not impactful, but cleaner)
 
 
 ## Step-by-step
