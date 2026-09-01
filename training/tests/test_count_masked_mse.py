@@ -103,6 +103,33 @@ def test_unweighted_loss_scales_with_coverage(n_observed: int) -> None:
     assert torch.allclose(loss(pred, target), torch.tensor(expected), atol=1e-5)
 
 
+@pytest.mark.parametrize("n_observed", [4, 16, 32, 64])
+def test_weighted_loss_is_invariant_to_coverage_with_no_grid_scaler(n_observed: int) -> None:
+    """The configuration a HEALPix run uses: no node_weights scaler at all, since equal-area
+    cells would make it a vector of ones. The divisor is sum(mask) there, so reduce's grid
+    sum still lands on the mean over observed cells."""
+    observed = torch.zeros(GRID, dtype=torch.bool)
+    observed[:n_observed] = True
+
+    loss = CountMaskedAndWeightedMSE()
+    pred, target = make_batch(observed)
+
+    assert torch.allclose(loss(pred, target), torch.tensor(0.25), atol=1e-5)
+
+
+def test_dropping_the_grid_scaler_does_not_rescale_the_loss() -> None:
+    """What lets the graph drop its area_weight attribute: on equal-area cells, dividing by
+    sum(m) with no weights is the same number as dividing by sum(m*w) with w = 1/N. Pinned
+    because getting it wrong is silent -- the loss is merely N times too big, and only the
+    gradient clip shows it."""
+    observed = torch.zeros(GRID, dtype=torch.bool)
+    observed[:16] = True
+    pred, target = make_batch(observed)
+
+    weighted = make_loss(CountMaskedAndWeightedMSE)(pred, target)
+    assert torch.allclose(CountMaskedAndWeightedMSE()(pred, target), weighted, atol=1e-5)
+
+
 def test_odd_column_count_is_rejected() -> None:
     loss = make_loss()
     pred = torch.zeros(1, 1, 1, GRID, 1)

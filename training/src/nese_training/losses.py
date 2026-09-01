@@ -29,12 +29,17 @@ def _coverage_divisor(loss: FunctionalLoss, mask: torch.Tensor, eps: float) -> t
     dependence this division exists to remove -- it counts observations on land that carry
     zero weight, and that fraction moves from sample to sample.
 
-    Falls back to ``mean(m)`` when no grid scaler is attached, so the loss stays usable on
-    its own.
+    With no grid scaler attached the divisor is ``sum(m)``: there are no weights to sum,
+    and ``reduce``'s bare grid sum contributes no ``1/N`` of its own, so
+    ``sum(e**2 m) / sum(m)`` is again the mean over observed cells -- the same number a
+    unit-sum ``node_weights`` scaler gives. That is the configuration a HEALPix run wants,
+    since equal-area cells make the node weight a vector of ones and the graph attribute
+    exists only to be summed and divided back out. The equivalence is exactly what equal
+    areas buy: a mesh with unequal cells needs a real grid scaler, not this branch.
     """
     weights = loss.scaler.subset_by_dim(TensorDim.GRID.value).tensors
     if not weights:
-        return mask.mean(dim=TensorDim.GRID, keepdim=True).clamp_min(eps)
+        return mask.sum(dim=TensorDim.GRID, keepdim=True).clamp_min(eps)
 
     grid_weight = None
     for _, tensor in weights.values():

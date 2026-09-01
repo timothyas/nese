@@ -60,7 +60,7 @@ def forecast_paths(config_file="forecast.yaml"):
     resolve the ``${date}`` in ``output.netcdf``.
     """
     config = OmegaConf.load(config_file)
-    dates = pd.date_range(**OmegaConf.to_container(config.dates, resolve=True))
+    dates = pd.date_range(**OmegaConf.to_container(config.date_range, resolve=True))
 
     paths = []
     for date in dates:
@@ -79,11 +79,30 @@ def get_save_dir(config_file="forecast.yaml"):
     return movie_dir
 
 
-def input_observation_mask(valid_times, sea, dataset=INPUT_DATASET):
+def scatter_to_mesh(xda, dim, dataset=INPUT_DATASET):
+    """Put a field on the stored cells back onto the full HEALPix mesh.
+
+    ``data.yaml`` prunes the mesh to its ocean cells (``land_fraction < 0.1``), so both the
+    zarr and the forecast netcdfs are ~33k cells long rather than the 49152 of hpx6, and
+    ``draw_cells``, which reads nside off the array length, cannot use them as they stand.
+    nese-dataprep records which cells survived as ``healpix_cell_index``; reindexing onto the
+    parent mesh puts each column back where it belongs and leaves the dropped cells NaN,
+    which is what paints them grey.
+    """
+    group = zarr.open(dataset, mode="r")
+    npix = 12*group.attrs["healpix_nside"]**2
+    return (
+        xda.rename({dim: "cell"})
+        .assign_coords(cell=group["healpix_cell_index"][:])
+        .reindex(cell=np.arange(npix))
+    )
+
+
+def input_observation_mask(valid_times, dataset=INPUT_DATASET):
     """Which input bin, if any, observed each cell -- the mask from plot_forecast.ipynb.
 
-    Returns 0 where no input bin saw the cell, then 1..MULTISTEP oldest to newest, and
-    NaN over land. Where several bins saw a cell the most recent wins, so the colours
+    Returns 0 where no input bin saw the cell, then 1..MULTISTEP oldest to newest, on the
+    dataset's own cells. Where several bins saw a cell the most recent wins, so the colours
     read as "how stale is what the model knows here".
 
     The bins are the model's inputs for a forecast valid at ``valid_times``, i.e. the
@@ -109,7 +128,6 @@ def input_observation_mask(valid_times, sea, dataset=INPUT_DATASET):
         seen = observed.sel(time=initial - step*TIMESTEP).values
         mask[seen] = MULTISTEP - step
 
-    mask[:, ~sea] = np.nan
     return xr.DataArray(mask, dims=("time", "cell"), coords={"time": valid_times})
 
 
@@ -120,6 +138,8 @@ def open_forecasts(config_file="forecast.yaml"):
     is finite at the forecast time, so each file contributes one frame stamped with its
     valid time. The observations that fed it are recovered separately, on their own
     input times, by :func:`input_observation_mask`.
+
+    Both fields come back on the full mesh, land included and NaN, ready for ``draw_cells``.
     """
     xds = xr.open_mfdataset(
         forecast_paths(config_file),
@@ -128,13 +148,10 @@ def open_forecasts(config_file="forecast.yaml"):
         preprocess=lambda xds: xds[["sla"]].isel(time=1),
     ).load()
 
-    # The sea mask the model was trained with: land is NaN in every output field.
-    sea = np.isfinite(xds["sla"].isel(time=0).values)
-    mask = input_observation_mask(xds["time"].values, sea)
-    # onto the netcdf's own spatial dim, so the two fields share it rather than sitting
-    # on parallel dims of equal length
-    xds["inputs"] = mask.rename({"cell": xds["sla"].dims[-1]})
-    return xds
+    return xr.Dataset({
+        "sla": scatter_to_mesh(xds["sla"], xds["sla"].dims[-1]),
+        "inputs": scatter_to_mesh(input_observation_mask(xds["time"].values), "cell"),
+    })
 
 
 def frame_size(region, panel=600, below=220):
@@ -160,7 +177,7 @@ def plot_single_timestamp(xds, fig, time, *args, **kwargs):
     region = kwargs.pop("region", REGION)
     extend = kwargs.pop("extend", "neither")
     cmap = plt.get_cmap(kwargs.pop("cmap", "cmo.balance")).copy()
-    # NaN is land, masked out of the model's output by the sea mask
+    # NaN is land: the cells data.yaml pruned off the mesh
     cmap.set_bad("0.9")
 
     axs = [fig.add_subplot(1, 2, i+1, projection=projection(region)) for i in range(2)]

@@ -53,6 +53,13 @@ computed_quantities:
   - sin_julian_day
   - insolation
 
+postprocess:
+  select_cells:
+    source: gebco
+    variable: land_fraction
+    keep: below
+    threshold: 0.1
+
 target:
   name: anemoi
   store_dir: ${oc.env:PWD}/anemoi-hpx6-24h

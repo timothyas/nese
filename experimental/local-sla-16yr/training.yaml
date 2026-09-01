@@ -81,21 +81,6 @@ data:
         # denormalising and after the imputer's de-imputation, on raw-space values. Its
         # forward pass is a no-op, so the imputer still sees the NaNs it has to fill.
         # Note that this obs_nan_restorer is just to make the training diagnostic plots sensible.
-        #
-        # sea-masking is listed first so the reversed inverse chain runs it last, on raw denormalised
-        # values. Land nodes are cut from both edge sets, so nothing informs them, but the
-        # decoder still maps their trainable embedding to a confident-looking number.
-        # Masking keeps this from happening by marking the model's output invalid there.
-        # We use a "data processor" rather than
-        # `model.output_mask` because processors are pickled into the inference checkpoint
-        # and applied inside predict_step, so the marking holds at inference too --
-        # anemoi-inference only uses output_mask to gate LAM boundary forcings, never to
-        # NaN anything.
-        sea_mask:
-          _target_: nese_training.processors.SeaMaskPostprocessor
-          dataset: ${system.input.dataset}
-          variable: ${graph.nodes.ocean.attributes.sea_mask.variable}
-          threshold: ${graph.nodes.ocean.attributes.sea_mask.threshold}
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
@@ -172,8 +157,8 @@ data:
               - obs_count_topex_poseidon_interleaved
             min-max:
               - elevation
-            none:
               - land_fraction
+            none:
               - cos_latitude
               - sin_latitude
               - cos_longitude
@@ -262,44 +247,31 @@ graph:
   nodes:
     ocean:
       node_builder:
-        _target_: anemoi.graphs.nodes.HEALPixNodes
-        resolution: 6   # nside=64, 49152 cells, ~0.9 deg
-        nest_ordering: true
-      attributes:
-        area_weight: ${graph.attributes.nodes.area_weight}
-        sea_mask:
-          _target_: nese_training.graph_attributes.DatasetVariableBelow
-          dataset: ${system.input.dataset}
-          variable: land_fraction
-          threshold: 0.1 # keep edges with land_fraction < threshold
+        _target_: anemoi.graphs.nodes.AnemoiDatasetNodes
+        dataset: ${system.input.dataset}
+      attributes: [] # no area weight, land-masked cells cause Voronoi problems
 
     hidden:
       node_builder:
         _target_: anemoi.graphs.nodes.HEALPixNodes
         resolution: 5   # nside=32, 12288 cells, ~1.8 deg
         nest_ordering: false
-      attributes: ${graph.attributes.nodes}
+      attributes: [] # no need for area weights with HEALPix
   edges:
   - source_name: ocean
     target_name: hidden
     edge_builders:
     - _target_: anemoi.graphs.edges.CutOffEdges
       cutoff_distance_km: 200
-      source_mask_attr_name: sea_mask
     attributes: ${graph.attributes.edges}
   - source_name: hidden
     target_name: ocean
     edge_builders:
     - _target_: anemoi.graphs.edges.KNNEdges
       num_nearest_neighbours: 3
-      target_mask_attr_name: sea_mask
     attributes: ${graph.attributes.edges}
   attributes:
-    nodes:
-      area_weight:
-        _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
-        norm: unit-max
-        fill_value: 0
+    nodes: []
     edges:
       edge_length:
         _target_: anemoi.graphs.edges.attributes.EdgeLength
@@ -385,15 +357,11 @@ model:
     _target_: anemoi.models.layers.residual.SkipConnection
     step: -1
 
-  # the model.output_mask
-  # * zeroes the node-weight scaler off-sea, and
-  # * NaNs the diagnostic plots appropriately
-  # The loss then stops scoring the ~2730 coastal cells that carry
-  # observations but have no decoder edges, where the model
-  # was memorizing a per-cell constant.
+  # SingleTraining.__init__ instantiates this unconditionally (train/methods/base.py:197),
+  # and every stock anemoi model config requires the same no-op default.
   output_mask:
-    _target_: anemoi.training.utils.masks.Boolean1DMask
-    attribute_name: sea_mask
+    _target_: anemoi.training.utils.masks.NoOutputMask
+
   trainable_parameters:
     data: 0
     hidden: 0
@@ -412,10 +380,6 @@ training:
   scalers:
     datasets:
       ocean:
-        node_weights:
-          _target_: anemoi.training.losses.scalers.GraphNodeAttributeScaler
-          nodes_attribute_name: area_weight
-          norm: unit-sum
         time_steps:
           _target_: anemoi.training.losses.scalers.UniformTimeStepScaler
 
@@ -474,7 +438,7 @@ training:
     datasets:
       ocean:
         _target_: nese_training.losses.ObservationMaskedMSE
-        scalers: ["node_weights"] # no need for "time_steps" unless multi-step predictions
+        scalers: []
         observations:
           sla:
             observed_as: sla_filtered
@@ -574,7 +538,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v2
+      experiment_name: v3
       project_name: local-sla-16yr
       terminal: false
       system: false

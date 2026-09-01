@@ -39,7 +39,7 @@ Model size: **~1.79 M trainable parameters, 7.2 MB of weights (fp32)**.
 | Decoder (`GraphTransformerBackwardMapper` + trainable edge attrs) | 227,841 + 200,814 = **428,655** | 1.71 |
 | **Total** | **1,787,339** | **7.15** |
 
-On top of the weights there are 1.50 M non-trainable buffers (6.8 MB): edge
+On top of the weights there are 1.55 M non-trainable buffers (6.9 MB): edge
 lengths/directions and the fixed node coordinate features.
 
 ### Version 1
@@ -58,7 +58,7 @@ Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)**.
 | Decoder (`GraphTransformerBackwardMapper`, no trainable edge attrs) | **227,329** | 0.91 |
 | **Total** | **1,246,465** | **4.99** |
 
-Non-trainable buffers are unchanged from version 0 at 1.50 M (6.8 MB): edge
+Non-trainable buffers are unchanged from version 0 at 1.55 M (6.9 MB): edge
 lengths/directions and the fixed node coordinate features.
 Dropping
 `trainable_size 2->0` removes 540,874 trainable parameters (30% of version 0),
@@ -70,9 +70,31 @@ entirely from the node embeddings and the trainable edge attributes.
 * With forcings
 * `trainable_size = 0`
 
+Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)**.
+
+| Stage | Trainable params | MB |
+|---|---:|---:|
+| Node attributes (no learnable node embeddings) | 0 | 0.00 |
+| Encoder (`GraphTransformerForwardMapper`, no trainable edge attrs) | **230,272** | 0.92 |
+| Processor (4-layer `TransformerProcessor`) | **791,552** | 3.17 |
+| Decoder (`GraphTransformerBackwardMapper`, no trainable edge attrs) | **230,017** | 0.92 |
+| **Total** | **1,251,841** | **5.01** |
+
+Non-trainable buffers are unchanged from version 1 at 1.55 M (6.9 MB): the seven new
+forcings add only their normalisation statistics.
+
+The forcings cost 5,376 trainable parameters over version 1, split evenly between the two
+input embeddings: 7 forcings x 3 input steps x 128 channels = 2,688 on each side. The
+processor is untouched, as it only ever sees the 128 hidden channels.
+
 ### Version 3
 
-* test removing some fraction of data at prediction time
+* With forcings
+* `trainable_size = 0`
+* Remove land points with nese-dataprep, rather than with masking
+    * Keep `land_fraction` with `min-max` normalization,
+      even though this just indicates coastal points
+
 
 ### After that ...
 

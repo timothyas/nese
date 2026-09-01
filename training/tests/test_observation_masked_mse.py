@@ -47,14 +47,20 @@ class FakeIndices:
         return len(self.data_full_name_to_position)
 
 
-def make_loss(groups: list[str] | str = "auto", indices: FakeIndices | None = None) -> ObservationMaskedMSE:
+def make_loss(
+    groups: list[str] | str = "auto",
+    indices: FakeIndices | None = None,
+    *,
+    node_weights: bool = True,
+) -> ObservationMaskedMSE:
     indices = indices or FakeIndices(GROUPS)
     loss = ObservationMaskedMSE(
         observations={"sla": {"observed_as": "sla_filtered", "groups": groups}},
         data_indices=indices,
     )
     # unit-sum node weights, so BaseLoss.reduce's grid sum reads as a mean
-    loss.add_scaler(dimension=TensorDim.GRID.value, scaler=torch.ones(GRID) / GRID, name="node_weights")
+    if node_weights:
+        loss.add_scaler(dimension=TensorDim.GRID.value, scaler=torch.ones(GRID) / GRID, name="node_weights")
     return loss
 
 
@@ -226,6 +232,22 @@ def test_loss_is_invariant_to_coverage(n_observed: int) -> None:
     pred, target = make_batch(indices, {group: mask for group in GROUPS})
 
     assert torch.allclose(call(make_loss(), pred, target), torch.tensor(0.25), atol=1e-5)
+
+
+@pytest.mark.parametrize("n_observed", [4, 16, 32, 64])
+def test_loss_is_invariant_to_coverage_with_no_grid_scaler(n_observed: int) -> None:
+    """The same invariance without a node_weights scaler, which is how a HEALPix run is
+    configured: equal-area cells make the weight uniform, so the loss supplies the 1/N
+    itself by dividing the mask by its own sum."""
+    mask = torch.zeros(GRID, dtype=torch.bool)
+    mask[:n_observed] = True
+
+    indices = FakeIndices(GROUPS)
+    pred, target = make_batch(indices, {group: mask for group in GROUPS})
+
+    unscaled = call(make_loss(node_weights=False), pred, target)
+    assert torch.allclose(unscaled, torch.tensor(0.25), atol=1e-5)
+    assert torch.allclose(unscaled, call(make_loss(), pred, target), atol=1e-5)
 
 
 def test_layout_is_required() -> None:
