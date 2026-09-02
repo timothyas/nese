@@ -11,7 +11,7 @@ date_range:
   freq: 24h
 
 output:
-  netcdf: ${debugging_info.root_dir}/inference-validation/${date}.nc
+  nese-zarr: ${debugging_info.root_dir}/inference-validation
 lead_time: 24h
 allow_nans: true
 initial_state_categories: [dynamic_forcings]

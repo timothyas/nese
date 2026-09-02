@@ -49,7 +49,7 @@ import pandas as pd
 
 import data
 
-RUN_DIR = "runs/v0"
+RUN_DIR = "runs/v3"
 ANEMOI_DATASET = "anemoi-hpx6-24h/dataset.zarr"
 OUTPUT_DIR = None  # defaults to {run_dir}/metrics
 
@@ -84,14 +84,17 @@ def _at(xda, times, when):
     return xda.sel(time=times).sel(time=when).drop_vars("time")
 
 
-def _verifiable(predicted, attrs, checkpoint):
+def _verifiable(predicted, dataset_attrs, model):
     """Drop initial conditions the dataset cannot support at either end.
 
     Late ones verify past ``end_date`` and have no truth; early ones reach back past
     ``start_date`` for their input window. Both would otherwise be silent all-NaN rows.
+
+    The span is the *evaluation* dataset's, so it comes from ``dataset_attrs``; the input
+    window is the model's, so it comes from the forecast store.
     """
-    end = pd.Timestamp(attrs["end_date"])
-    first = pd.Timestamp(attrs["start_date"]) + _lookback(checkpoint)
+    end = pd.Timestamp(dataset_attrs["end_date"])
+    first = pd.Timestamp(dataset_attrs["start_date"]) + _lookback(model)
 
     for keep, why in [
         ((predicted["valid_time"] <= end).all("fhr").compute(), f"verifying past {end:%Y-%m-%dT%H}"),
@@ -105,9 +108,9 @@ def _verifiable(predicted, attrs, checkpoint):
     return predicted
 
 
-def _lookback(checkpoint):
+def _lookback(model):
     """How far back of its own past the model was shown."""
-    return (checkpoint["multistep_input"] - 1)*pd.Timedelta(checkpoint["timestep"])
+    return (model["multistep_input"] - 1)*pd.Timedelta(model["timestep"])
 
 
 def align(field, spec, run_dir=RUN_DIR, dataset=ANEMOI_DATASET):
@@ -120,19 +123,25 @@ def align(field, spec, run_dir=RUN_DIR, dataset=ANEMOI_DATASET):
         observed    (t0, fhr, group, cell) bool, at the valid time, in memory
         seen        (t0, step, cell) bool, any live group across the input window
 
+    The forecast store opens with nothing passed to it and describes itself, so the model
+    metadata the alignment needs -- its channels' groups, its input window, its stepping --
+    is read off ``forecast.attrs`` rather than out of the checkpoint. Its ``cell`` axis
+    already holds parent-mesh HEALPix ids, so the prediction and the observations align on
+    ``cell`` with neither being reindexed.
+
     Groups that observed nothing anywhere in the window are dropped here rather than
     after the reduction, so the conditioned accumulators below stay narrow. The two masks
     are computed eagerly because each of them is reused by every accumulator, and the
     vectorised selection behind them is the expensive part.
     """
-    checkpoint = data.open_checkpoint(run_dir)
+    forecast = data.open_forecast(run_dir)
     ads = data.open_anemoi_dataset(dataset)
-    groups = data.resolve_groups(spec, checkpoint)
+    groups = data.resolve_groups(spec, forecast.attrs)
 
     # fhr=0 carries the initial condition, where a diagnostic is all NaN.
-    predicted = data.open_forecasts([field], run_dir, checkpoint, dataset)[field]
+    predicted = forecast[field]
     has_prediction = predicted.notnull().any(("t0", "cell")).compute()
-    predicted = _verifiable(predicted.sel(fhr=has_prediction), ads.attrs, checkpoint)
+    predicted = _verifiable(predicted.sel(fhr=has_prediction), ads.attrs, forecast.attrs)
 
     counts = _stack(ads, [spec["count"].format(group=g) for g in groups], groups)
     valid = np.unique(predicted["valid_time"].values)
@@ -147,19 +156,20 @@ def align(field, spec, run_dir=RUN_DIR, dataset=ANEMOI_DATASET):
         valid,
         predicted["valid_time"],
     )
-    return predicted, values, observed, input_seen(counts, predicted["t0"], checkpoint)
+    return predicted, values, observed, input_seen(counts, predicted["t0"], forecast.attrs)
 
 
-def input_seen(counts, t0s, checkpoint):
+def input_seen(counts, t0s, model):
     """Where any group observed, at each step of the model's input window.
 
     Dims ``(t0, step, cell)``, with ``step`` counting backwards from the initial time,
     so ``step=0`` is t0 itself. The window is the model's own ``multistep_input`` and
-    ``timestep``, so this follows a checkpoint that was trained differently.
+    ``timestep``, both recorded in the forecast store, so this follows a model that was
+    trained differently.
     """
-    steps = np.arange(checkpoint["multistep_input"])
+    steps = np.arange(model["multistep_input"])
     when = xr.DataArray(
-        t0s.values[:, None] - steps[None, :]*pd.Timedelta(checkpoint["timestep"]).to_timedelta64(),
+        t0s.values[:, None] - steps[None, :]*pd.Timedelta(model["timestep"]).to_timedelta64(),
         dims=("t0", "step"),
         coords={"t0": t0s, "step": steps},
     )

@@ -1,39 +1,63 @@
+"""Animate a run's forecasts beside the observations that fed them.
+
+Reads the `nese-zarr` store directly. The store is `(t0, fhr, cell)` with `valid_time`,
+`lead_time` and the grid as coordinates, and it carries the model's own `multistep_input`
+and `timestep`, so nothing here restates the input window or the stepping as a constant,
+and there is no inference config to re-resolve to find the files.
+
+The one thing still read from the anemoi dataset is the earlier input bins: the store holds
+the initial time and the forecast, not the two bins before t0 that the model was also shown.
+"""
+
 import os
 import sys
 
 import numpy as np
 import xarray as xr
 import pandas as pd
-import zarr
-import dask.array as dsa
-from omegaconf import OmegaConf
 
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap, to_hex
 from matplotlib.patches import Patch
 import cmocean  # noqa: F401  -- registers the "cmo.*" colormaps
 import xmovie
 
 sys.path.append(f"../..")
 from regions import set_region, projection, draw_cells
+import data
 
 plt.style.use(f"../../nice.mplstyle")
 
+RUN_DIR = data.RUN_DIR
 REGION = "global"
 REGIONS_TO_PLOT = ("tropical_pacific",)
 DATE_FORMAT = "%Y-%m-%dT%H"
 
-# The observations the model is given. The forecast netcdfs only carry the initial time,
-# so the earlier input bins have to come from the source dataset.
-INPUT_DATASET = "anemoi-hpx6-24h/dataset.zarr"
-MULTISTEP = 3               # training.yaml: task.multistep_input
-TIMESTEP = pd.Timedelta("24h")   # training.yaml: data.frequency
+FIELD = "sla"
+OBSERVED_AS = "sla_filtered"
+LABEL = "Sea Level Anomaly [m]"
 
-# Oldest to newest, so recency reads as increasing depth of colour. Index 0 is
-# "unobserved" and is transparent; land is NaN and painted grey by set_bad.
+# Which forecast hour to animate. None takes the longest lead time in the store, which for
+# a single-step model is the only one carrying a diagnostic at all.
+FHR = None
+
+# Oldest to newest, so recency reads as increasing depth of colour. ColorBrewer Blues
+# 4/6/9, for the three input bins this model has; a model trained with a different
+# multistep_input samples the same ramp instead.
 INPUT_COLORS = ["#9ecae1", "#4292c6", "#08306b"]
-INPUT_CMAP = ListedColormap([(1, 1, 1, 0)] + INPUT_COLORS)
-INPUT_CMAP.set_bad("0.9")
+
+
+def input_cmap(multistep):
+    """Colours for the input-recency mask.
+
+    Index 0 is "unobserved" and is transparent; land is NaN and painted grey by set_bad.
+    """
+    colors = INPUT_COLORS if multistep == len(INPUT_COLORS) else [
+        to_hex(c) for c in plt.get_cmap("Blues")(np.linspace(.35, 1., multistep))
+    ]
+    cmap = ListedColormap([(1, 1, 1, 0)] + colors)
+    cmap.set_bad("0.9")
+    return cmap
 
 
 def get_vmin_vmax_extend(xda, vmin, vmax):
@@ -53,105 +77,69 @@ def get_vmin_vmax_extend(xda, vmin, vmax):
     return extend, vmin, vmax
 
 
-def forecast_paths(config_file="forecast.yaml"):
-    """The netcdf written for each initial condition in the forecast config.
-
-    Rebuilds each path the way nese-inference does: set ``date`` and let OmegaConf
-    resolve the ``${date}`` in ``output.netcdf``.
-    """
-    config = OmegaConf.load(config_file)
-    dates = pd.date_range(**OmegaConf.to_container(config.date_range, resolve=True))
-
-    paths = []
-    for date in dates:
-        config.date = date.strftime(config.get("date_format", DATE_FORMAT))
-        paths.append(OmegaConf.to_container(config, resolve=True)["output"]["netcdf"])
-    return paths
-
-
-def get_save_dir(config_file="forecast.yaml"):
-    paths = forecast_paths(config_file)
-    inference_dir = os.path.dirname(paths[0])
-    run_dir = os.path.dirname(inference_dir)
+def get_save_dir(run_dir=RUN_DIR):
     movie_dir = f"{run_dir}/movies"
-    if not os.path.isdir(movie_dir):
-        os.makedirs(movie_dir)
+    os.makedirs(movie_dir, exist_ok=True)
     return movie_dir
 
 
-def scatter_to_mesh(xda, dim, dataset=INPUT_DATASET):
-    """Put a field on the stored cells back onto the full HEALPix mesh.
-
-    ``data.yaml`` prunes the mesh to its ocean cells (``land_fraction < 0.1``), so both the
-    zarr and the forecast netcdfs are ~33k cells long rather than the 49152 of hpx6, and
-    ``draw_cells``, which reads nside off the array length, cannot use them as they stand.
-    nese-dataprep records which cells survived as ``healpix_cell_index``; reindexing onto the
-    parent mesh puts each column back where it belongs and leaves the dropped cells NaN,
-    which is what paints them grey.
-    """
-    group = zarr.open(dataset, mode="r")
-    npix = 12*group.attrs["healpix_nside"]**2
-    return (
-        xda.rename({dim: "cell"})
-        .assign_coords(cell=group["healpix_cell_index"][:])
-        .reindex(cell=np.arange(npix))
-    )
-
-
-def input_observation_mask(valid_times, dataset=INPUT_DATASET):
+def input_observation_mask(t0s, attrs, dataset=data.ANEMOI_DATASET):
     """Which input bin, if any, observed each cell -- the mask from plot_forecast.ipynb.
 
-    Returns 0 where no input bin saw the cell, then 1..MULTISTEP oldest to newest, on the
-    dataset's own cells. Where several bins saw a cell the most recent wins, so the colours
-    read as "how stale is what the model knows here".
+    Returns 0 where no input bin saw the cell, then 1..multistep oldest to newest, on the
+    forecast's own cells. Where several bins saw a cell the most recent wins, so the
+    colours read as "how stale is what the model knows here".
 
-    The bins are the model's inputs for a forecast valid at ``valid_times``, i.e. the
-    initial time and the MULTISTEP-1 steps before it.
+    The bins are the model's inputs for a forecast started at each of ``t0s``: the initial
+    time and the ``multistep_input - 1`` steps before it. Both the number of bins and their
+    spacing come from ``attrs``, the forecast store's, so this follows a model that was
+    trained differently rather than assuming this one.
+
+    Any group counts as having seen a cell -- the question is whether the model had
+    information there, not whether the same instrument came back around.
     """
-    group = zarr.open(dataset, mode="r")
-    variables = list(group.attrs["variables"])
-    missions = [name for name in variables if name.startswith("sla_filtered_")]
+    multistep = attrs["multistep_input"]
+    timestep = pd.Timedelta(attrs["timestep"]).to_timedelta64()
 
-    observed = xr.DataArray(
-        dsa.from_zarr(group["data"])[:, [variables.index(m) for m in missions], 0, :],
-        dims=("time", "variable", "cell"),
-        coords={"time": group["dates"][:], "variable": missions},
-    ).notnull().any("variable")
+    ads = data.open_anemoi_dataset(dataset)
+    groups = data.resolve_groups(data.normalise_spec(OBSERVED_AS), attrs)
+    counts = xr.concat([ads[f"obs_count_{group}"] for group in groups], dim="group")
 
-    initial = pd.DatetimeIndex(valid_times) - TIMESTEP
-    earliest = initial.min() - (MULTISTEP - 1)*TIMESTEP
-    observed = observed.sel(time=slice(earliest, initial.max())).compute()
+    steps = np.arange(multistep)
+    when = xr.DataArray(
+        t0s.values[:, None] - steps[None, :]*timestep,
+        dims=("t0", "step"),
+        coords={"t0": t0s, "step": steps},
+    )
+    # Select the distinct timestamps first, so the vectorised indexing that follows runs on
+    # a small subset rather than on the whole store.
+    seen = counts.sel(time=np.unique(when.values)) > 0
+    seen = seen.any("group").sel(time=when).drop_vars("time").compute()
 
-    mask = np.zeros((len(initial), observed.sizes["cell"]))
-    # Oldest first, so a cell seen more than once ends up labelled by its newest bin.
-    for step in reversed(range(MULTISTEP)):
-        seen = observed.sel(time=initial - step*TIMESTEP).values
-        mask[seen] = MULTISTEP - step
-
-    return xr.DataArray(mask, dims=("time", "cell"), coords={"time": valid_times})
+    # ``step`` counts backwards from t0, so the smallest step that saw a cell is its most
+    # recent bin. argmax on a boolean gives that first True; 0 is left for unobserved.
+    return xr.where(seen.any("step"), multistep - seen.argmax("step"), 0)
 
 
-def open_forecasts(config_file="forecast.yaml"):
+def open_forecasts(run_dir=RUN_DIR, field=FIELD, fhr=FHR, dataset=data.ANEMOI_DATASET):
     """One frame per forecast, as the single dataset xmovie wants.
 
-    Each file splits its variables over two timestamps, and only the diagnostic ``sla``
-    is finite at the forecast time, so each file contributes one frame stamped with its
-    valid time. The observations that fed it are recovered separately, on their own
-    input times, by :func:`input_observation_mask`.
+    Frames run along ``t0``, which carries ``valid_time`` with it, so a frame knows both
+    its initial and its valid time without either being recomputed from a lead time.
 
     Both fields come back on the full mesh, land included and NaN, ready for ``draw_cells``.
     """
-    xds = xr.open_mfdataset(
-        forecast_paths(config_file),
-        combine="nested",
-        concat_dim="time",
-        preprocess=lambda xds: xds[["sla"]].isel(time=1),
-    ).load()
+    xds = data.open_forecast(run_dir)
+    fhr = int(xds["fhr"].values[-1]) if fhr is None else fhr
 
-    return xr.Dataset({
-        "sla": scatter_to_mesh(xds["sla"], xds["sla"].dims[-1]),
-        "inputs": scatter_to_mesh(input_observation_mask(xds["time"].values), "cell"),
-    })
+    on_mesh = lambda xda: data.scatter_to_mesh(xda, xds.attrs)
+    return xr.Dataset(
+        {
+            field: on_mesh(xds[field].sel(fhr=fhr)),
+            "inputs": on_mesh(input_observation_mask(xds["t0"], xds.attrs, dataset)),
+        },
+        attrs=dict(xds.attrs),
+    )
 
 
 def frame_size(region, panel=600, below=220):
@@ -172,42 +160,47 @@ def frame_size(region, panel=600, below=220):
     return width + width % 2, height + height % 2   # h264 wants even dimensions
 
 
-def plot_single_timestamp(xds, fig, time, *args, **kwargs):
+def plot_single_timestamp(xds, fig, frame, *args, **kwargs):
 
     region = kwargs.pop("region", REGION)
     extend = kwargs.pop("extend", "neither")
+    field = kwargs.pop("field", FIELD)
     cmap = plt.get_cmap(kwargs.pop("cmap", "cmo.balance")).copy()
     # NaN is land: the cells data.yaml pruned off the mesh
     cmap.set_bad("0.9")
+
+    multistep = xds.attrs["multistep_input"]
 
     axs = [fig.add_subplot(1, 2, i+1, projection=projection(region)) for i in range(2)]
     for ax in axs:
         set_region(ax, region)
 
-    valid = pd.Timestamp(xds["time"].isel(time=time).values)
-    initial = valid - TIMESTEP
+    initial = pd.Timestamp(xds["t0"].isel(t0=frame).values)
+    valid = pd.Timestamp(xds["valid_time"].isel(t0=frame).values)
 
     # Left: where the model's input observations are, coloured by how recent they are.
     # vmin/vmax put each integer in the middle of its own colour band.
-    draw_cells(axs[0], xds["inputs"].isel(time=time), cmap=INPUT_CMAP, vmin=-.5, vmax=MULTISTEP+.5)
+    draw_cells(axs[0], xds["inputs"].isel(t0=frame), cmap=input_cmap(multistep),
+               vmin=-.5, vmax=multistep+.5)
     labels = [
         f"$t_0-{step if step > 1 else ''}\\Delta t$" if step else "$t_0$"
-        for step in reversed(range(MULTISTEP))
+        for step in reversed(range(multistep))
     ]
     # A figure legend, dropped into the space the colorbar leaves free on the left. An
     # axes legend hung below the panel is invisible to constrained layout, which would
     # leave the two maps at different heights, and inside the axes it covers the map.
     fig.legend(
-        handles=[Patch(facecolor=c, label=l) for c, l in zip(INPUT_COLORS, labels)],
+        handles=[Patch(facecolor=c, label=l)
+                 for c, l in zip(input_cmap(multistep).colors[1:], labels)],
         loc="lower center",
         bbox_to_anchor=(.27, .01),
-        ncol=MULTISTEP,
+        ncol=multistep,
         frameon=False,
     )
     axs[0].set(title=f"Input observations\n$t_0$ = {initial.strftime(DATE_FORMAT)}")
 
     # Right: what the model made of them.
-    cc = draw_cells(axs[1], xds["sla"].isel(time=time), cmap=cmap, **kwargs)
+    cc = draw_cells(axs[1], xds[field].isel(t0=frame), cmap=cmap, **kwargs)
     axs[1].set(title=f"Predicted SLA\nvalid {valid.strftime(DATE_FORMAT)}")
     # ax=axs so both columns give up the same height and the maps stay aligned; anchored
     # right so the bar still sits under the panel it describes.
@@ -219,7 +212,7 @@ def plot_single_timestamp(xds, fig, time, *args, **kwargs):
         anchor=(1., .5),
         pad=0.05,
         aspect=35,
-        label="Sea Level Anomaly [m]",
+        label=LABEL,
         extend=extend,
     )
     # xmovie saves each frame at a fixed pixel size, with no bbox_inches="tight" to
@@ -231,11 +224,11 @@ def plot_single_timestamp(xds, fig, time, *args, **kwargs):
 if __name__ == "__main__":
 
     xds = open_forecasts()
-    print(f"Opened {xds.sizes['time']} forecasts")
+    print(f"Opened {xds.sizes['t0']} forecasts")
 
     # Once, over the whole record: computed per frame, the scale would flicker. Shared
     # across regions too, so the movies are directly comparable.
-    extend, vmin, vmax = get_vmin_vmax_extend(xds["sla"], vmin=None, vmax=None)
+    extend, vmin, vmax = get_vmin_vmax_extend(xds[FIELD], vmin=None, vmax=None)
     print(f"Color limits: {vmin:.3f} to {vmax:.3f}, extend={extend}")
 
     save_dir = get_save_dir()
@@ -247,7 +240,7 @@ if __name__ == "__main__":
         mov = xmovie.Movie(
             xds,
             plot_single_timestamp,
-            framedim="time",
+            framedim="t0",
             input_check=False,
             pixelwidth=width,
             pixelheight=height,
@@ -257,7 +250,7 @@ if __name__ == "__main__":
             vmin=vmin,
             vmax=vmax,
         )
-        fname = f"{save_dir}/sla.{region}.mp4"
+        fname = f"{save_dir}/{FIELD}.{region}.mp4"
         mov.save(
             fname,
             progress=True,
