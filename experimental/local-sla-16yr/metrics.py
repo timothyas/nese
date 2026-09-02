@@ -49,13 +49,9 @@ import pandas as pd
 
 import data
 
-FORECAST_CONFIG = "forecast.yaml"
+RUN_DIR = "runs/v0"
 ANEMOI_DATASET = "anemoi-hpx6-24h/dataset.zarr"
-OUTPUT_DIR = "runs/v3/metrics"
-
-# The window the model sees, from training.yaml's model.multistep_input and model.timestep.
-INPUT_STEPS = 3
-TIMESTEP = "24h"
+OUTPUT_DIR = None  # defaults to {run_dir}/metrics
 
 REGIONS = ("seen_at_t0", "seen_earlier", "unseen")
 
@@ -88,14 +84,14 @@ def _at(xda, times, when):
     return xda.sel(time=times).sel(time=when).drop_vars("time")
 
 
-def _verifiable(predicted, attrs):
+def _verifiable(predicted, attrs, checkpoint):
     """Drop initial conditions the dataset cannot support at either end.
 
     Late ones verify past ``end_date`` and have no truth; early ones reach back past
     ``start_date`` for their input window. Both would otherwise be silent all-NaN rows.
     """
     end = pd.Timestamp(attrs["end_date"])
-    first = pd.Timestamp(attrs["start_date"]) + (INPUT_STEPS - 1)*pd.Timedelta(TIMESTEP)
+    first = pd.Timestamp(attrs["start_date"]) + _lookback(checkpoint)
 
     for keep, why in [
         ((predicted["valid_time"] <= end).all("fhr").compute(), f"verifying past {end:%Y-%m-%dT%H}"),
@@ -109,7 +105,12 @@ def _verifiable(predicted, attrs):
     return predicted
 
 
-def align(field, spec, config_file=FORECAST_CONFIG, dataset=ANEMOI_DATASET):
+def _lookback(checkpoint):
+    """How far back of its own past the model was shown."""
+    return (checkpoint["multistep_input"] - 1)*pd.Timedelta(checkpoint["timestep"])
+
+
+def align(field, spec, run_dir=RUN_DIR, dataset=ANEMOI_DATASET):
     """The prediction, the observations verifying it, and where they were observed.
 
     Returns ``(prediction, values, observed, seen)``:
@@ -117,20 +118,21 @@ def align(field, spec, config_file=FORECAST_CONFIG, dataset=ANEMOI_DATASET):
         prediction  (t0, fhr, cell), lazy
         values      (t0, fhr, group, cell), lazy
         observed    (t0, fhr, group, cell) bool, at the valid time, in memory
-        seen        (t0, step, cell) bool, any live group at t0 - step*TIMESTEP
+        seen        (t0, step, cell) bool, any live group across the input window
 
     Groups that observed nothing anywhere in the window are dropped here rather than
     after the reduction, so the conditioned accumulators below stay narrow. The two masks
     are computed eagerly because each of them is reused by every accumulator, and the
     vectorised selection behind them is the expensive part.
     """
+    checkpoint = data.open_checkpoint(run_dir)
     ads = data.open_anemoi_dataset(dataset)
-    groups = data.resolve_groups(spec, ads.attrs)
+    groups = data.resolve_groups(spec, checkpoint)
 
     # fhr=0 carries the initial condition, where a diagnostic is all NaN.
-    predicted = data.open_forecasts([field], config_file, dataset)[field]
+    predicted = data.open_forecasts([field], run_dir, checkpoint, dataset)[field]
     has_prediction = predicted.notnull().any(("t0", "cell")).compute()
-    predicted = _verifiable(predicted.sel(fhr=has_prediction), ads.attrs)
+    predicted = _verifiable(predicted.sel(fhr=has_prediction), ads.attrs, checkpoint)
 
     counts = _stack(ads, [spec["count"].format(group=g) for g in groups], groups)
     valid = np.unique(predicted["valid_time"].values)
@@ -145,19 +147,21 @@ def align(field, spec, config_file=FORECAST_CONFIG, dataset=ANEMOI_DATASET):
         valid,
         predicted["valid_time"],
     )
-    return predicted, values, observed, input_seen(counts, predicted["t0"])
+    return predicted, values, observed, input_seen(counts, predicted["t0"], checkpoint)
 
 
-def input_seen(counts, t0s, steps=INPUT_STEPS, timestep=TIMESTEP):
+def input_seen(counts, t0s, checkpoint):
     """Where any group observed, at each step of the model's input window.
 
     Dims ``(t0, step, cell)``, with ``step`` counting backwards from the initial time,
-    so ``step=0`` is t0 itself.
+    so ``step=0`` is t0 itself. The window is the model's own ``multistep_input`` and
+    ``timestep``, so this follows a checkpoint that was trained differently.
     """
+    steps = np.arange(checkpoint["multistep_input"])
     when = xr.DataArray(
-        t0s.values[:, None] - pd.timedelta_range(0, periods=steps, freq=timestep).values[None, :],
+        t0s.values[:, None] - steps[None, :]*pd.Timedelta(checkpoint["timestep"]).to_timedelta64(),
         dims=("t0", "step"),
-        coords={"t0": t0s, "step": np.arange(steps)},
+        coords={"t0": t0s, "step": steps},
     )
     return _at((counts > 0).any("group"), np.unique(when.values), when).compute()
 
@@ -288,11 +292,12 @@ def all_groups(acc, aggregate_t0=AGGREGATE_T0):
 
 def main(
     observations=OBSERVATIONS,
-    config_file=FORECAST_CONFIG,
+    run_dir=RUN_DIR,
     dataset=ANEMOI_DATASET,
     output_dir=OUTPUT_DIR,
     aggregate_t0=AGGREGATE_T0,
 ):
+    output_dir = output_dir if output_dir is not None else f"{run_dir}/metrics"
     os.makedirs(output_dir, exist_ok=True)
 
     results = {}
@@ -300,7 +305,7 @@ def main(
         spec = data.normalise_spec(raw)
         print(f"Scoring '{field}' against {spec['observed_as']}_*")
 
-        prediction, values, observed, seen = align(field, spec, config_file, dataset)
+        prediction, values, observed, seen = align(field, spec, run_dir, dataset)
         print(f"  {prediction.sizes['t0']} initial conditions, "
               f"fhr = {list(prediction['fhr'].values)}, "
               f"live groups: {', '.join(observed['group'].values)}")
