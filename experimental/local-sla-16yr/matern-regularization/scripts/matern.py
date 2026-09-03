@@ -170,6 +170,18 @@ def delta_hat(rho_hat, order, n_dim=2):
     return 8.0 * smoothness(order, n_dim) / rho_hat**2
 
 
+def analytic_variance(rho_hat, order, n_dim=2):
+    """Marginal variance of a stationary, unbounded Matern field, Smith (2022) Eq. 8.
+
+    A scalar: it depends only on delta_hat, nu and n_dim, and carries no geometry. The
+    land mask is what forces the per-cell estimate in `normalisation` instead.
+    """
+    nu = smoothness(order, n_dim)
+    return gamma(nu) / (
+        gamma(nu + n_dim / 2) * (4 * np.pi) ** (n_dim / 2) * delta_hat(rho_hat, order, n_dim) ** nu
+    )
+
+
 def matern_correlation(distance, rho_hat, order, n_dim=2):
     """Analytical Matern correlation, Smith (2022) Eq. 12."""
     nu = smoothness(order, n_dim)

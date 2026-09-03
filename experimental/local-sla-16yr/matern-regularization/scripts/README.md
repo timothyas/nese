@@ -16,6 +16,7 @@ conda run -n nese-anemoi python table_phi.py
 | `table_sigma.py` | Table `tab:sigma` — `sigma/sigma_interior` vs correlation range |
 | `table_coast.py` | Table `tab:coast`, the cell counts and isolated-cell locations of §3.3 |
 | `table_validation.py` | Table `tab:validation` — discrete vs analytical Matérn |
+| `check_analytic.py` | Table `tab:analytic` — estimated `sigma_hat_n` vs the analytic scalar of Eq. 8 (§2.1) |
 | `check_normalisation.py` | §2 verification: unit marginal variance, `E[x'C^-1x] = N`, and that `sigma` acts on `x` *before* `A` |
 | `check_alternatives.py` | §3.3 — the boundary-stencil diagnosis and the two rejected fixes |
 

@@ -126,42 +126,84 @@ product.
 \label{sec:lambda}
 
 $\Lambda$ is fixed by requiring $C$ to be a correlation matrix, i.e.\ to have unit
-diagonal. Writing $\sigma^2_i \equiv (A^{-2M})_{ii}$ for the pointwise variance of
-$A^{-M}$ applied to unit white noise, \eqref{eq:chalf} gives
-$C_{ii} = \Lambda_{ii}^2 \det(\Phi)^{-1} \sigma^2_i$, so
+diagonal. It is a diagonal matrix throughout, in the same form as \citet{smith2022},
 
 \begin{equation}
 \label{eq:lambda}
-\Lambda_{ii} = \frac{\det(\Phi)^{1/2}}{\sigma_i},
+\Lambda = \det(\Phi)^{1/2}\operatorname{diag}\left\{1/\shat_n\right\}_{n=1}^{N},
 \qquad
-\Sigma_{ii} = \frac{\sigma_i}{\det(\Phi)^{1/2}}.
+\Sigma = \Lambda^{-1} = \det(\Phi)^{-1/2}\operatorname{diag}\left\{\shat_n\right\}_{n=1}^{N},
 \end{equation}
 
-Substituting into $\mathcal{L}_M$, the $\det(\Phi)^{1/2}$ in \eqref{eq:cinvhalf} cancels
-exactly against the one inside $\Sigma$:
+\noindent where $\shat_n$ is the pointwise standard deviation of $A^{-M}$ applied to unit
+white noise, $\shat_n^2 \equiv (A^{-2M})_{nn}$. Substituting into \eqref{eq:cinvhalf} gives
+$C_{nn} = \det(\Phi)^{-1}\Lambda_{nn}^2\shat_n^2 = 1$ as required, and the
+$\det(\Phi)^{1/2}$ in $C^{-1/2}$ cancels against the one inside $\Sigma$:
 
 \begin{equation}
 \label{eq:LM}
-\mathcal{L}_M = \frac{\lambda_M}{2}\left\| A^{M}\left(\sigma \odot x\right)\right\|_2^2 .
+\mathcal{L}_M = \frac{\lambda_M}{2}\left\|A^{M}\Sigma\, x\right\|_2^2
+\qquad\text{with}\qquad
+\Sigma \, x = \left(\shat_1 x_1, \; \shat_2 x_2, \; \ldots, \; \shat_N x_N\right)^{T}.
 \end{equation}
 
-Note that $\sigma$ multiplies $x$ \emph{before} the operator is applied, not after. This is
-worth stating because the alternative reading, $\|A^M x / \sigma\|^2$, is a different
-quantity and fails the checks below.
+Note $\Sigma$ acts on $x$ \emph{before} the operator is applied, not after. This is worth
+stating because the alternative reading, $\|A^M x / \shat\|^2$, is a different quantity
+and fails the checks below.
 
-We estimate $\sigma$ by randomization \citep{weaver2021}, $\sigma^2_i = \mathbb{E}[(A^{-M}z)_i^2]$
-with $z \sim \mathcal{N}(0,I)$. On the mesh described below this costs a single sparse
-factorization plus $10^3$ solves, about \SI{1.6}{\second}, once at initialisation. The
-alternative closed form (Eq.~8 of \citealp{smith2022}) is a function of $\dhat$, $\nu$ and
-$\Nd$ alone; it carries no geometry, so on an equal-area mesh it is a constant and cannot
-represent the boundary effects of Section~\ref{sec:lowneighbour}.
+\paragraph{$\shat_n$ is a field here, not a scalar.} In the stationary, isotropic,
+unbounded case the marginal variance has the closed form of \citet[Eq.~8]{smith2022},
 
-\paragraph{Verification.} With $\sigma$ so defined, drawing $x \sim \mathcal{N}(0,C)$ on
+\begin{equation}
+\label{eq:analytic}
+\shat^2 = \frac{\Gamma(\nu)}{\Gamma\!\left(\nu + \Nd/2\right)\left(4\pi\right)^{\Nd/2}\dhat^{\,\nu}},
+\end{equation}
+
+which depends only on $\dhat$, $\nu$ and $\Nd$ --- a single number, carrying no geometry.
+That is the right object on an unbounded equal-area mesh, and Table~\ref{tab:analytic}
+confirms it: run on a full sphere with no land mask, the estimated $\shat_n$ is spatially
+constant to within the sampling noise of the estimator and agrees with \eqref{eq:analytic}
+to between $1.4\%$ and $12\%$, converging as $\rhohat$ grows and the operator is better
+resolved.
+
+What breaks the scalar is the land mask. Dropping fluxes at a coastal face weakens $A$
+locally, so $\shat_n$ acquires spatial structure that \eqref{eq:analytic} cannot represent
+--- by a factor of up to $20$, as Section~\ref{sec:lowneighbour} shows. We therefore
+estimate $\shat_n$ per cell by randomization \citep{weaver2021},
+$\shat^2_n = \mathbb{E}[(A^{-M}z)_n^2]$ with $z \sim \mathcal{N}(0,I)$, which costs a
+single sparse factorization plus $10^3$ solves, about \SI{1.6}{\second}, once at
+initialization. Where the analytic scalar is adequate it is recovered automatically, so
+nothing is lost by estimating.
+
+\begin{table}[htbp]
+\centering
+\caption{Estimated $\shat_n$ against the analytic scalar \eqref{eq:analytic} on a full
+sphere at $\mathrm{nside}=32$, no land mask. ``Spread'' is the $5$--$95$ percentile range
+of $\shat_n$ over the mesh as a fraction of its median; with $600$ randomization samples
+the estimator's own noise accounts for $\approx 9.5\%$, so $\shat_n$ is constant to within
+the estimate. Reproduced by \texttt{scripts/check\_analytic.py}.}
+\label{tab:analytic}
+\begin{tabular}{cccccc}
+\toprule
+$M$ & $\rhohat$ & $\dhat$ & estimated $\shat_n$ & spread & estimated / analytic \\
+\midrule
+1 & 4  & 0.5000 & 0.44743 & 10.2\% & 1.122 \\
+1 & 8  & 0.1250 & 0.84350 & 10.5\% & 1.057 \\
+1 & 16 & 0.0312 & 1.63995 & 10.7\% & 1.028 \\
+2 & 4  & 1.5000 & 0.09895 & 10.4\% & 1.116 \\
+2 & 8  & 0.3750 & 0.72939 & 10.7\% & 1.028 \\
+2 & 16 & 0.0938 & 5.75555 & 10.7\% & 1.014 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Verification.} With $\Sigma$ so defined, drawing $x \sim \mathcal{N}(0,C)$ on
 the real land-masked mesh gives marginal variance $0.998$ at interior cells and $0.986$ at
 isolated cells against a target of $1$, and
 $\mathbb{E}\!\left[x^{T} C^{-1} x\right] = 33436$ against $N = 33469$. Per-cell, the
-contributions $((A^M(\sigma \odot x))_i)^2$ average to $0.999$, $0.999$, $1.001$ and $0.972$
-across cells with $8$, $3$--$7$, $1$--$2$ and $0$ retained neighbours respectively.
+contributions $\left(\left(A^{M}\Sigma x\right)_n\right)^2$ average to $0.999$, $0.999$,
+$1.001$ and $0.972$ across cells with $8$, $3$--$7$, $1$--$2$ and $0$ retained neighbours
+respectively.
 
 \paragraph{Scaling.} Because \eqref{eq:LM} has expectation $N$ under the prior, defining
 the implemented term as $\tfrac{\lambda_M}{2}\,\|\cdot\|^2 / N$ makes
@@ -235,24 +277,36 @@ because it is where the grid scale enters: the length scales appear as the coeff
 $L_x^2, L_y^2$ multiplying the second derivatives, and nowhere else.
 
 The hat follows \citet{smith2022}: hatted quantities live in the grid-scale normalized
-space, where the operator is isotropic and stationary. $\dhat$ and $\rhohat$ are already
-in that space, and $\Ahat$, $\shat$ and $\hat{d}_{ij}$ join them.
+space, where the operator is isotropic and stationary. $\dhat$, $\rhohat$ and $\shat_n$
+are already in that space, and $\Ahat$ and $\hat{d}_{ij}$ join them.
 
-Nothing is lost by working with $\Ahat$ instead of $A$. Writing
-$\shat^2_i \equiv (\Ahat^{-2M})_{ii}$, so that $\sigma = \det(\Phi)^{M}\shat$ relates it
-to the dimensional $\sigma$ of Section~\ref{sec:lambda}, the unit-diagonal condition
-there gives $\Lambda_{ii} = \det(\Phi)^{1/2-M}/\shat_i$, and substituting into
-$\mathcal{L}_M$ the powers of $\det\Phi$ cancel exactly:
+Nothing is lost by working with $\Ahat$ instead of $A$. Since
+$A^{-M} = \det(\Phi)^{M}\Ahat^{-M}$, the square root \eqref{eq:chalf} collapses to
+$C^{1/2} = \hat{\Lambda}\,\Ahat^{-M}$ with
+$\hat{\Lambda} \equiv \det(\Phi)^{M-1/2}\Lambda$, and the unit-diagonal condition of
+Section~\ref{sec:lambda} becomes simply
+
+\begin{equation}
+\label{eq:lambdahat}
+\hat{\Lambda} = \operatorname{diag}\left\{1/\shat_n\right\}_{n=1}^{N},
+\qquad
+\hat{\Sigma} = \hat{\Lambda}^{-1} = \operatorname{diag}\left\{\shat_n\right\}_{n=1}^{N},
+\qquad
+\shat^2_n \equiv \left(\Ahat^{-2M}\right)_{nn}.
+\end{equation}
+
+Every power of $\det\Phi$ then cancels:
 
 \begin{equation}
 \label{eq:LMhat}
 \mathcal{L}_M
  = \frac{\lambda_M}{2}\left\|\det(\Phi)^{1/2} A^{M} \Sigma x\right\|_2^2
- = \frac{\lambda_M}{2}\left\|\Ahat^{M}\!\left(\shat \odot x\right)\right\|_2^2 .
+ = \frac{\lambda_M}{2}\left\|\Ahat^{M}\hat{\Sigma}\, x\right\|_2^2 .
 \end{equation}
 
 So $\det\Phi$ never has to be evaluated at all, provided the normalization is estimated
-for the same operator that is applied.
+for the same operator that is applied. This is the form the code implements: build
+$\Ahat$, estimate $\shat_n$ from it, and apply \eqref{eq:LMhat}.
 
 \subsection{The normalizing length scales on HEALPix}
 \label{sec:lengths}
