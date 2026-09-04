@@ -39,6 +39,7 @@ REGIONS = {
     "mediterranean": [-6, 36, 30, 46],
     # Matches the focus_areas in training.yaml, for comparing against the training plots
     "europe": [-20, 40, 30, 60],
+    "south_atlandian": [-60, 120, -50, 0],
 }
 
 
