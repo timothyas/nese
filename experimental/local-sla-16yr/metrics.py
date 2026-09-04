@@ -49,7 +49,7 @@ import pandas as pd
 
 import data
 
-RUN_DIR = "runs/v3"
+RUN_DIR = "runs/v3mft"
 ANEMOI_DATASET = "anemoi-hpx6-24h/dataset.zarr"
 OUTPUT_DIR = None  # defaults to {run_dir}/metrics
 

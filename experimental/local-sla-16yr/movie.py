@@ -28,7 +28,7 @@ import data
 
 plt.style.use(f"../../nice.mplstyle")
 
-RUN_DIR = data.RUN_DIR
+RUN_DIR = f"runs/v3mft"
 REGION = "global"
 REGIONS_TO_PLOT = ("tropical_pacific",)
 DATE_FORMAT = "%Y-%m-%dT%H"

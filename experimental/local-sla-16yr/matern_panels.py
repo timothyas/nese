@@ -53,7 +53,7 @@ REGION = "south_atlandian"
 
 # The Matérn operator, named and defaulted as in nese_training.losses.MaternPenalty so the
 # figure and training.yaml are set from the same vocabulary.
-ORDER = 8                 # M, the number of times the operator is applied
+ORDER = 2                 # M, the number of times the operator is applied
 RHO_HAT = 8.0             # correlation range in grid cells
 MIN_NEIGHBOURS = 3        # drop the term below this retained-neighbour count
 N_RANDOMISATION = 1000    # randomisation samples behind sigma_hat
@@ -72,17 +72,21 @@ PERCENTILE = 98.0
 
 # sigma_hat is a property of the mesh and the operator, not of the forecast, so it is
 # estimated once per (mesh, rho_hat, M, samples, seed) and kept beside the run.
-CACHE_DIR = f"{movie.RUN_DIR}/matern-normalisation"
+FIELD = "sla"
+LABEL = "Sea Level Anomaly [m]"
+OBSERVED_AS = "sla_filtered"
+RUN_DIR = "runs/v3mft"
+CACHE_DIR = f"./matern-norm-cache"
 
 
-def normalised_field(snapshot, run_dir=movie.RUN_DIR):
+def normalised_field(snapshot, run_dir=RUN_DIR):
     """The predicted field in the space the loss sees it.
 
     Pooled over `sla` and every mission observing it, which is what
     `PooledObservationNormalizer` does in training.yaml -- per-mission statistics would
     carry each mission's epoch rather than the field.
     """
-    stats = data.pooled_statistics(data.normalise_spec(movie.OBSERVED_AS), run_dir)
+    stats = data.pooled_statistics(data.normalise_spec(OBSERVED_AS), run_dir)
     x = (snapshot.values - float(stats["mean"]))/float(stats["stdev"])
     if not np.isfinite(x).all():
         raise ValueError(
@@ -194,7 +198,7 @@ def draw_field(fig, ax, values, title, label, cmap, vmin, vmax, extend="neither"
     return collection
 
 
-def panels(date=DATE, region=REGION, fhr=FHR, run_dir=movie.RUN_DIR):
+def panels(date=DATE, region=REGION, fhr=FHR, run_dir=RUN_DIR):
     """The figure, and the loss value annotated on it."""
     xds = data.open_forecast(run_dir)
     fhr = int(xds["fhr"].values[-1]) if fhr is None else fhr
@@ -205,7 +209,7 @@ def panels(date=DATE, region=REGION, fhr=FHR, run_dir=movie.RUN_DIR):
     multistep = xds.attrs["multistep_input"]
     print(f"t0 = {initial}, fhr = {fhr}, valid {valid}")
 
-    x = normalised_field(forecast[movie.FIELD], run_dir)
+    x = normalised_field(forecast[FIELD], run_dir)
 
     mesh = matern.Mesh(xds.attrs["healpix_nside"], cell_index=xds["cell"].values)
     # The same cells MaternPenalty drops: the Laplacian at a cell with no neighbours is
@@ -224,13 +228,13 @@ def panels(date=DATE, region=REGION, fhr=FHR, run_dir=movie.RUN_DIR):
     print(f"||A_hat^M Sigma_hat x||^2 = {total:.1f}, / N = {loss:.4f}")
 
     masked = lambda values: data.scatter_to_mesh(
-        forecast[movie.FIELD].copy(data=np.where(active, values, np.nan)), xds.attrs
+        forecast[FIELD].copy(data=np.where(active, values, np.nan)), xds.attrs
     )
     inputs = data.scatter_to_mesh(
         movie.input_observation_mask(xds["t0"].sel(t0=[initial]), xds.attrs).isel(t0=0),
         xds.attrs,
     )
-    sla = data.scatter_to_mesh(forecast[movie.FIELD], xds.attrs)
+    sla = data.scatter_to_mesh(forecast[FIELD], xds.attrs)
 
     fig, axs = plt.subplots(
         2, 2, figsize=(13, 8), subplot_kw={"projection": projection(region)}
@@ -242,7 +246,7 @@ def panels(date=DATE, region=REGION, fhr=FHR, run_dir=movie.RUN_DIR):
 
     extend, vmin, vmax = movie.get_vmin_vmax_extend(sla, vmin=None, vmax=None)
     draw_field(fig, axs[0, 1], sla, f"Predicted SLA\nvalid {valid.strftime(movie.DATE_FORMAT)}",
-               movie.LABEL, "cmo.balance", vmin, vmax, extend)
+               LABEL, "cmo.balance", vmin, vmax, extend)
 
     gradient_label = (
         r"$|\hat{\nabla} x|$" if GRADIENT_SQRT else r"$|\hat{\nabla} x|^2$"
@@ -274,7 +278,7 @@ if __name__ == "__main__":
     date = sys.argv[1] if len(sys.argv) > 1 else DATE
     fig, loss = panels(date)
 
-    save_dir = f"{movie.RUN_DIR}/figures-matern"
+    save_dir = f"{RUN_DIR}/figures-matern"
     os.makedirs(save_dir, exist_ok=True)
     fname = f"{save_dir}/{REGION}.{date}.M{ORDER}.rho{RHO_HAT}.jpeg"
     fig.savefig(fname, dpi=300, bbox_inches="tight")
