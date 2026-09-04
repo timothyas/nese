@@ -171,7 +171,7 @@ locally, so $\shat_n$ acquires spatial structure that \eqref{eq:analytic} cannot
 --- by a factor of up to $20$, as Section~\ref{sec:lowneighbour} shows. We therefore
 estimate $\shat_n$ per cell by randomization \citep{weaver2021},
 $\shat^2_n = \mathbb{E}[(A^{-M}z)_n^2]$ with $z \sim \mathcal{N}(0,I)$, which costs a
-single sparse factorization plus $10^3$ solves, about \SI{1.6}{\second}, once at
+single sparse factorization plus $10^3$ solves, about \SI{3.4}{\second}, once at
 initialization. Where the analytic scalar is adequate it is recovered automatically, so
 nothing is lost by estimating.
 
@@ -204,6 +204,21 @@ $\mathbb{E}\!\left[x^{T} C^{-1} x\right] = 33436$ against $N = 33469$. Per-cell,
 contributions $\left(\left(A^{M}\Sigma x\right)_n\right)^2$ average to $0.999$, $0.999$,
 $1.001$ and $0.972$ across cells with $8$, $3$--$7$, $1$--$2$ and $0$ retained neighbours
 respectively.
+
+\paragraph{What the code implements.} Two departures from \eqref{eq:loss}, both
+deliberate. The implementation omits the $1/2$, because the paired data term
+(\texttt{ObservationMaskedMSE}) is a plain MSE without one and carrying the factor on
+only one term would be inconsistent. And $\lambda_M$ is not a parameter of the
+regularization term: it is \texttt{loss\_weights[1]} of the \texttt{CombinedLoss} that
+holds the two terms, so the strength lives in one place rather than two. What the code
+evaluates is therefore
+
+\begin{equation}
+\label{eq:implemented}
+\texttt{loss\_weights[1]} \times \frac{1}{N}\left\|\Ahat^{M}\hat{\Sigma}\,x\right\|_2^2 ,
+\end{equation}
+
+and anyone wanting the $1/2$ folds it into the weight.
 
 \paragraph{Scaling.} Because \eqref{eq:LM} has expectation $N$ under the prior, defining
 the implemented term as $\tfrac{\lambda_M}{2}\,\|\cdot\|^2 / N$ makes

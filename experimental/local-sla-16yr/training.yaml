@@ -102,13 +102,13 @@ data:
           # one mission only because anemoi needs a diagnostic to exist there -- merging
           # the missions in nese-dataprep would pre-empt what the model is being trained
           # to do. Same spec as the loss, so the mission list stays in one place.
-          composed: ${training.training_loss.datasets.ocean.observations}
+          composed: ${training.training_loss.datasets.ocean.losses.0.observations}
         imputer:
           # Pooled so the fill agrees with the normaliser: an unobserved cell is filled in
           # raw space and centred afterwards, so a per-mission fill under a pooled centre
           # would sit up to 0.25 sigma off zero, varying by mission and so by era.
           _target_: nese_training.processors.PooledObservationImputer
-          pool: ${training.training_loss.datasets.ocean.observations}
+          pool: ${training.training_loss.datasets.ocean.losses.0.observations}
           config:
             default: none
             # Unobserved cells are NaN. Fill with the field mean; CountMaskedMSE (etc) zeroes
@@ -138,7 +138,7 @@ data:
           # `pool` reuses the loss's own `observations` spec, so the mission list is
           # recovered from one place and cannot drift between loss and normaliser.
           _target_: nese_training.processors.PooledObservationNormalizer
-          pool: ${training.training_loss.datasets.ocean.observations}
+          pool: ${training.training_loss.datasets.ocean.losses.0.observations}
           config:
             default: mean-std
             max:
@@ -434,16 +434,27 @@ training:
   # never the batch, and scalers are keyed on model-output variables, of which there is
   # exactly one. NaNMaskScaler is also wrong here regardless -- imputer.py:210 builds
   # loss_mask_training from nan_locations[:, 0], the oldest input bin, not the target.
+  # The Matern term adds regularization, see matern-regularization
   training_loss:
     datasets:
       ocean:
-        _target_: nese_training.losses.ObservationMaskedMSE
-        scalers: []
-        observations:
-          sla:
-            observed_as: sla_filtered
-            groups: auto
-            count: "obs_count_{group}"
+        _target_: anemoi.training.losses.combined.CombinedLoss
+        loss_weights: [1.0, 0.0]
+        losses:
+        - _target_: nese_training.losses.ObservationMaskedMSE
+          scalers: []
+          observations:
+            sla:
+              observed_as: sla_filtered
+              groups: auto
+              count: "obs_count_{group}"
+        - _target_: nese_training.losses.MaternPenalty
+          scalers: []
+          order: 1              # M, times the operator is applied
+          rho_hat: 4.0          # correlation range in grid cells (~407 km at hpx6)
+          min_neighbours: 3     # drop the 110 cells with 0-2 sea neighbours
+          n_randomisation: 1000
+          seed: 0
 
   validation_metrics:
     datasets:

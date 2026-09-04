@@ -3,12 +3,16 @@
 import logging
 from typing import Any
 
+import numpy as np
 import torch
+from anemoi.training.losses.base import BaseLoss
 from anemoi.training.losses.base import FunctionalLoss
 from anemoi.training.losses.base import LossFactoryContextKey
 from anemoi.training.utils.enums import TensorDim
 from anemoi.training.utils.index_space import IndexSpace
 
+from nese_training.matern import HEALPixMaternOperator
+from nese_training.matern import delta_hat
 from nese_training.observations import normalise_spec
 from nese_training.observations import resolve_groups
 
@@ -47,6 +51,39 @@ def _coverage_divisor(loss: FunctionalLoss, mask: torch.Tensor, eps: float) -> t
 
     grid_weight = grid_weight.to(device=mask.device, dtype=mask.dtype).reshape(-1, 1)
     return (mask * grid_weight).sum(dim=TensorDim.GRID, keepdim=True).clamp_min(eps)
+
+
+def _indices_by_layout(
+    names: list[str],
+    lookups: dict[IndexSpace, dict[str, int]],
+) -> dict[IndexSpace, list[int]]:
+    """Resolve ``names`` into column indices, keeping only layouts that address them all."""
+    resolved = {}
+    for layout, lookup in lookups.items():
+        if all(name in lookup for name in names):
+            resolved[layout] = [lookup[name] for name in names]
+    return resolved
+
+
+def _select(
+    tensor: torch.Tensor,
+    layout: IndexSpace | str | None,
+    indices_by_layout: dict[IndexSpace, list[int]],
+    role: str,
+    owner: str,
+) -> torch.Tensor:
+    """Index ``tensor``'s variable axis for the given layout."""
+    if layout is None:
+        msg = f"{owner} requires a '{role}_layout' kwarg."
+        raise ValueError(msg)
+    layout = IndexSpace(layout)
+    if layout not in indices_by_layout:
+        msg = (
+            f"{role}_layout '{layout.value}' cannot address the configured variables. "
+            f"Available: {[space.value for space in indices_by_layout]}"
+        )
+        raise ValueError(msg)
+    return tensor[..., indices_by_layout[layout]].contiguous()
 
 
 class CountMaskedMSE(FunctionalLoss):
@@ -229,45 +266,15 @@ class ObservationMaskedMSE(FunctionalLoss):
             )
 
         self.predicted_variables, self.target_variables = predicted, targets
-        self.predicted_indices_by_layout = self._indices_by_layout(
+        self.predicted_indices_by_layout = _indices_by_layout(
             predicted,
             {IndexSpace.MODEL_OUTPUT: model_output, IndexSpace.DATA_OUTPUT: data_output, IndexSpace.DATA_FULL: data_full},
         )
-        self.target_indices_by_layout = self._indices_by_layout(
+        self.target_indices_by_layout = _indices_by_layout(
             targets,
             {IndexSpace.DATA_OUTPUT: data_output, IndexSpace.DATA_FULL: data_full},
         )
         return self
-
-    @staticmethod
-    def _indices_by_layout(
-        names: list[str],
-        lookups: dict[IndexSpace, dict[str, int]],
-    ) -> dict[IndexSpace, list[int]]:
-        resolved = {}
-        for layout, lookup in lookups.items():
-            if all(name in lookup for name in names):
-                resolved[layout] = [lookup[name] for name in names]
-        return resolved
-
-    @staticmethod
-    def _select(
-        tensor: torch.Tensor,
-        layout: IndexSpace | str | None,
-        indices_by_layout: dict[IndexSpace, list[int]],
-        role: str,
-    ) -> torch.Tensor:
-        if layout is None:
-            msg = f"ObservationMaskedMSE requires a '{role}_layout' kwarg."
-            raise ValueError(msg)
-        layout = IndexSpace(layout)
-        if layout not in indices_by_layout:
-            msg = (
-                f"{role}_layout '{layout.value}' cannot address the configured variables. "
-                f"Available: {[space.value for space in indices_by_layout]}"
-            )
-            raise ValueError(msg)
-        return tensor[..., indices_by_layout[layout]].contiguous()
 
     def forward(
         self,
@@ -283,8 +290,10 @@ class ObservationMaskedMSE(FunctionalLoss):
             msg = f"{type(self).__name__} must be given data_indices before use."
             raise RuntimeError(msg)
 
-        pred = self._select(pred, pred_layout, self.predicted_indices_by_layout, "pred")
-        target = self._select(target, target_layout, self.target_indices_by_layout, "target")
+        pred = _select(pred, pred_layout, self.predicted_indices_by_layout, "pred", type(self).__name__)
+        target = _select(
+            target, target_layout, self.target_indices_by_layout, "target", type(self).__name__
+        )
         return super().forward(pred, target, squash, **kwargs)
 
     def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -300,3 +309,127 @@ class ObservationMaskedMSE(FunctionalLoss):
         mask = mask * counts.shape[-1] / live.sum(dim=-1, keepdim=True).clamp_min(1.0)
 
         return torch.square(predicted - values) * mask
+
+
+class MaternPenalty(BaseLoss):
+    """Matérn-class smoothness prior on the full predicted field.
+
+    The background term of a variational cost function, ``x^T C^-1 x`` with ``x_b = 0``,
+    which supplies a gradient at the cells no mission observed -- where the data term is
+    exactly zero. Derived and validated in
+    ``experimental/local-sla-16yr/matern-regularization``::
+
+        L_M = || A_hat^M Sigma_hat x ||^2 / N
+
+    Note ``Sigma_hat`` acts on ``x`` *before* the operator, not after: with
+    ``C^{1/2} = Lambda_hat A_hat^-M`` the inverse square root is ``A_hat^M Sigma_hat``.
+
+    ``x`` is the model output as the loss receives it, i.e. in data-normalised space.
+    Nothing here de-normalises, and nothing upstream does either: ``post_processors`` run
+    only in ``_compute_metrics`` for validation metrics, never in ``_compute_loss``.
+
+    Overall strength comes from ``CombinedLoss.loss_weights``, not from a parameter here.
+    The ``1/2`` of the variational form is likewise omitted, since the paired data term is
+    a plain MSE without one; fold it into the weight if wanted.
+    """
+
+    name: str = "matern_penalty"
+    needs_graph_data: bool = True
+    factory_context_keys = frozenset({LossFactoryContextKey.DATA_INDICES})
+
+    def __init__(
+        self,
+        *args: Any,
+        order: int = 1,
+        rho_hat: float = 4.0,
+        min_neighbours: int = 3,
+        variables: dict[str, Any] | None = None,
+        n_randomisation: int = 1000,
+        seed: int = 0,
+        graph_data: Any = None,  # noqa: ANN401
+        data_node_name: str | None = None,
+        data_indices: Any = None,  # noqa: ANN401
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(*args, **kwargs)
+        self.order, self.rho_hat, self.min_neighbours = order, rho_hat, min_neighbours
+        self.variables = dict(variables or {})
+        self.n_randomisation, self.seed = n_randomisation, seed
+        self.supports_sharding = False
+
+        if graph_data is None or data_node_name is None:
+            msg = f"{type(self).__name__} needs graph_data to build its stencil."
+            raise ValueError(msg)
+
+        coords = np.degrees(np.asarray(graph_data[data_node_name]["x"].cpu()))
+        self.operator = HEALPixMaternOperator(
+            coords[:, 0], coords[:, 1], min_neighbours=min_neighbours
+        )
+        self.penalised_variables: list[str] = []
+        self.indices_by_layout: dict[IndexSpace, list[int]] = {}
+        if data_indices is not None:
+            self.set_data_indices(data_indices)
+
+    def set_data_indices(self, data_indices: Any) -> "MaternPenalty":  # noqa: ANN401
+        """Resolve which model outputs to penalise, and normalise the operator for each."""
+        model_output = data_indices.model.output.name_to_position
+        unknown = set(self.variables) - set(model_output)
+        if unknown:
+            msg = f"Not model outputs: {sorted(unknown)}. Available: {list(model_output)}"
+            raise ValueError(msg)
+
+        names = list(self.variables) if self.variables else list(model_output)
+        specs = [self.variables.get(name, {}) for name in names]
+        orders = [int(spec.get("order", self.order)) for spec in specs]
+        rho_hats = [float(spec.get("rho_hat", self.rho_hat)) for spec in specs]
+
+        self.penalised_variables = names
+        self.indices_by_layout = _indices_by_layout(
+            names,
+            {
+                IndexSpace.MODEL_OUTPUT: model_output,
+                IndexSpace.DATA_OUTPUT: data_indices.data.output.name_to_position,
+                IndexSpace.DATA_FULL: data_indices.data_full_name_to_position,
+            },
+        )
+        self.register_buffer(
+            "delta",
+            torch.tensor([delta_hat(r, m) for r, m in zip(rho_hats, orders, strict=True)]),
+        )
+        self.register_buffer("order_per_variable", torch.tensor(orders))
+        self.operator.estimate_normalisation(
+            rho_hats, orders, n_samples=self.n_randomisation, seed=self.seed
+        )
+        LOGGER.info(
+            "%s: penalising %s with rho_hat=%s, order=%s, min_neighbours=%d",
+            type(self).__name__,
+            ", ".join(names),
+            rho_hats,
+            orders,
+            self.min_neighbours,
+        )
+        return self
+
+    def forward(
+        self,
+        pred: torch.Tensor,
+        target: torch.Tensor,  # noqa: ARG002 -- a prior has no target
+        squash: bool = True,
+        *,
+        pred_layout: IndexSpace | str | None = None,
+        group: Any = None,  # noqa: ANN401
+        **kwargs: Any,
+    ) -> torch.Tensor:
+        if not self.indices_by_layout:
+            msg = f"{type(self).__name__} must be given data_indices before use."
+            raise RuntimeError(msg)
+
+        x = _select(pred, pred_layout, self.indices_by_layout, "pred", type(self).__name__)
+        scaled = self.operator.sigma * x
+        penalty = self.operator(scaled, self.delta, self.order_per_variable)
+
+        active = self.operator.active.unsqueeze(-1)
+        # reduce() *sums* over GRID, so divide by the cell count to leave a per-cell mean;
+        # without this the weight would carry a hidden factor of N.
+        out = torch.square(penalty) * active / active.sum().clamp_min(1)
+        return self.reduce(out, squash, group=group)
