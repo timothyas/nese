@@ -139,6 +139,11 @@ Same as verison 3, but with a Matern loss penalty turned on, defined with
 
 ### Version Np
 
+Capturing epistemic uncertainty with dropout.
+Note: the dropout implementation blows up memory on the CPU, but is basically
+free on the GPU.
+So, this will wait for now.
+
 * With forcings
 * `trainable_size = 0`
 * Remove land points with nese-dataprep
