@@ -439,7 +439,7 @@ training:
     datasets:
       ocean:
         _target_: anemoi.training.losses.combined.CombinedLoss
-        loss_weights: [1.0, 0.0]
+        loss_weights: [1.0, 0.1]
         losses:
         - _target_: nese_training.losses.ObservationMaskedMSE
           scalers: []
@@ -450,8 +450,8 @@ training:
               count: "obs_count_{group}"
         - _target_: nese_training.losses.MaternPenalty
           scalers: []
-          order: 1              # M, times the operator is applied
-          rho_hat: 4.0          # correlation range in grid cells (~407 km at hpx6)
+          order: 2              # M, times the operator is applied
+          rho_hat: 8.0          # correlation range in grid cells (~407 km at hpx6)
           min_neighbours: 3     # drop the 110 cells with 0-2 sea neighbours
           n_randomisation: 1000
           seed: 0
@@ -553,7 +553,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v3
+      experiment_name: v4
       project_name: local-sla-16yr
       terminal: false
       system: false

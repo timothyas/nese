@@ -1,8 +1,10 @@
 debugging_info:
   #root_dir: runs/v3
   #run_id: 109b3e86564e43d38f2d86603f5fb008
-  root_dir: runs/v3mft
-  run_id: 1fdae0085b664645ab6314db14b00a22
+  #root_dir: runs/v3mft
+  #run_id: 1fdae0085b664645ab6314db14b00a22
+  root_dir: runs/v4
+  run_id: 23c396bfc6ff4049a776ee6aca7af43f
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
 # multistep_input: 3

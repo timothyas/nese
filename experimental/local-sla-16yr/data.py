@@ -121,9 +121,22 @@ def open_anemoi_dataset(path=ANEMOI_DATASET):
     return result
 
 
-def open_anemoi_statistics(path=ANEMOI_DATASET):
+def open_anemoi_statistics(path=ANEMOI_DATASET, return_pooled=True):
     """The dataset's per-channel statistics, indexed by variable name."""
-    return _open_store(path)[list(DATASET_STATISTICS)]
+    sds = _open_store(path)[list(DATASET_STATISTICS)]
+    sds = sds.load()
+    if not return_pooled:
+        return sds
+    else:
+        spec = normalise_spec("sla_filtered")
+        pooled = pooled_statistics(spec)
+        pooled = pooled.expand_dims(
+            {
+                "variable": np.asarray(["pooled"]).astype(sds.variable.dtype),
+            },
+        )
+        sds = xr.concat([sds, pooled], dim="variable")
+        return sds
 
 
 def normalise_spec(spec):

@@ -75,7 +75,7 @@ PERCENTILE = 98.0
 FIELD = "sla"
 LABEL = "Sea Level Anomaly [m]"
 OBSERVED_AS = "sla_filtered"
-RUN_DIR = "runs/v3mft"
+RUN_DIR = "runs/v4"
 CACHE_DIR = f"./matern-norm-cache"
 
 

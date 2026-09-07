@@ -113,6 +113,46 @@ Non-trainable buffers change, as there are fewer nodes and no boolean `sea_mask`
 anymore.
 No substantive changes to the graph, just removed dead weight.
 
+### Version 3 Matern fine tuned
+
+`v3mft` is same as v3, but with a Matern penalty, same as described in v4, but
+added on after v3 training.
+Fine tuning consisted of
+* Max LR = 5e-5
+* 50 linear warm up steps
+* 300 training steps
+
+All of these values are 1 order of magnitude smaller than the pretraining run.
+
+### Version 4
+
+Same as verison 3, but with a Matern loss penalty turned on, defined with
+
+* Loss weights amplitudes:
+    * 1 on misfit term
+    * 0.1 on Matern term
+* Matern parameters:
+    * `order` = M = 2
+    * `rho_hat` = 8 ~= 815 km to correlation drops to 0.14
+    * only turned on at points with at least 3 neighbors
+
+
+### Version Np
+
+* With forcings
+* `trainable_size = 0`
+* Remove land points with nese-dataprep
+* `dropout_p = 0.1`
+
+### Version Nt
+
+* With forcings
+* `trainable_size = 0`
+* Remove land points with nese-dataprep
+* Randomly remove 30% of input and target observations
+
+### Version Nb
+
 
 ### After that ...
 
@@ -121,6 +161,8 @@ No substantive changes to the graph, just removed dead weight.
 * Tackle some of the network oddities noted when visualizing the architecture
 * Use a "pooled" error metric for the loss, normalizing over observation counts
   rather than just num missions (probably not impactful, but cleaner)
+* dropout > 0, note this only affects training. anemoi-inference is
+  deterministic
 
 
 ## Step-by-step
