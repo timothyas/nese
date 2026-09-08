@@ -1,12 +1,12 @@
 # Network diagrams
 
-TikZ figures of the encoder (`GraphTransformerForwardMapper`) and decoder
-(`GraphTransformerBackwardMapper`) of the `AnemoiModelEncProcDec` trained here,
-drawn at the block level of *Attention Is All You Need* Fig. 1 with every wire
-annotated by its array shape. The processor is not drawn yet.
+TikZ figures of the encoder (`GraphTransformerForwardMapper`), processor
+(`TransformerProcessor`) and decoder (`GraphTransformerBackwardMapper`) of the
+`AnemoiModelEncProcDec` trained here, drawn at the block level of *Attention Is
+All You Need* Fig. 1 with every wire annotated by its array shape.
 
     make            # network_diagram.pdf
-    make figure     # encoder_standalone.pdf + decoder_standalone.pdf
+    make figure     # {encoder,processor,decoder}_standalone.pdf
     make png        # rasterise for a quick look
     make clean
     make CKPT=<other>/inference-last.ckpt      # a different run
@@ -19,20 +19,21 @@ from it, not typed in, and follows whichever one you build against.
 | page | |
 |---|---|
 | 1 | encoder wire diagram, **symbols only, no numerals** |
-| 2 | decoder wire diagram, same block vocabulary |
-| 3 | notation table, values read from the checkpoint |
-| 4 | **Notes** — what this configuration is doing |
-| 5 | **Candidates for Architectural Experimentation** — where these depart from GraphCast / plain GNNs / transformers |
+| 2 | processor wire diagram |
+| 3 | decoder wire diagram, same block vocabulary |
+| 4 | notation table, values read from the checkpoint |
+| 5 | **Notes** — what this configuration is doing |
+| 6 | **Candidates for Architectural Experimentation** — where these depart from GraphCast / plain GNNs / transformers |
 
-Pages 4 and 5 split on a useful line: page 4 states what is true of this run,
-page 5 proposes changes to it.
+Pages 5 and 6 split on a useful line: page 5 states what is true of this run,
+page 6 proposes changes to it.
 
 | file | |
 |---|---|
-| `encoder_figure.tex`, `decoder_figure.tex` | the `tikzpicture`s — the files you edit |
+| `encoder_figure.tex`, `processor_figure.tex`, `decoder_figure.tex` | the `tikzpicture`s — the files you edit |
 | `notation.tex` | symbol macros; the one place a symbol is renamed |
-| `network_diagram.tex` | the five-page landscape wrapper |
-| `encoder_standalone.tex`, `decoder_standalone.tex` | one figure alone, for `\includegraphics` |
+| `network_diagram.tex` | the six-page landscape wrapper |
+| `*_standalone.tex` | one figure alone, for `\includegraphics` |
 | `extract_dims.py` | reads the dimensions out of a checkpoint |
 | `dims.tex`, `symbols_table.tex` | **generated** — never hand-edit, `make` overwrites them |
 
@@ -51,10 +52,16 @@ page 5 proposes changes to it.
   because that is anemoi's own name (cf. `mlp_hidden_ratio`).
 - **Source lane on top** (supplies `k`, `v`), edges in the middle, **destination
   lane at the bottom** (supplies `q`, `r`), destination stream leaving along the
-  middle line — on both pages. Lanes keep their colours and swap position, so the
-  colour tells you which space is playing which role. A fourth accent marks only
-  the decoder's output extractor and output channels; paths that are inert in
-  this configuration are grey and dashed.
+  middle line — on the two mapper pages. Lanes keep their colours and swap
+  position, so the colour tells you which space is playing which role. The
+  processor has one space and no edges, so it is a single lane in the latent
+  accent. A fourth accent marks only the decoder's output extractor and output
+  channels; paths that are inert in this configuration are grey and dashed.
+- **Repetition is a dashed box, not repeated boxes.** The processor's `×N_L` is
+  drawn once and fitted with a `\node[fit=...]`, which needs the tikz `fit`
+  library and named coordinates — a bare `(\colF, \rowattnskip)` in a `fit=` list
+  is a pgf error, so route points that the box must enclose get `\coordinate`
+  names.
 - **No numbers on the figures.** Values live only in the notation table.
 - **Prose belongs in the document, not in a box on the figure.** If it needs a
   paragraph, it is a Notes bullet; the figure gets at most a wire label.
@@ -85,13 +92,19 @@ fails loudly instead of drawing a lie. It also derives the incoming-degree
 distribution of both graphs and whether the attributes carry a trainable tail
 (`\valtrainablenote` carries the wording for either case).
 
+It also measures the processor's attention window in degrees of latitude, since
+`window_size` is a half-width on the node *index* and only the graph knows what
+that is worth on the sphere, and asserts the hidden nodes are still in ring order
+(the measurement is meaningless under nested ordering).
+
 From `runs/v4`: `N_x` 33469 (HEALPix res 6, sea-masked), `N_z` 12288 (res 5),
 `N_EE` 107950 (cutoff 200 km), `N_DE` 100407 (KNN k=3, = 3·N_x), `N_φ` 128,
-`N_y` 1 = 0 prognostic + 1 diagnostic (`sla`). Encoder in-degree 0–15, mean 8.8,
-empty for 2967 of 12288 latent nodes (land masking); decoder in-degree exactly 3
-everywhere. Parameters: encoder 230272, processor 791552, decoder 230017, total
-1251841, with **nothing** pinned to the graph (every `trainable_size` is 0; in v0
-it was 338780, 19% of the model).
+`N_L` 4, `N_w` 512, `N_y` 1 = 0 prognostic + 1 diagnostic (`sla`). Encoder
+in-degree 0–15, mean 8.8, empty for 2967 of 12288 latent nodes (land masking);
+decoder in-degree exactly 3 everywhere; processor window ≈ 11° of latitude and
+every longitude. Parameters: encoder 230272, processor 791552, decoder 230017,
+total 1251841, with **nothing** pinned to the graph (every `trainable_size` is 0;
+in v0 it was 338780, 19% of the model).
 
 ## Verified encoder forward pass
 
@@ -159,6 +172,50 @@ Points the trace settled, and the figure now gets right:
 competition between latent nodes. **The receptive field is a graph decision, not a
 learned one**: training re-weights inside `𝒩(j)` but can never attend outside it.
 Fix it in `anemoi-graphs`, not in training.
+
+## Verified processor forward pass
+
+Between the two mappers, and the only stage that is not a graph operation:
+`processor_graph_provider` is a `NoOpGraphProvider`, and `TransformerProcessor`
+takes `edge_attr` / `edge_index` only to drop them (`processor.py:298-316`). The
+hidden→hidden graph is never used — and `training.yaml` never defines one.
+
+```
+  x_latent = Σ over datasets of the encoder outputs      (N_z, N_φ)
+
+TransformerProcessor:  N_L blocks, separate weights, run in
+  num_layers // num_chunks-sized groups under gradient checkpointing
+
+  TransformerProcessorBlock (block.py:174-196), standard pre-norm:
+    x = x + attention(LayerNorm_attn(x))     # add AFTER the output projection
+    x = x + mlp(LayerNorm_mlp(x))
+
+  MultiHeadSelfAttention (attention.py):
+    q = lin_q(x); k = lin_k(x); v = lin_v(x)   # three separate Linears, bias=False
+    α_ij = softmax_{|i-j| ≤ N_w} (q_i·k_j / √N_c)
+    out  = projection(Σ_j α_ij v_j)            # projection has bias=True
+
+then in AnemoiModelEncProcDec.forward:
+  if latent_skip:  x_latent_proc = processor(x_latent) + x_latent
+  → φ' to every decoder                                 (N_z, N_φ)
+```
+
+1. **The window is over the node index, not the graph** — an SDPA band mask on
+   `|i - j| ≤ N_w`, built on the first forward pass and cached
+   (`attention.py:339-346`). The hidden nodes are HEALPix in **ring** order
+   (`nest_ordering: false`), so consecutive indices run along a latitude ring:
+   the window is a zonal strip, ~11° of latitude by every longitude, not a
+   compact patch. Over 4 layers that caps meridional transport at ~22°. Measured
+   on the graph by `extract_dims.py`, not assumed.
+2. **`lin_q` / `lin_k` / `lin_v` are plain `nn.Linear`**, not `layer_kernels`
+   (`attention.py:145-147` binds the factory and then uses it only for
+   `projection`), and they have `bias=False` where `projection` has bias.
+3. **The residual lands after the output projection here**, unlike the mappers,
+   which add `r` *before* theirs. Two conventions in one model.
+4. **`num_chunks` means something different from the mappers'.** Here it splits
+   the layer stack into gradient-checkpointing groups of `num_layers/num_chunks`
+   (`processor.py:90`); in the mappers it partitions destination nodes. With 4
+   layers and 4 chunks that is one layer per checkpoint — maximum recomputation.
 
 ## Verified decoder forward pass
 
@@ -253,11 +310,11 @@ attention weight as its node's own SLA.
 
 ## Open threads
 
-- **Processor figure.** `TransformerProcessor`, 4 layers, sliding window 512 over
-  the 12288 latent nodes — all model depth lives here. Add `processor_figure.tex`
-  beside the other two, reuse the `blk` / `wire` / `shp` styles, and extend `ROWS`
-  in `extract_dims.py` for any new dimensions. A row lands in the notation table's
-  first column unless placed after the `SPLIT` marker.
+- **Node ordering.** The hidden nodes are HEALPix ring-ordered, which is what
+  makes the processor's window zonal. This is intentional.
+- **Adding a figure.** Reuse the `blk` / `wire` / `shp` styles and extend `ROWS`
+  in `extract_dims.py` for any new dimensions. A row lands in the notation
+  table's first column unless placed after the `SPLIT` marker.
 - **Other variables / datasets** — see the multi-dataset section above.
 - **Land masking** — parked. The 2967 empty-neighbourhood latent nodes and
   `sea_mask` interact with loss masking; revisit if a land-inclusive dataset is
@@ -266,6 +323,7 @@ attention weight as its node's own SLA.
 Page 5 of the PDF carries the full list of architectural oddities. The ones worth
 chasing: attention aggregation is degree-normalised where GraphCast's sums, so the
 output carries no magnitude cue for observation density; the decoder's receptive
-field is a fixed three latent nodes regardless of local density; and nothing is
-pinned to the graph in v4, so turning `trainable_size` back on would add order
-`N_x + N_z` and `N_EE + N_DE` non-transferable parameters.
+field is a fixed three latent nodes regardless of local density; the processor's
+is a zonal band; and nothing is pinned to the graph in v4, so turning
+`trainable_size` back on would add order `N_x + N_z` and `N_EE + N_DE`
+non-transferable parameters.

@@ -30,6 +30,8 @@ def load_dims(ckpt_path, dataset=None):
 
     enc = model.encoder[dataset]
     dec = model.decoder[dataset]
+    proc = model.processor
+    proc_attn = proc.proc[0].attention
     block = enc.proc
     node_attrs = model.node_attributes
     hidden = model._graph_name_hidden
@@ -51,6 +53,9 @@ def load_dims(ckpt_path, dataset=None):
         "NEE": model.encoder_graph_provider[dataset].edge_index_base.shape[1],
         "NDE": model.decoder_graph_provider[dataset].edge_index_base.shape[1],
         "Nout": model.num_output_channels[dataset],
+        "NL": proc.num_layers,
+        "Nw": proc_attn.window_size,
+        "Nchunk": proc.num_chunks,
     }
 
     # Output channels split into prognostic (which take the residual add) and
@@ -80,7 +85,8 @@ def load_dims(ckpt_path, dataset=None):
     # graph rather than shared across it.
     d["encparams"] = sum(p.numel() for p in enc.parameters())
     d["decparams"] = sum(p.numel() for p in dec.parameters())
-    d["procparams"] = sum(p.numel() for p in model.processor.parameters())
+    d["procparams"] = sum(p.numel() for p in proc.parameters())
+    d["proclayerparams"] = sum(p.numel() for p in proc.proc[0].parameters())
     d["nodeparams"] = sum(
         t.trainable.numel() for t in node_attrs.trainable_tensors.values() if t.trainable is not None
     )
@@ -107,6 +113,23 @@ def load_dims(ckpt_path, dataset=None):
         d[f"{prefix}degmean"] = f"{degree.float().mean().item():.1f}"
         d[f"{prefix}degzero"] = int((degree == 0).sum().item())
 
+    # The processor's window is a band on the node *index*, and the hidden nodes are
+    # HEALPix in ring order, so the window is a zonal strip -- all longitudes, a few
+    # degrees of latitude.  How many degrees is a property of the graph, so measure it
+    # rather than asserting it in a caption.
+    latlons = dict(node_attrs.named_buffers())[f"latlons_{hidden}"]
+    lat = torch.rad2deg(torch.atan2(latlons[:, 0], latlons[:, 2]))
+    spans = [
+        (lambda w: (w.max() - w.min()).item())(lat[max(0, j - d["Nw"]) : j + d["Nw"] + 1])
+        for j in range(0, d["Nz"], 97)
+    ]
+    span = sorted(spans)[len(spans) // 2]
+    d["windowlat"] = f"{span:.0f}"
+    # One layer reaches half a window in each direction, so the whole stack reaches
+    # N_L times that -- the meridional limit on how far information can travel.
+    d["windowreach"] = f"{proc.num_layers * span / 2:.0f}"
+    d["ringordered"] = bool(torch.all(lat[1:] - lat[:-1] <= 1e-4))
+
     # multistep is not stored directly; it falls out of the input width.
     num, rem = divmod(d["Npsi"] - d["Nax"], d["Nu"])
     if rem or num < 1:
@@ -121,6 +144,14 @@ def load_dims(ckpt_path, dataset=None):
     assert d["Nout"] == d["Nprog"] + d["Ndiag"], "output channels are not prognostic + diagnostic"
     assert dec.node_data_extractor[-1].out_features == model.output_dim[dataset], (
         "the decoder's extractor no longer emits the model output width"
+    )
+    assert proc.num_channels == d["Nphi"], "the processor no longer runs at the latent width"
+    assert proc_attn.num_heads * proc_attn.head_dim == d["Nphi"], (
+        "the processor's attention is narrower than the latent width; the figure draws them equal"
+    )
+    assert d["Nw"] is not None, "the processor figure draws a sliding window; this one attends globally"
+    assert d["ringordered"], (
+        "hidden nodes are no longer in ring order, so the index window is not a zonal band"
     )
     assert not hasattr(dec, "emb_nodes_src"), (
         "the backward mapper has grown a source embedding; the decoder figure draws it without one"
@@ -174,6 +205,8 @@ ROWS = [
     (r"\Nc", r"channels per head, $\Nc = \Nphi/\NH$", r"\valNcsplit"),
     (r"\ff", r"MLP, $\ff:\mathbb{R}^{\Nphi}\to\mathbb{R}^{\Nphi}$, GELU", None),
     (r"\Nf", r"MLP hidden width ({\tt mlp\_hidden\_ratio})", r"\valNfsplit"),
+    (r"\NL", r"processor layers ({\tt num\_layers})", r"\valNL"),
+    (r"\Nw", r"attention window half-width, in latent nodes ({\tt window\_size})", r"\valNw"),
 ]
 
 
@@ -271,6 +304,7 @@ def main():
         N_H           {d['NH']}
         N_c           {d['Nc']}
         N_f           {d['Nf']}
+        N_L / N_w     {d['NL']} layers / window {d['Nw']} nodes = {d['windowlat']} deg latitude
         out channels  {d['Nout']} = {d['Nprog']} prognostic + {d['Ndiag']} diagnostic ({d['diagnamesplain']})"""))
     print(f"\nwrote {args.outdir/'dims.tex'} and {args.outdir/'symbols_table.tex'}")
 

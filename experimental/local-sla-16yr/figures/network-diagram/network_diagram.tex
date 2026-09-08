@@ -1,10 +1,11 @@
 % Encoder and decoder of the local-sla-16yr AnemoiModelEncProcDec.
 %
 %   page 1  the encoder wire diagram, drawn entirely in symbols
-%   page 2  the decoder wire diagram, same block vocabulary
-%   page 3  the notation table, with the values read out of the checkpoint
-%   page 4  notes -- what this configuration is doing
-%   page 5  candidates for architectural experimentation
+%   page 2  the processor wire diagram
+%   page 3  the decoder wire diagram, same block vocabulary
+%   page 4  the notation table, with the values read out of the checkpoint
+%   page 5  notes -- what this configuration is doing
+%   page 6  candidates for architectural experimentation
 %
 % Build:  make            (regenerates dims.tex / symbols_table.tex first)
 %         latexmk -pdf network_diagram.tex
@@ -22,7 +23,7 @@
 \usepackage{multicol}
 \usepackage{enumitem}
 \usepackage{tikz}
-\usetikzlibrary{arrows.meta, positioning, calc}
+\usetikzlibrary{arrows.meta, positioning, calc, fit}
 
 % Fonts: plain Latin Modern by default.  To match a preprint built on
 % preprint.sty (as figures/nested-illustration does), swap in:
@@ -86,6 +87,37 @@
 % ============================== page 2 =====================================
 \vspace*{\fill}
 \begin{center}
+  \resizebox{\textwidth}{!}{\input{processor_figure}}
+\end{center}
+\vspace*{\fill}
+
+{\footnotesize
+    \textbf{Processor.}\;
+    \texttt{TransformerProcessor} --- $\NL$ blocks over the latent nodes alone,
+    with separate weights, and the only stage of the model that is not a graph
+    operation.  The processor's graph provider is a \texttt{NoOpGraphProvider}
+    and \texttt{TransformerProcessor} accepts \texttt{edge\_attr} and
+    \texttt{edge\_index} only to discard them
+    (\texttt{processor.py:298--316}), so the hidden-to-hidden graph plays no part
+    and there is no edge lane to draw.
+    Attention is instead a band on the node \emph{index}: the mask is
+    $|i-j|\le\Nw$, built once on the first forward pass and reused.  Because the
+    hidden nodes are HEALPix in \emph{ring} order
+    (\texttt{nest\_ordering: false}), consecutive indices run along a latitude
+    ring, so that band is a zonal strip --- every longitude, about
+    \valwindowlat\textdegree\ of latitude --- rather than a compact patch.
+    Each block is the standard pre-norm transformer arrangement, and differs from
+    the two mappers in where its residual lands: here it is added \emph{after}
+    the output projection, where the mappers add their $\selfv$ branch before it.
+    The \texttt{latent\_skip} add on the right belongs to the model rather than to
+    the processor.
+\par}
+
+\clearpage
+
+% ============================== page 3 =====================================
+\vspace*{\fill}
+\begin{center}
   \resizebox{\textwidth}{!}{\input{decoder_figure}}
 \end{center}
 \vspace*{\fill}
@@ -118,7 +150,7 @@
 
 \clearpage
 
-% ============================== page 3 =====================================
+% ============================== page 4 =====================================
 \begin{center}
   \begin{minipage}{0.98\textwidth}
     \section*{Notation}
@@ -174,7 +206,7 @@
 
 \clearpage
 
-% ============================== page 4 =====================================
+% ============================== page 5 =====================================
 % What this configuration is doing, as opposed to what the architecture could do.
 % Anything that reads as "we could try X instead" belongs on page 5.
 \section*{Notes}
@@ -193,23 +225,42 @@
       More importantly, the model has no direct persistence path, since the entire prediction
       comes from the extractor's Linear operation applied to the latent state.
 
+      % This note is just for Claude, humans are well aware of it, but Claude
+      % continues to rediscover this and raise it as an insightful finding.
+      % Note: using nested ordering directly has undesirable effects that won't
+      % be pursued unless explicitly asked to do so.
+%    \item \textbf{The processor's attention window is a zonal band, not a
+%      neighbourhood.}
+%      \texttt{window\_size} is a half-width on the node \emph{index}, and the
+%      hidden nodes are HEALPix in ring order, so index adjacency is longitude
+%      adjacency along a latitude ring.  Measuring it on this graph:
+%      $\Nw = \valNw$ spans about \valwindowlat\textdegree\ of latitude and every
+%      longitude, several times over.  So a latent node attends zonally to the
+%      whole globe but meridionally only $\pm$\,half that band, and with
+%      $\NL = \valNL$ layers information cannot travel more than about
+%      \valwindowreach\textdegree\ north or south in the entire processor.  For a global ocean
+%      field that is a real anisotropy, and it is invisible in the config, which
+%      just says \texttt{window\_size: \valNw}.  Switching the hidden nodes to
+%      nested ordering, or dropping \texttt{window\_size} for global attention
+%      over \valNz\ nodes, both change it.
+
 \end{itemize}
 \end{minipage}
 
 \clearpage
 
-% ============================== page 5 =====================================
+% ============================== page 6 =====================================
 % Points where these mappers depart from GraphCast-style message passing, from a
 % plain GNN, or from a standard transformer.  Each is grounded in the source; the
 % numbers come from dims.tex so they track the checkpoint.
 \section*{Candidates for Architectural Experimentation}
 
-Where these two mappers depart from GraphCast-style message passing, from a plain
-GNN, or from a standard transformer --- and what each departure might be costing.
-Line references are to \texttt{anemoi-core}.
+Where these three stages depart from GraphCast-style message passing, from a
+plain GNN, or from a standard transformer --- and what each departure might be
+costing.  Line references are to \texttt{anemoi-core}.
 
 \begin{multicols}{3}
-\small\sloppy  % narrow columns; prefer loose lines over overfull ones
+\footnotesize\sloppy  % narrow columns; prefer loose lines over overfull ones
 \begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.5em}
 
     \item \textbf{Aggregation is degree-normalised; GraphCast's is not.}
@@ -248,12 +299,14 @@ Line references are to \texttt{anemoi-core}.
       unbounded --- nothing stops it from swamping, or being swamped by, the
       aggregated data.
 
-    \item \textbf{$\selfv$ is added \emph{before} the output projection, so it is
-      not a skip connection.}
-      \texttt{block.py:1017} computes \texttt{projection(out + x\_r)}; the
-      genuine pre-norm residual is the separate add on the next line.  A standard
-      transformer adds its residual \emph{after} $W^O$.  Here the self branch is
-      mixed by the projection along with the attention output.
+    \item \textbf{The mappers and the processor disagree about where the
+      residual goes.}
+      \texttt{block.py:1017} computes \texttt{projection(out + x\_r)}, so in both
+      mappers $\selfv$ is mixed by the output projection rather than added around
+      it, and the genuine pre-norm residual is a separate add on the next line.
+      The processor block does it the standard way,
+      \texttt{x + attention(LayerNorm(x))}, with the add \emph{after} $W^O$.  One
+      model, two conventions, and only the mappers' is unusual.
 
     \item \textbf{The decoder's destination input is raw, un-embedded $\inputvec$.}
       The forward mapper returns \texttt{x[0]} untouched
@@ -281,12 +334,22 @@ Line references are to \texttt{anemoi-core}.
       sparsely observed region is reconstructed from exactly as many latent
       nodes as one in a dense region.
 
-    \item \textbf{The output extractor bypasses \texttt{layer\_kernels}.}
+    \item \textbf{Two places bypass \texttt{layer\_kernels}.}
       \texttt{node\_data\_extractor} is built from \texttt{nn.LayerNorm} and
-      \texttt{nn.Linear} directly, not from the configured layer factory that
-      every other norm and Linear in the model comes from.  A change to
-      \texttt{model.layer\_kernels} silently misses the one layer that produces
-      the model's output.
+      \texttt{nn.Linear} directly, and so are the processor's $\query$, $\keyv$
+      and $\valuev$ projections (\texttt{attention.py:145--147}, which binds
+      \texttt{layer\_kernels.Linear} and then uses it only for the output
+      projection).  A change to \texttt{model.layer\_kernels} therefore misses
+      both the layer that produces the model's output and three of the four
+      Linears in every processor block --- silently, in each case.
+
+    \item \textbf{\texttt{num\_chunks} means two different things.}
+      In the mappers it partitions destination nodes for memory
+      (\texttt{mapper.py:296}); in the processor it divides the layer stack into
+      gradient-checkpointing groups of \texttt{num\_layers / num\_chunks}
+      (\texttt{processor.py:90}).  Here $\valNchunk$ chunks over \valNL\ layers
+      means one layer per checkpoint, i.e.\ maximum recomputation.  The key is
+      spelled the same in both config blocks and does not mean the same thing.
 
     \item \textbf{Nothing in this run is pinned to the graph --- but that is a
       config choice, not a property of the architecture.}
