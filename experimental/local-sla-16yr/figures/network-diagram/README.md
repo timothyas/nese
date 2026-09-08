@@ -1,82 +1,271 @@
 # Network diagrams
 
-> Picking this back up? Start with `network-illustration.md` — conventions,
-> verified forward pass, open threads.
+TikZ figures of the encoder (`GraphTransformerForwardMapper`) and decoder
+(`GraphTransformerBackwardMapper`) of the `AnemoiModelEncProcDec` trained here,
+drawn at the block level of *Attention Is All You Need* Fig. 1 with every wire
+annotated by its array shape. The processor is not drawn yet.
 
-TikZ figures of the encoder and the decoder of the `AnemoiModelEncProcDec`
-trained here — a `GraphTransformerForwardMapper` and a
-`GraphTransformerBackwardMapper` — drawn at the block level of *Attention Is All
-You Need* Fig. 1, with every wire annotated by its array shape.  The processor
-is not drawn yet.
-
-    make            # build network_diagram.pdf (figures + notation + notes)
-    make figure     # encoder_standalone.pdf and decoder_standalone.pdf
+    make            # network_diagram.pdf
+    make figure     # encoder_standalone.pdf + decoder_standalone.pdf
     make png        # rasterise for a quick look
     make clean
+    make CKPT=<other>/inference-last.ckpt      # a different run
 
-    make CKPT=path/to/other/inference-last.ckpt      # a different run
+`CKPT` defaults to `runs/v4`, the run `../../training.yaml` describes. Other runs
+differ in ways the pages report — `v0` has trainable node/edge attributes and an
+unmasked data mesh — so all wording that depends on the checkpoint is generated
+from it, not typed in, and follows whichever one you build against.
 
-`CKPT` defaults to the `v4` run, which is the one `../../training.yaml`
-describes.  Earlier runs differ in ways the pages report — `v0`, for instance,
-has trainable node and edge attributes and an unmasked data mesh — so the wording
-on the notation and notes pages is generated from the checkpoint rather than
-typed in, and follows whichever one you build against.
+| page | |
+|---|---|
+| 1 | encoder wire diagram, **symbols only, no numerals** |
+| 2 | decoder wire diagram, same block vocabulary |
+| 3 | notation table, values read from the checkpoint |
+| 4 | **Notes** — what this configuration is doing |
+| 5 | **Candidates for Architectural Experimentation** — where these depart from GraphCast / plain GNNs / transformers |
 
-## Files
+Pages 4 and 5 split on a useful line: page 4 states what is true of this run,
+page 5 proposes changes to it.
 
 | file | |
 |---|---|
-| `encoder_figure.tex`   | the encoder `tikzpicture`. **One of the two files you edit.** |
-| `decoder_figure.tex`   | the decoder `tikzpicture`. **The other one.** |
-| `notation.tex`         | the symbol macros --- the one place a symbol is renamed |
-| `network_diagram.tex`  | five-page landscape wrapper: encoder, decoder, notation table, notes, experiment candidates |
-| `encoder_standalone.tex`, `decoder_standalone.tex` | one figure alone, for `\includegraphics` into a paper |
-| `extract_dims.py`      | reads the dimensions out of a checkpoint |
-| `dims.tex`             | **generated** --- `\newcommand{\valNx}{33469}` etc. |
-| `symbols_table.tex`    | **generated** --- the rows of the notation table, in two columns |
+| `encoder_figure.tex`, `decoder_figure.tex` | the `tikzpicture`s — the files you edit |
+| `notation.tex` | symbol macros; the one place a symbol is renamed |
+| `network_diagram.tex` | the five-page landscape wrapper |
+| `encoder_standalone.tex`, `decoder_standalone.tex` | one figure alone, for `\includegraphics` |
+| `extract_dims.py` | reads the dimensions out of a checkpoint |
+| `dims.tex`, `symbols_table.tex` | **generated** — never hand-edit, `make` overwrites them |
 
-The figures are drawn entirely in symbols; no number appears on pages 1--2.  The
-concrete values live only in the notation table, and `extract_dims.py` reads
-them off the live modules in the checkpoint, so they cannot drift from the
-trained model.  It asserts that `N_psi == N_T * N_u + N_ax`, that
-`N_phi == N_H * N_c`, that `N_y == N_P + N_D`, that the decoder's extractor still
-emits the model's output width and that the backward mapper still has no source
-embedding --- so a config or upstream change that breaks what the figures assume
-fails loudly instead of drawing a lie.  It also summarises the incoming-degree
-distribution of both graphs (`\valdegmin` ... `\valdegzero` for the encoder,
-`\valdecdegmin` ... `\valdecdegzero` for the decoder), which the notation
-caption quotes --- so those numbers track the graph rather than being typed in.
-Whether the attributes carry a trainable tail is likewise read off the
-checkpoint, and `\valtrainablenote` carries the wording for either case.
+## Conventions
 
-Both figures place every node off the `\row*` / `\col*` registers at the top of
-the file, so the layout is reflowed by editing those numbers rather than by
-moving nodes.  The three lanes (data, edges, latent) each carry one accent colour
-from `notebooks/nice.mplstyle`, matching
-`$WORK/nested-eagle-paper/figures/nested-illustration`; a fourth accent is used
-only for the decoder's output extractor and its output channels.  Paths that are
-present in the code but inert in this configuration are drawn grey and dashed.
+- **Lowercase for variables and functions**; uppercase reserved for matrices,
+  except integer counts, which are always `N_{quantity}` — including set sizes
+  (`N_P`, not `|P|`).
+- **`ψ` in data space maps to `φ` in latent space.** `φ` not `h`, so it never
+  reads as "heads". `N_EE` / `N_DE` for encoder / decoder edges; one symbol `a_e`
+  serves both attribute sets and the counts carry the distinction.
+- **`‖` is concatenation** along the feature axis, circled **`+` is addition**.
+  One meaning per symbol.
+- **Boxes are labelled by what they are** (`Linear`, `LayerNorm`, `MLP`), never by
+  role; the role rides on the wire as a symbol (`k`, `v`, `q`, `r`, `ε`). `MLP`
+  because that is anemoi's own name (cf. `mlp_hidden_ratio`).
+- **Source lane on top** (supplies `k`, `v`), edges in the middle, **destination
+  lane at the bottom** (supplies `q`, `r`), destination stream leaving along the
+  middle line — on both pages. Lanes keep their colours and swap position, so the
+  colour tells you which space is playing which role. A fourth accent marks only
+  the decoder's output extractor and output channels; paths that are inert in
+  this configuration are grey and dashed.
+- **No numbers on the figures.** Values live only in the notation table.
+- **Prose belongs in the document, not in a box on the figure.** If it needs a
+  paragraph, it is a Notes bullet; the figure gets at most a wire label.
 
-The two pages share a lane convention: the **source** lane is on top and supplies
-`k` and `v`, the edge lane is in the middle, the **destination** lane is at the
-bottom and supplies `q` and `r`, and the destination stream leaves along the
-middle line.  So the lanes keep their colours between the pages but swap
-position, because the two spaces have swapped roles.
+### Layout mechanics
 
-Lane labels are anchored to their own input box (`(psiin.north west)`), not to a
-fixed offset off the lane row, so a box that grows a line cannot hide one.
+Every node is placed off the `\row*` / `\col*` registers at the top of each figure
+file — reflow by editing those numbers, not by moving nodes. (Deliberately unlike
+`$WORK/nested-eagle-paper/figures/nested-illustration`, which hard-codes inches
+because it was pinned to cropped bitmaps.) Lane labels anchor to their own input
+box, so a box that grows a line cannot hide one.
 
-Apparent text size is set by the aspect ratio, not the font size --- both figures
-are placed with `\resizebox{\textwidth}{!}`.  The decoder's chain is longer than
-the encoder's (it carries the extractor and the residual add), so its lanes are
-spread further apart to compensate.  Push them too far and the page-2 caption
-falls off the page.
+**Apparent text size is set by the aspect ratio, not the font size** — the figures
+are placed with `\resizebox{\textwidth}{!}`. Pushing lanes apart scales everything
+up together. There is a ceiling: spread them too far and the figure plus its
+caption no longer fit, and LaTeX ships the caption to a page of its own, leaving a
+blank page mid-document. The same failure mode is why the notation table is two
+tabulars side by side rather than one.
 
-## Extending to the processor
+## Generated numbers
 
-Add `processor_figure.tex` alongside the other two, reuse the same `blk` / `wire`
-/ `shp` styles, and extend `ROWS` in `extract_dims.py` with whatever new
-dimensions it needs.  A row added to `ROWS` lands in the notation table's first
-column unless it is placed after the `SPLIT` marker; the table is set as two
-tabulars because a single one tall enough to overflow the page is silently
-shipped as an overfull box on a page of its own.
+`extract_dims.py` reads every value off the live modules in the checkpoint, so
+they cannot drift from the trained model. It asserts `N_psi == N_T*N_u + N_ax`,
+`N_phi == N_H*N_c`, `N_y == N_P + N_D`, that the decoder's extractor still emits
+the model's output width, and that the backward mapper still has no source
+embedding — so a config or upstream change that breaks what the figures assume
+fails loudly instead of drawing a lie. It also derives the incoming-degree
+distribution of both graphs and whether the attributes carry a trainable tail
+(`\valtrainablenote` carries the wording for either case).
+
+From `runs/v4`: `N_x` 33469 (HEALPix res 6, sea-masked), `N_z` 12288 (res 5),
+`N_EE` 107950 (cutoff 200 km), `N_DE` 100407 (KNN k=3, = 3·N_x), `N_φ` 128,
+`N_y` 1 = 0 prognostic + 1 diagnostic (`sla`). Encoder in-degree 0–15, mean 8.8,
+empty for 2967 of 12288 latent nodes (land masking); decoder in-degree exactly 3
+everywhere. Parameters: encoder 230272, processor 791552, decoder 230017, total
+1251841, with **nothing** pinned to the graph (every `trainable_size` is 0; in v0
+it was 338780, 19% of the model).
+
+## Verified encoder forward pass
+
+Traced through `$WORK/anemoi-core/models/src/anemoi/models/`. That checkout is
+**post-refactor**: mappers live in a single `layers/mapper.py` (no package dir, no
+mixins), `shard_shapes` is now `BipartiteGraphShardInfo`, and the model is
+multi-dataset (`x` is a `dict[str, Tensor]`). Single dataset `ocean`,
+non-distributed, batch 1, ensemble 1:
+
+```
+input                                       (N_T, N_x, N_u)
+  ├─ residual  ────────────────────────────────────► bypasses enc/proc/dec
+  └─ rearrange "b t e g v -> (b e g) (t v)"    → (N_x, N_T·N_u)
+       ‖ a_x  from NamedNodesAttributes("ocean")    (N_x, N_ax)
+       = ψ                                          (N_x, N_ψ)
+                                                     │
+                                                     └──► raw, UNCHANGED, is the
+                                                          decoder's dst input
+
+  a_z  from NamedNodesAttributes("hidden")     (N_z, N_az)
+  a_e, edge_index from StaticGraphProvider     (N_EE, N_ae), (2, N_EE)  [dst-sorted]
+
+GraphTransformerForwardMapper:
+  Linear (emb_nodes_src) : (N_x, N_ψ)  → (N_x, N_φ)
+  Linear (emb_nodes_dst) : (N_z, N_az) → (N_z, N_φ)
+
+  GraphTransformerMapperBlock:
+    s0, d0 = the two embedded streams               # saved skips
+    sN = LayerNorm_src(s0)     ;  dN = LayerNorm_dst(d0)
+    r  = lin_self(dN)          → (N_z, N_φ)         # NOT reshaped into heads
+    q  = lin_query(dN)         → (N_z, N_H, N_c)
+    k  = lin_key(sN)           → (N_x, N_H, N_c)
+    v  = lin_value(sN)         → (N_x, N_H, N_c)
+    ε  = lin_edge(a_e)         → (N_EE, N_H, N_c)   [edge_pre_mlp = Identity]
+
+    GraphTransformerConv  (src = edge_index[0], dst = edge_index[1]):
+      α_ij = softmax_{i∈𝒩(j)} q_j·(k_i + ε_ij)/√N_c        (N_EE, N_H)
+      out_j = Σ_{i∈𝒩(j)} α_ij (v_i + ε_ij)                 (N_z, N_H, N_c)
+
+    out = projection(out + r)      # RESIDUAL 1 — inside, pre-projection
+    out = out + d0                 # RESIDUAL 2 — pre-norm dst skip
+    φ   = MLP(LayerNorm(out)) + out    # RESIDUAL 3
+    s1  = s0                       # src is a straight wire (update_src_nodes=False)
+
+  returns (ψ_raw, φ)               # φ : (N_z, N_φ) → processor
+```
+
+Points the trace settled, and the figure now gets right:
+
+1. Three residual adds on the latent path, **zero** on the data path.
+2. Residual 1 is not a skip — `r` is added *before* `projection`, so it passes
+   through `W^O` rather than around it.
+3. The LayerNorm does **not** produce k/v or q/r pairs. It emits one tensor and
+   the fork after it is a fan-out read by two independent Linears; anemoi does
+   *not* use a fused `Linear(N_φ → 3N_φ)` + chunk (`block.py:550-553`).
+4. `r` is never reshaped into heads; it waits for the attention output to be
+   rearranged back to `(N_z, N_φ)`.
+5. The mapper returns the **raw, un-embedded** `ψ` (`mapper.py:597`).
+   `emb_nodes_src` runs on a chunk-local copy inside the chunk loop.
+6. `num_chunks=4` partitions destination nodes; edges are dst-sorted so it is
+   exact — memory optimisation only, deliberately not drawn.
+
+`𝒩(j)` is the set of data nodes with an edge into latent node `j`, and
+`Σ_{i∈𝒩(j)} α_ij = 1` per head — so weights are relative *within a patch*, with no
+competition between latent nodes. **The receptive field is a graph decision, not a
+learned one**: training re-weights inside `𝒩(j)` but can never attend outside it.
+Fix it in `anemoi-graphs`, not in training.
+
+## Verified decoder forward pass
+
+Same checkout and case. `x_src` is the processor output with the latent skip
+already added; `x_dst` is the **raw** `ψ` the encoder handed back.
+
+```
+  x_src = x_latent_proc                          (N_z, N_φ)
+  x_dst = ψ                                      (N_x, N_ψ)   raw, from the encoder
+  a_e, edge_index from StaticGraphProvider       (N_DE, N_ae), (2, N_DE)  KNN k=3
+
+GraphTransformerBackwardMapper:
+  pre_process:  x_src UNCHANGED                  # no emb_nodes_src exists
+                Linear (emb_nodes_dst) : (N_x, N_ψ) → (N_x, N_φ)
+
+  GraphTransformerMapperBlock:   # identical to the encoder's, roles swapped
+    s0 = latent, d0 = data
+    r  = lin_self(LayerNorm_dst(d0))   → (N_x, N_φ)
+    q  = lin_query(LayerNorm_dst(d0))  → (N_x, N_H, N_c)
+    k, v = lin_key/value(LayerNorm_src(s0)) → (N_z, N_H, N_c)
+    ε  = lin_edge(a_e)                 → (N_DE, N_H, N_c)
+    α_ij = softmax_{i∈𝒩(x_j)} ...       # over exactly 3 latent nodes
+    out = projection(out + r); out = out + d0; out = MLP(LayerNorm(out)) + out
+
+  post_process:  node_data_extractor = Sequential(LayerNorm, Linear)
+                 (N_x, N_φ) → (N_x, N_y)
+
+then in AnemoiModelEncProcDec._assemble_output:
+  rearrange → (batch, time, ensemble, grid, vars)
+  x_out[..., _internal_output_idx] += x_skip[..., _internal_input_idx]
+                                 ↑ prognostic only — EMPTY here
+  boundings (none configured)
+  → sla at t+Δt                                  (N_x, 1)
+```
+
+1. **No source embedding at all.** `pre_process` embeds only the destination
+   (`mapper.py:698-701`). Harmless while `num_channels` is the width on both
+   sides, but the latent stream gets no per-mapper reprojection on the way out.
+2. **`node_data_extractor` is built from `nn.LayerNorm` / `nn.Linear` directly**,
+   not from `layer_kernels` — so a change to `model.layer_kernels` silently
+   misses the one layer that produces the model's output.
+3. **The residual add is dead here.** `_internal_output_idx` is
+   `model.output.prognostic`, and with `sla` under `diagnostic:` and nothing
+   prognostic, both index tensors are empty (verified on the checkpoint).
+   `SkipConnection` still runs — two view ops — and its result is added to no
+   column. Cheap, but the config reads as though the model has a persistence path
+   and it does not. Note `prognostic` is a *fallback* category
+   (`data_indices/collection.py:57-58`: everything not declared forcing,
+   diagnostic or target), so adding a variable to the zarr and forgetting to
+   declare it silently switches this path on.
+
+### Where the diagnostic "comes in"
+
+Nowhere a diagram could show. There is no separate diagnostic branch: the
+distinction lives entirely in the **index sets**. `model.output` is
+`prognostic ∪ diagnostic`, the extractor's Linear emits all of them at once in one
+matrix, and the only thing separating the two is which columns
+`_assemble_output` adds the input state back onto.
+
+So the decoder page does not try to draw it — it shows the extractor Linear
+(accented) feeding a residual `⊕` whose other input is grey, dashed and labelled
+`added on P only`, and the explanation lives in the Notes section on page 4 as
+prose. An explanatory box floating over the diagram was tried first and removed:
+it implied there was a mechanism there to point at.
+
+## Multi-dataset findings
+
+For the atmosphere/forcings plan. Verified in `models/encoder_processor_decoder.py`:
+
+- **Every dataset gets an encoder AND a decoder, unconditionally** (`:41`, `:79`,
+  `:300`). No encoder-only dataset in this code path; each needs *both* edge sets,
+  `(ds,"to","hidden")` and `("hidden","to",ds)`, or construction KeyErrors.
+- Latents are **summed**, not concatenated or gated (`:273`). No learned weighting
+  between datasets.
+- `x_hidden_latent` is built **once** (`:229`) and handed to every encoder, so with
+  K datasets a latent node receives K attribute-derived residual terms.
+- `model.encoder` is one config instantiated per dataset (`:51`) — separate
+  weights, shared hyperparameters. Whether per-dataset overrides exist is
+  unverified.
+
+| what | where | why |
+|---|---|---|
+| sin/cos julian day, insolation | extra channels in `ocean` under `forcing:` | same node set; costs one wider Linear |
+| sin/cos lat-lon | **already in `a_x`** — don't add | `graph.py:95-98` stores `cat([sin,cos])` |
+| winds / land-defined variables | own dataset | genuinely different node set |
+
+A separate dataset on the *same* grid would duplicate all 107950 edges and add a
+second attention block, and it changes the semantics: a forcing in its own dataset
+arrives spatially-attended over its own neighbourhood, decoupled from the SLA at
+the same location, whereas concatenated into `ψ` it travels through the same
+attention weight as its node's own SLA.
+
+## Open threads
+
+- **Processor figure.** `TransformerProcessor`, 4 layers, sliding window 512 over
+  the 12288 latent nodes — all model depth lives here. Add `processor_figure.tex`
+  beside the other two, reuse the `blk` / `wire` / `shp` styles, and extend `ROWS`
+  in `extract_dims.py` for any new dimensions. A row lands in the notation table's
+  first column unless placed after the `SPLIT` marker.
+- **Other variables / datasets** — see the multi-dataset section above.
+- **Land masking** — parked. The 2967 empty-neighbourhood latent nodes and
+  `sea_mask` interact with loss masking; revisit if a land-inclusive dataset is
+  added.
+
+Page 5 of the PDF carries the full list of architectural oddities. The ones worth
+chasing: attention aggregation is degree-normalised where GraphCast's sums, so the
+output carries no magnitude cue for observation density; the decoder's receptive
+field is a fixed three latent nodes regardless of local density; and nothing is
+pinned to the graph in v4, so turning `trainable_size` back on would add order
+`N_x + N_z` and `N_EE + N_DE` non-transferable parameters.
