@@ -1,7 +1,10 @@
-% Encoder architecture of the local-sla-15yr AnemoiModelEncProcDec.
+% Encoder and decoder of the local-sla-16yr AnemoiModelEncProcDec.
 %
 %   page 1  the encoder wire diagram, drawn entirely in symbols
-%   page 2  the notation table, with the values read out of the checkpoint
+%   page 2  the decoder wire diagram, same block vocabulary
+%   page 3  the notation table, with the values read out of the checkpoint
+%   page 4  notes -- what this configuration is doing
+%   page 5  candidates for architectural experimentation
 %
 % Build:  make            (regenerates dims.tex / symbols_table.tex first)
 %         latexmk -pdf network_diagram.tex
@@ -14,6 +17,7 @@
 \usepackage[T1]{fontenc}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{array}
 \usepackage{booktabs}
 \usepackage{multicol}
 \usepackage{enumitem}
@@ -33,6 +37,12 @@
 \definecolor{dataclr}{HTML}{4C72B0}
 \definecolor{edgeclr}{HTML}{D95F02}
 \definecolor{latentclr}{HTML}{55A868}
+% A fourth accent, used only for the decoder's output extractor and the output
+% channels, so the one thing the decoder page exists to show is the one thing not
+% drawn in a lane colour.
+\definecolor{diagclr}{HTML}{8172B2}
+\colorlet{diagfill}{diagclr!8}
+\colorlet{inactiveclr}{black!45}
 \colorlet{attnfill}{latentclr!8}
 
 \input{notation}
@@ -74,8 +84,43 @@
 \clearpage
 
 % ============================== page 2 =====================================
+\vspace*{\fill}
 \begin{center}
-  \begin{minipage}{0.72\textwidth}
+  \resizebox{\textwidth}{!}{\input{decoder_figure}}
+\end{center}
+\vspace*{\fill}
+
+{\footnotesize
+    \textbf{Decoder.}\;
+    \texttt{GraphTransformerBackwardMapper} maps the processed latent mesh back
+    onto the data nodes. It is the same block as the encoder with the two spaces
+    exchanged: latent is now the source and supplies $\keyv$ and $\valuev$,
+    whereas data is the destination, supplying $\query$ and $\selfv$.
+    The three residual paths act on the destination path (latent lane in the encoder,
+    data lane here).
+    Two things are genuinely different from the encoder.
+    First, there is no source embedding: the mapper defines only
+    \texttt{emb\_nodes\_dst}, so $\latentvec$ enters the block at its own width
+    while the destination input is embedded by a Linear of the decoder's own
+    (\texttt{mapper.py:698--701}). That destination input is the raw
+    $\inputvec$ handed back unchanged by the encoder, so the data-space input is
+    embedded twice, by two independent matrices.
+    Second, \texttt{post\_process} is not the identity: a LayerNorm and a Linear
+    (\texttt{node\_data\_extractor}) take the latent width down to the
+    model's $\Nout$ output channels. That Linear is the only place in the
+    network that leaves latent width, and its output columns are the model
+    output, which partitions into prognostic ($\idxprog$) and diagnostic
+    ($\idxdiag$). Prognostic channels
+    are also model inputs and are predicted as an increment on the last input
+    step, which \texttt{\_assemble\_output} adds back; diagnostic channels are
+    not inputs and receive no such add. Currently $\idxprog = \varnothing$.
+\par}
+
+\clearpage
+
+% ============================== page 3 =====================================
+\begin{center}
+  \begin{minipage}{0.98\textwidth}
     \section*{Notation}
 
     Lowercase letters denote variables and functions; integer counts are written
@@ -83,21 +128,36 @@
     \texttt{extract\_dims.py}, so they cannot drift from the trained model.
 
     \medskip
-    \begin{tabular}{@{}llr@{}}
-      \toprule
-      symbol & meaning & value \\
-      \midrule
-      \symbolrows
-      \bottomrule
-    \end{tabular}
+    % Two tabulars side by side: one table tall enough to overflow the page is
+    % shipped as an overfull box on a page of its own.  The split point is set in
+    % extract_dims.py, so rows can be added without touching this file.
+    \begin{minipage}[t]{0.49\textwidth}
+      \vspace{0pt}
+      \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{6.4cm} r@{}}
+        \toprule
+        symbol & meaning & value \\
+        \midrule
+        \symbolrowsone
+        \bottomrule
+      \end{tabular}
+    \end{minipage}\hfill
+    \begin{minipage}[t]{0.49\textwidth}
+      \vspace{0pt}
+      \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{6.4cm} r@{}}
+        \toprule
+        symbol & meaning & value \\
+        \midrule
+        \symbolrowstwo
+        \bottomrule
+      \end{tabular}
+    \end{minipage}
 
-    \medskip
+    \bigskip
     {\footnotesize
-    $\|$ denotes concatenation along the feature axis.  The attribute widths
-    split as (sin/cos lat-lon) $\|$ (trainable), and the edge attribute width as
-    (length, direction) $\|$ (trainable); the trainable parts are
-    zero-initialised.  $\NEE$ counts the encoder's data-to-latent edges;
-    $N_{DE}$ is reserved for the decoder's.
+    $\|$ denotes concatenation along the feature axis.  \valtrainablenote\
+    The encoder and the decoder run on different edge sets, with their own
+    attributes and their own weights; $\attre$, $\Nae$, $\NH$, $\Nc$ and $\Nf$
+    name the corresponding quantity in whichever of the two is being drawn.
 
     \smallskip
     Each latent node draws on a small local patch of the data mesh rather than
@@ -105,23 +165,50 @@
     \valdegmax\ data nodes, \valdegmean\ on average.  It is empty for
     \valdegzero\ of the \valNz\ latent nodes, which by design receive no data
     and carry only their attributes and the skip connection into the processor.
+    On the way back out the graph is a $k$-nearest-neighbour one rather than a
+    cutoff, so $\nbhd(\coordx_j)$ \valdecdegphrase, for every one of the \valNx\
+    data nodes.
     \par}
   \end{minipage}
 \end{center}
 
 \clearpage
 
-% ============================== page 3 =====================================
-% Points where this encoder departs from GraphCast-style message passing, from a
-% plain GNN, or from a standard transformer.  Each is grounded in the source; the
-% numbers come from dims.tex so they track the checkpoint.
+% ============================== page 4 =====================================
+% What this configuration is doing, as opposed to what the architecture could do.
+% Anything that reads as "we could try X instead" belongs on page 5.
 \section*{Notes}
 
-Where this encoder departs from GraphCast-style message passing, from a plain GNN,
-or from a standard transformer --- and what each departure might be costing.  Line
-references are to \texttt{anemoi-core}.
+\begin{minipage}{0.86\textwidth}
+\small\sloppy
+\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.6em}
 
-\begin{multicols}{2}
+    \item \textbf{Currently, the only output is diagnostic, so the prognostic
+        residual connection does nothing.}
+      That is, $\idxprog = \varnothing$
+      and $\idxdiag = \{\text{\tt sla}\}$.
+      So, \texttt{SkipConnection} is instantiated and evaluated, and looks like
+      a legitimate configuration turned on in the training yaml, but it does
+      nothing.
+      More importantly, the model has no direct persistence path, since the entire prediction
+      comes from the extractor's Linear operation applied to the latent state.
+
+\end{itemize}
+\end{minipage}
+
+\clearpage
+
+% ============================== page 5 =====================================
+% Points where these mappers depart from GraphCast-style message passing, from a
+% plain GNN, or from a standard transformer.  Each is grounded in the source; the
+% numbers come from dims.tex so they track the checkpoint.
+\section*{Candidates for Architectural Experimentation}
+
+Where these two mappers depart from GraphCast-style message passing, from a plain
+GNN, or from a standard transformer --- and what each departure might be costing.
+Line references are to \texttt{anemoi-core}.
+
+\begin{multicols}{3}
 \small\sloppy  % narrow columns; prefer loose lines over overfull ones
 \begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.5em}
 
@@ -168,32 +255,58 @@ references are to \texttt{anemoi-core}.
       transformer adds its residual \emph{after} $W^O$.  Here the self branch is
       mixed by the projection along with the attention output.
 
-    \item \textbf{The decoder's skip carries raw, un-embedded $\inputvec$.}
-      The mapper returns \texttt{x[0]} untouched (\texttt{mapper.py:597}), and
-      the decoder re-embeds it with its own Linear.  So
-      \texttt{emb\_nodes\_src} serves the keys and values only and never reaches
-      the decoder, and the data-space input is embedded twice by two independent
-      matrices.  GraphCast's decoder consumes the \emph{encoded} grid features
-      instead.  A candidate ablation.
+    \item \textbf{The decoder's destination input is raw, un-embedded $\inputvec$.}
+      The forward mapper returns \texttt{x[0]} untouched
+      (\texttt{mapper.py:597}), and the decoder re-embeds it with its own Linear.
+      So \texttt{emb\_nodes\_src} serves the encoder's keys and values only and
+      never reaches the decoder, and the data-space input is embedded twice by
+      two independent matrices.  GraphCast's decoder consumes the \emph{encoded}
+      grid features instead.  A candidate ablation.
 
-    \item \textbf{\valgraphpct\% of the model's parameters are pinned to
-      specific nodes and edges.}
-      The trainable node and edge attributes total \valgraphparams\
-      (\valnodeparams\ node $+$ \valedgeparams\ edge) against \valencparams\ in
-      the entire encoder module and \valtotalparams\ in the whole model --- so
-      there is roughly $1.5\times$ as much free parameter attached to \emph{this
-      graph} as there is learned weight in the encoder that uses it.  They are
-      zero-initialised, they can memorise per-location behaviour, and none of it
-      transfers to a different graph or resolution.  Worth inspecting their
-      magnitude after training, and worth suspecting first if the model
-      generalises poorly in space.
+    \item \textbf{The decoder has no source embedding at all.}
+      \texttt{GraphTransformerBackwardMapper.pre\_process} embeds only the
+      destination (\texttt{mapper.py:698--701}), so $\latentvec$ goes straight
+      into the block's source LayerNorm.  Harmless while \texttt{num\_channels}
+      is the width on both sides, but it means the latent stream gets no
+      per-mapper reprojection on the way out --- the decoder's only chance to
+      reweight latent channels before attending is the \texttt{lin\_key} /
+      \texttt{lin\_value} pair.
 
-    \item \textbf{The encoder is a single attention block.}
-      \texttt{self.proc} is one \texttt{Graph\-Transformer\-Mapper\-Block}, not a stack
-      (\texttt{mapper.py:222}); all depth lives in the processor.  GraphCast's
-      encoder is likewise a single message-passing step, so this matches --- but
-      combined with the one-hop neighbourhood it means the entire path from data
-      to latent is one local gather.
+    \item \textbf{The way out is $k$-nearest-neighbour, the way in is a cutoff.}
+      Every data node attends to exactly \valdecdegmax\ latent nodes, whatever
+      the local latent density, while a latent node gathers from between
+      \valdegmin\ and \valdegmax\ data nodes.  The decoder's softmax therefore
+      normalises over a fixed and very small set --- three logits, one head at a
+      time.  Nothing in the decoder can widen that patch, and a data node in a
+      sparsely observed region is reconstructed from exactly as many latent
+      nodes as one in a dense region.
+
+    \item \textbf{The output extractor bypasses \texttt{layer\_kernels}.}
+      \texttt{node\_data\_extractor} is built from \texttt{nn.LayerNorm} and
+      \texttt{nn.Linear} directly, not from the configured layer factory that
+      every other norm and Linear in the model comes from.  A change to
+      \texttt{model.layer\_kernels} silently misses the one layer that produces
+      the model's output.
+
+    \item \textbf{Nothing in this run is pinned to the graph --- but that is a
+      config choice, not a property of the architecture.}
+      Every \texttt{trainable\_size} is zero, so the node and edge attributes are
+      purely geometric and the trainable node-plus-edge total is
+      \valgraphparams\ against \valtotalparams\ in the model.  The stock anemoi
+      configs instead give each node and each edge a zero-initialised trainable
+      tail; on this graph each such column costs order $\Nx+\Nz$ parameters for
+      the nodes and $\NEE+\NDE$ for the edges, none of which transfer to another
+      graph or resolution.  Worth suspecting first if spatial generalisation
+      looks surprisingly good once they are turned on.
+
+    \item \textbf{Depth is in the processor, not in the mappers.}
+      \texttt{self.proc} is one \texttt{Graph\-Transformer\-Mapper\-Block} at
+      each end, not a stack (\texttt{mapper.py:222}): \valencparams\ parameters
+      in the encoder and \valdecparams\ in the decoder against \valprocparams\
+      in the processor.  GraphCast's encoder is likewise a single
+      message-passing step, so this matches --- but combined with the one-hop
+      neighbourhood at both ends it means the whole path from data to latent,
+      and from latent back to data, is a single local gather.
 
     \item \textbf{Multi-dataset latents are summed, not gated.}
       Every dataset contributes additively with no learned weighting between

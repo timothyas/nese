@@ -26,10 +26,25 @@
 \newcommand{\Nphi}{N_{\varphi}}         % number of latent channels
 
 % --- graph edges -------------------------------------------------------------
+% The encoder and decoder graphs are distinct edge sets with distinct attributes
+% and distinct weights; only the widths happen to coincide, so one symbol serves
+% both and the edge counts carry the distinction.
 \newcommand{\attre}{a_{e}}              % edge attributes
 \newcommand{\Nae}{N_{a_{e}}}
-\newcommand{\NEE}{N_{EE}}               % encoder edges (N_{DE} reserved for the decoder)
-\newcommand{\nbhd}{\mathcal{N}}         % incoming neighbourhood of a latent node
+\newcommand{\NEE}{N_{EE}}               % encoder edges, data -> latent
+\newcommand{\NDE}{N_{DE}}               % decoder edges, latent -> data
+\newcommand{\nbhd}{\mathcal{N}}         % incoming neighbourhood of a destination node
+
+% --- model output ------------------------------------------------------------
+\newcommand{\outvec}{y}                 % model output in data space
+\newcommand{\Nout}{N_{y}}               % number of output channels
+\newcommand{\idxprog}{\mathcal{P}}      % prognostic output channels
+\newcommand{\idxdiag}{\mathcal{D}}      % diagnostic output channels
+% Counts of the two, so the sets keep the set symbols and the integer counts are
+% written N_{quantity} like every other count here.  Subscripting the set macro
+% means renaming a set renames its count with it.
+\newcommand{\Nprog}{N_{\idxprog}}
+\newcommand{\Ndiag}{N_{\idxdiag}}
 
 % --- attention ---------------------------------------------------------------
 \newcommand{\NH}{N_{H}}                 % attention heads
