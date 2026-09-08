@@ -1,5 +1,5 @@
 # Encoder, processor and decoder figures.  `make` regenerates the checkpoint-derived numbers if the
-# checkpoint is newer, then builds the six-page PDF.
+# checkpoint is newer, then builds the seven-page PDF.
 
 CKPT ?= ../../runs/v4/checkpoint/23c396bfc6ff4049a776ee6aca7af43f/inference-last.ckpt
 CONDA_ENV ?= nese-anemoi
@@ -7,7 +7,7 @@ PYTHON = conda run --no-capture-output -n $(CONDA_ENV) python
 
 GENERATED = dims.tex symbols_table.tex
 SOURCES = network_diagram.tex encoder_figure.tex processor_figure.tex decoder_figure.tex \
-          notation.tex $(GENERATED)
+          notation.tex deepmind.tex $(GENERATED)
 
 .PHONY: all dims figure png clean
 

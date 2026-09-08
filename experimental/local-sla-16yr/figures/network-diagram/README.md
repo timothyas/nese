@@ -24,15 +24,19 @@ from it, not typed in, and follows whichever one you build against.
 | 4 | notation table, values read from the checkpoint |
 | 5 | **Notes** — what this configuration is doing |
 | 6 | **Candidates for Architectural Experimentation** — where these depart from GraphCast / plain GNNs / transformers |
+| 7–8 | **Comparison with the DeepMind lineage** — GraphCast, GenCast and WeatherNext 2, stage by stage |
 
-Pages 5 and 6 split on a useful line: page 5 states what is true of this run,
-page 6 proposes changes to it.
+Pages 5, 6 and 7 split on a useful line: page 5 states what is true of this run,
+page 6 proposes changes to it, page 7 says what someone else did. Page 7 runs
+onto page 8 — the three stages do not fit on one landscape page, and shrinking
+the type to force it is the lever this document deliberately avoids.
 
 | file | |
 |---|---|
 | `encoder_figure.tex`, `processor_figure.tex`, `decoder_figure.tex` | the `tikzpicture`s — the files you edit |
 | `notation.tex` | symbol macros; the one place a symbol is renamed |
-| `network_diagram.tex` | the six-page landscape wrapper |
+| `deepmind.tex` | GraphCast / GenCast / WeatherNext 2 literals, hand-maintained, one provenance tag per value |
+| `network_diagram.tex` | the eight-page landscape wrapper |
 | `*_standalone.tex` | one figure alone, for `\includegraphics` |
 | `extract_dims.py` | reads the dimensions out of a checkpoint |
 | `dims.tex`, `symbols_table.tex` | **generated** — never hand-edit, `make` overwrites them |
@@ -97,6 +101,13 @@ It also measures the processor's attention window in degrees of latitude, since
 that is worth on the sphere, and asserts the hidden nodes are still in ring order
 (the measurement is meaningless under nested ordering).
 
+Three values exist only so the page-7 comparison can be quantitative rather than
+by eye, and are measured rather than typed: the longest surviving encoder edge in
+km, the median nearest-neighbour separation of the hidden nodes, and their ratio
+— which is the form DeepMind's query radius takes (a fraction of the mesh's own
+edge length, so it rescales itself). Plus the window as a percentage of the mesh,
+against GenCast's 7.7%. On `v4` these come out 200 km, 204 km, 1.0 and 8.3%.
+
 From `runs/v4`: `N_x` 33469 (HEALPix res 6, sea-masked), `N_z` 12288 (res 5),
 `N_EE` 107950 (cutoff 200 km), `N_DE` 100407 (KNN k=3, = 3·N_x), `N_φ` 128,
 `N_L` 4, `N_w` 512, `N_y` 1 = 0 prognostic + 1 diagnostic (`sla`). Encoder
@@ -105,6 +116,29 @@ decoder in-degree exactly 3 everywhere; processor window ≈ 11° of latitude an
 every longitude. Parameters: encoder 230272, processor 791552, decoder 230017,
 total 1251841, with **nothing** pinned to the graph (every `trainable_size` is 0;
 in v0 it was 338780, 19% of the model).
+
+### DeepMind's numbers are the exception
+
+`deepmind.tex` is the one `\newcommand` file here that is **not** generated and
+must be edited by hand — no checkpoint of ours can produce someone else's
+hyperparameters. What survives of the discipline is that the literals live in
+exactly one place and each carries a provenance tag: `[P]` stated in the paper,
+`[C]` only in a shipped config, `[K]` only recoverable by decoding a released
+checkpoint, `[D]` derived arithmetic. That distinction is not pedantry — the
+three models disagree with their own papers in places:
+
+- `google-deepmind/graphcast` was **renamed** to `google-deepmind/weathernext`.
+  Old URLs redirect but the old `graphcast/*.py` paths 404. All three models now
+  live in one tree (`weathernext1_graph/`, `weathernext1_gen/`, `weathernext2/`)
+  over a shared `utils/`, and GenCast and FGN import the same
+  `sparse_transformer.py`.
+- GenCast's `attention_k_hop = 32` is a required field with no default in the
+  code; it is in the paper, but FGN's is **config-only** — that paper never
+  mentions the attention sparsity at all.
+- GenCast's paper gives 41,162 mesh nodes / 246,960 edges where the code produces
+  40,962 / 245,760. We quote the code.
+- The demo notebooks' random-init defaults (`k_hop=16`, `mesh_size=4`) are *not*
+  the paper models. Do not read hyperparameters off a notebook.
 
 ## Verified encoder forward pass
 
@@ -320,10 +354,45 @@ attention weight as its node's own SLA.
   `sea_mask` interact with loss masking; revisit if a land-inclusive dataset is
   added.
 
-Page 5 of the PDF carries the full list of architectural oddities. The ones worth
-chasing: attention aggregation is degree-normalised where GraphCast's sums, so the
-output carries no magnitude cue for observation density; the decoder's receptive
-field is a fixed three latent nodes regardless of local density; the processor's
-is a zonal band; and nothing is pinned to the graph in v4, so turning
-`trainable_size` back on would add order `N_x + N_z` and `N_EE + N_DE`
-non-transferable parameters.
+## Comparison with the DeepMind lineage
+
+Pages 7–8, from reading GraphCast, the GenCast denoiser and FGN / WeatherNext 2.
+The shape of the lineage: **the encoder and the decoder barely changed across
+three models, and the processor is the only stage that was ever redesigned.**
+Both mappers are one message-passing step, a ball query at 0.6 × the longest
+finest-mesh edge in and the containing triangle out, in all three. GraphCast's
+processor was 16 message-passing steps over a multimesh; GenCast deleted the
+multimesh and replaced it with 16 pre-norm transformer blocks on the finest mesh,
+sparsified by `mask = adj_mat ** attention_k_hop` — a **k-hop graph
+neighbourhood**, not a metric radius, k=32, isotropic by construction, 7.7% of
+the mesh. FGN kept that file and scaled it to 24 blocks / 768 wide.
+
+Three things this settled that page 6 had wrong or half-right:
+
+- **Three neighbours out is not a departure.** All three DeepMind models also
+  read each grid node from exactly 3. The difference is that theirs are the
+  vertices of the containing triangle, so the node is guaranteed to sit inside
+  the patch it reads from, where kNN k=3 can draw all three from one side.
+- **Nothing pinned to the graph puts us *with* the lineage.** No DeepMind model
+  has a learned per-node or per-edge parameter at all. The stock anemoi configs
+  are the outlier, not `v4`.
+- **Two norm conventions in one model is normal.** Their mappers are post-norm
+  inside the residual branch and only their processor is pre-norm. We differ in
+  which stage gets which, not in being mixed.
+
+And the one idea most worth borrowing: GenCast and FGN strip the learned affine
+out of every LayerNorm and supply it from a FiLM layer driven by one global
+vector — the diffusion noise level in GenCast, a learned 32-element noise vector
+in FGN. Repointing that vector is essentially the whole architectural difference
+between the two, which is how FGN went probabilistic without a redesign. Ours are
+stock `torch.nn.LayerNorm`, so there is no slot for a global signal. Their
+residual branches are also zero-initialised, so the processor is an exact
+identity at initialisation.
+
+Page 6 carries the full list of architectural oddities. The ones worth chasing:
+attention aggregation is degree-normalised where all three of DeepMind's keep
+density in the magnitude, so our output carries no magnitude cue for how well
+observed a patch is; the decoder is handed the raw un-embedded `ψ` where theirs
+gets the encoder's grid latent carried around the processor; and nothing is
+pinned to the graph in v4, so turning `trainable_size` back on would add order
+`N_x + N_z` and `N_EE + N_DE` parameters that transfer to no other graph.

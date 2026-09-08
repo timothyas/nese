@@ -130,6 +130,55 @@ def load_dims(ckpt_path, dataset=None):
     d["windowreach"] = f"{proc.num_layers * span / 2:.0f}"
     d["ringordered"] = bool(torch.all(lat[1:] - lat[:-1] <= 1e-4))
 
+    # Two numbers that only exist so the DeepMind comparison on page 7 can be made
+    # quantitatively rather than by eye.  Both are measured on this graph.
+    #
+    # DeepMind size their grid->mesh query radius as a fraction of the mesh's own
+    # edge length (0.6 x the longest, in all three models), so it rescales itself
+    # when the mesh or the grid changes.  Ours is an absolute cutoff in km, so the
+    # comparable quantity is that cutoff divided by the hidden mesh's spacing.
+    def gc_km(a, b):
+        """Great-circle distance in km between two (lat, lon) tensors, degrees."""
+        p1, p2 = torch.deg2rad(a), torch.deg2rad(b)
+        dlat, dlon = p2[:, 0] - p1[:, 0], p2[:, 1] - p1[:, 1]
+        h = (dlat / 2).sin() ** 2 + p1[:, 0].cos() * p2[:, 0].cos() * (dlon / 2).sin() ** 2
+        return 2 * 6371.0 * torch.asin(h.clamp(max=1.0).sqrt())
+
+    def latlon_deg(name):
+        ll = dict(node_attrs.named_buffers())[f"latlons_{name}"]
+        return torch.rad2deg(torch.stack([torch.atan2(ll[:, 0], ll[:, 2]),
+                                          torch.atan2(ll[:, 1], ll[:, 3])], dim=1))
+
+    ll_hidden, ll_data = latlon_deg(hidden), latlon_deg(dataset)
+
+    # The realised cutoff: the longest edge the builder actually kept.  Reading it
+    # off the graph rather than off training.yaml means the caption cannot drift
+    # from the checkpoint the way a typed-in 200 would.
+    src, dst = model.encoder_graph_provider[dataset].edge_index_base
+    d["enccutoffkm"] = f"{gc_km(ll_data[src], ll_hidden[dst]).max().item():.0f}"
+
+    # Median nearest-neighbour separation of the hidden nodes, chunked because the
+    # full 12288^2 distance matrix is not worth allocating.
+    nearest = []
+    for i in range(0, ll_hidden.shape[0], 512):
+        blk = ll_hidden[i : i + 512]
+        rep = blk.repeat_interleave(ll_hidden.shape[0], 0)
+        tile = ll_hidden.repeat(blk.shape[0], 1)
+        dist = gc_km(rep, tile).view(blk.shape[0], -1)
+        dist[torch.arange(blk.shape[0]), torch.arange(i, i + blk.shape[0])] = float("inf")
+        nearest.append(dist.min(dim=1).values)
+    spacing = torch.cat(nearest).median().item()
+    d["hiddenspacing"] = f"{spacing:.0f}"
+    d["cutoffratio"] = f"{float(d['enccutoffkm']) / spacing:.1f}"
+
+    # The processor's window as a fraction of the mesh, which is the one axis on
+    # which it is directly comparable to GenCast's k-hop ball (7.7% of its mesh).
+    d["windowfrac"] = f"{100.0 * min(2 * d['Nw'] + 1, d['Nz']) / d['Nz']:.1f}"
+
+    # Millions, so the page-7 scale table can set our total against theirs without
+    # mixing units in one column.
+    d["totalparamsM"] = f"{d['totalparams'] / 1e6:.2f}"
+
     # multistep is not stored directly; it falls out of the input width.
     num, rem = divmod(d["Npsi"] - d["Nax"], d["Nu"])
     if rem or num < 1:

@@ -6,6 +6,7 @@
 %   page 4  the notation table, with the values read out of the checkpoint
 %   page 5  notes -- what this configuration is doing
 %   page 6  candidates for architectural experimentation
+%   page 7  comparison with the DeepMind lineage (runs onto page 8)
 %
 % Build:  make            (regenerates dims.tex / symbols_table.tex first)
 %         latexmk -pdf network_diagram.tex
@@ -47,6 +48,7 @@
 \colorlet{attnfill}{latentclr!8}
 
 \input{notation}
+\input{deepmind}
 \input{dims}
 \input{symbols_table}
 
@@ -255,13 +257,16 @@
 % numbers come from dims.tex so they track the checkpoint.
 \section*{Candidates for Architectural Experimentation}
 
+{\small
 Where these three stages depart from GraphCast-style message passing, from a
 plain GNN, or from a standard transformer --- and what each departure might be
-costing.  Line references are to \texttt{anemoi-core}.
+costing.  Line references are to \texttt{anemoi-core}; page 7 sets the same
+departures against what GraphCast, GenCast and WeatherNext~2 actually do.
+\par}
 
 \begin{multicols}{3}
 \footnotesize\sloppy  % narrow columns; prefer loose lines over overfull ones
-\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.5em}
+\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.35em}
 
     \item \textbf{Aggregation is degree-normalised; GraphCast's is not.}
       The softmax makes $\sum_{i\in\nbhd(\coordz_j)}\attn_{ij}=1$, so a latent
@@ -270,13 +275,16 @@ costing.  Line references are to \texttt{anemoi-core}.
       so its aggregate grows with degree.  For a data-assimilation-like problem
       the observation density \emph{is} much of the signal, and here the
       attention output carries no magnitude cue for how well observed a patch
-      is.  The \texttt{obs\_count} channels ride in $\inputvec$ and so reach the
-      values, but that is an indirect route --- worth checking whether the model
-      actually exploits it.
+      is.  The \texttt{obs\_count} channels ride in $\inputvec$ and reach the
+      values, but only indirectly.  GenCast and FGN divide by a constant, which is
+      a resolution fix and not a degree normalisation: all three keep density in
+      the magnitude.  Page 7.
 
     \item \textbf{Edge features are never updated.}
       GraphCast is an interaction network: each message-passing step rebuilds
-      edge features from (sender, receiver, edge).  Here $\attre$ passes through
+      edge features from (sender, receiver, edge).  That bites in its
+      \emph{processor}, which takes \gcsteps\ such steps; its mappers take one,
+      and GenCast and FGN drop the edge residual there.  Here $\attre$ passes through
       one Linear into the keys and values and is returned unchanged
       (\texttt{block.py:1029}), then discarded by the mapper
       (\texttt{mapper.py:321}).  Edge geometry is a fixed bias, never a state, so
@@ -284,20 +292,20 @@ costing.  Line references are to \texttt{anemoi-core}.
 
     \item \textbf{The edge embedding enters both the key and the value.}
       \texttt{conv.py:140} and \texttt{:147}, the same tensor twice.  Inherited
-      from PyG's \texttt{TransformerConv} rather than invented here, but it is
-      distinct both from GraphCast (which concatenates edge features into an MLP)
-      and from a plain transformer (no edge features at all).  One
+      from PyG's \texttt{TransformerConv} rather than invented here, and distinct
+      both from GraphCast and from a plain transformer (page 7).  One
       \texttt{lin\_edge} is trained to do two different jobs: shift the logit and
       shift the payload.
 
     \item \textbf{There is no self-loop in the softmax.}
       In standard self-attention a token sits inside its own softmax, so
-      ``attend to myself'' competes with ``attend to my neighbours'' on a
-      normalised scale.  Here the node's own state re-enters outside the softmax,
+      own-state competes with neighbour-evidence on a normalised scale.  Here the
+      node's own state re-enters outside the softmax,
       through $\selfv$.  The balance between own-state and neighbour-evidence is
       therefore set by the learned magnitude of \texttt{lin\_self} and is
       unbounded --- nothing stops it from swamping, or being swamped by, the
-      aggregated data.
+      aggregated data.  A property of the mappers only: our processor's band
+      contains its own index, and GenCast adds self-loops deliberately.
 
     \item \textbf{The mappers and the processor disagree about where the
       residual goes.}
@@ -313,8 +321,9 @@ costing.  Line references are to \texttt{anemoi-core}.
       (\texttt{mapper.py:597}), and the decoder re-embeds it with its own Linear.
       So \texttt{emb\_nodes\_src} serves the encoder's keys and values only and
       never reaches the decoder, and the data-space input is embedded twice by
-      two independent matrices.  GraphCast's decoder consumes the \emph{encoded}
-      grid features instead.  A candidate ablation.
+      two independent matrices.  All three DeepMind models instead hand their
+      decoder the \emph{encoded} grid latent, carried around the processor.  The
+      clearest single ablation here.  Page 7.
 
     \item \textbf{The decoder has no source embedding at all.}
       \texttt{GraphTransformerBackwardMapper.pre\_process} embeds only the
@@ -330,26 +339,29 @@ costing.  Line references are to \texttt{anemoi-core}.
       the local latent density, while a latent node gathers from between
       \valdegmin\ and \valdegmax\ data nodes.  The decoder's softmax therefore
       normalises over a fixed and very small set --- three logits, one head at a
-      time.  Nothing in the decoder can widen that patch, and a data node in a
-      sparsely observed region is reconstructed from exactly as many latent
-      nodes as one in a dense region.
+      time, and a data node in a sparsely observed region is reconstructed from
+      exactly as many latent nodes as one in a dense region.
+      The \emph{count} is not the departure --- all three DeepMind models also read
+      each grid node from exactly \dmdecdeg.  What differs is which three: theirs
+      are the vertices of the containing triangle, so the node is guaranteed to sit
+      inside the patch it reads from; ours are merely the nearest, which at a coast
+      can all lie on one side.  Page 7.
 
     \item \textbf{Two places bypass \texttt{layer\_kernels}.}
       \texttt{node\_data\_extractor} is built from \texttt{nn.LayerNorm} and
       \texttt{nn.Linear} directly, and so are the processor's $\query$, $\keyv$
       and $\valuev$ projections (\texttt{attention.py:145--147}, which binds
       \texttt{layer\_kernels.Linear} and then uses it only for the output
-      projection).  A change to \texttt{model.layer\_kernels} therefore misses
-      both the layer that produces the model's output and three of the four
-      Linears in every processor block --- silently, in each case.
+      projection).  A change to \texttt{model.layer\_kernels} therefore silently
+      misses both the layer that produces the model's output and three of the four
+      Linears in every processor block.
 
     \item \textbf{\texttt{num\_chunks} means two different things.}
       In the mappers it partitions destination nodes for memory
       (\texttt{mapper.py:296}); in the processor it divides the layer stack into
       gradient-checkpointing groups of \texttt{num\_layers / num\_chunks}
       (\texttt{processor.py:90}).  Here $\valNchunk$ chunks over \valNL\ layers
-      means one layer per checkpoint, i.e.\ maximum recomputation.  The key is
-      spelled the same in both config blocks and does not mean the same thing.
+      means one layer per checkpoint, i.e.\ maximum recomputation.
 
     \item \textbf{Nothing in this run is pinned to the graph --- but that is a
       config choice, not a property of the architecture.}
@@ -357,27 +369,233 @@ costing.  Line references are to \texttt{anemoi-core}.
       purely geometric and the trainable node-plus-edge total is
       \valgraphparams\ against \valtotalparams\ in the model.  The stock anemoi
       configs instead give each node and each edge a zero-initialised trainable
-      tail; on this graph each such column costs order $\Nx+\Nz$ parameters for
-      the nodes and $\NEE+\NDE$ for the edges, none of which transfer to another
-      graph or resolution.  Worth suspecting first if spatial generalisation
-      looks surprisingly good once they are turned on.
+      tail, costing order $\Nx+\Nz$ parameters for the nodes and $\NEE+\NDE$ for
+      the edges, none of which transfer to another graph.  Worth suspecting first if spatial generalisation
+      looks surprisingly good once they are turned on.  Note which side is unusual:
+      no DeepMind model has a learned per-node or per-edge parameter at all, so
+      zeroing them puts this run \emph{with} the lineage.
 
     \item \textbf{Depth is in the processor, not in the mappers.}
       \texttt{self.proc} is one \texttt{Graph\-Transformer\-Mapper\-Block} at
       each end, not a stack (\texttt{mapper.py:222}): \valencparams\ parameters
       in the encoder and \valdecparams\ in the decoder against \valprocparams\
-      in the processor.  GraphCast's encoder is likewise a single
-      message-passing step, so this matches --- but combined with the one-hop
-      neighbourhood at both ends it means the whole path from data to latent,
-      and from latent back to data, is a single local gather.
+      in the processor.  GraphCast's encoder is likewise one message-passing step,
+      so this matches --- but with a one-hop neighbourhood at both ends the whole
+      path from data to latent, and back, is a single local gather.
+
+    \item \textbf{The residual branches could start at zero.}
+      GenCast and FGN zero-initialise both output projections in every processor
+      block, so the stack is an identity at initialisation; ours do not.  Page 7.
 
     \item \textbf{Multi-dataset latents are summed, not gated.}
-      Every dataset contributes additively with no learned weighting between
-      them, and each carries its own copy of the latent-attribute residual
-      (\texttt{encoder\_\-processor\_\-decoder.py:273}).  Relevant before adding a
-      second dataset whose observation density differs sharply from this one's.
+      Every dataset contributes additively with no learned weighting, and each
+      carries its own copy of the latent-attribute residual
+      (\texttt{encoder\_\-processor\_\-decoder.py:273}).
 
 \end{itemize}
+\end{multicols}
+
+\clearpage
+
+% ============================== page 7 =====================================
+% Where these three stages sit relative to GraphCast, GenCast and WeatherNext 2.
+% Pages 5, 6 and 7 split as: what is true of this run / what to try / what someone
+% else did.  Every DeepMind number here comes from deepmind.tex, which is
+% hand-maintained and carries a provenance tag per value; every number of ours
+% still comes from dims.tex.
+\section*{Comparison with the DeepMind lineage}
+
+{\small\sloppy
+The three models are one codebase.  {\tt google-deepmind/graphcast} was renamed to
+{\tt google-deepmind/weathernext}, and GraphCast, the GenCast denoiser and
+FGN / WeatherNext~2 now sit side by side in {\tt weathernext1\_graph/},
+{\tt weathernext1\_gen/} and {\tt weathernext2/} over a shared {\tt utils/} ---
+GenCast and FGN import the same {\tt sparse\_transformer.py}, and FGN's own
+appendix calls its architecture ``very similar to that of GenCast''.  Read in one
+tree the shape of the lineage is plain: \textbf{the encoder and the decoder barely
+changed across three models, and the processor is the only stage that was ever
+redesigned.}
+\par}
+
+{\footnotesize\smallskip
+Two differences are assumed throughout and not repeated below.  They train on full
+gridded reanalysis or analysis fields, where we train on sparse per-mission
+altimeter observations binned onto a sea-masked HEALPix grid.  And we are
+deterministic with an MSE loss, so GenCast is taken here as its denoiser core
+alone, as though it were deterministic, and FGN's noise mechanism is described
+only where it changes which layers exist.
+\par}
+
+\smallskip
+{\footnotesize
+\begin{center}
+\begin{tabular}{@{}l r r r r@{}}
+  \toprule
+   & GraphCast & GenCast & WN2 & here \\
+  \midrule
+  latent width      & \gclatent & \genlatent & \fgnlatent & \valNphi \\
+  processor depth   & \gcsteps  & \genlayers & \fgnlayers & \valNL \\
+  heads $\times$ ch.& ---       & $\genheads\!\times\!\genheaddim$
+                                & $\fgnheads\!\times\!\fgnheaddim$
+                                & $\valNH\!\times\!\valNc$ \\
+  latent nodes      & \dmmeshnodes & \dmmeshnodes & \dmmeshnodes & \valNz \\
+  parameters (M)    & \gcparams & $\sim$\genparams & $\sim$\fgnparams
+                                & \valtotalparamsM \\
+  \bottomrule
+\end{tabular}
+\end{center}
+\par}
+
+\medskip
+\begin{multicols}{3}
+\footnotesize\sloppy
+
+\subsection*{Encoder}
+
+\textit{GraphCast built the grid-to-mesh edges with a ball query at
+\dmradiusfrac\ times the longest finest-mesh edge and ran one round of
+interaction-network message passing.  GenCast kept both; FGN kept both.  Across
+three models the only encoder changes were widths.}
+
+\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.45em}
+
+  \item \textbf{Their query radius is tied to the mesh; ours is tied to
+    kilometres.}  Theirs is \dmradiusfrac\ $\times$ the longest edge of the
+    finest mesh --- about \dmradiuskm\,km at level \dmmeshlevel\ --- so it
+    rescales itself whenever the mesh or the grid changes.  Measured on this
+    graph, our longest surviving encoder edge is \valenccutoffkm\,km against a
+    hidden-node spacing of \valhiddenspacing\,km, a ratio of
+    \valcutoffratio\ where theirs is \dmradiusfrac.  Theirs is also chosen so
+    that every grid node reaches at least one mesh node; ours is a cutoff, so
+    $\nbhd(\coordz_j)$ is empty for \valdegzero\ latent nodes --- by design,
+    from land masking.  Their in-degree is about \gcencdeg\ grid nodes per mesh
+    node, ours \valdegmean.
+
+  \item \textbf{They kept an aggregate that grows with degree, three times over.}
+    GraphCast sums messages with no normalisation at all.  GenCast divides by a
+    constant \genaggnorm\ and FGN by \fgnaggnorm\ --- and GenCast's
+    \genaggnorm\ was introduced when they fine-tuned from 1\textdegree\ to
+    0.25\textdegree, so each mesh node began receiving \genaggnorm$\times$ more
+    messages.  That is a resolution scale fix, not a degree normalisation: all
+    three still carry observation density in the magnitude.  Our softmax makes
+    the aggregate degree-invariant.  See page 6.
+
+  \item \textbf{Message form.}  Theirs is an interaction network:
+    $\mathrm{MLP}([\attre, v_{\text{src}}, v_{\text{dst}}])$ summed into
+    $\mathrm{MLP}([v_{\text{dst}}, \textstyle\sum])$, with residual adds on nodes
+    \emph{and} on edges.  Ours is attention, with one {\tt lin\_edge} feeding both
+    the key and the value.
+
+  \item \textbf{Two norm conventions in one model is not unique to us.}  Their
+    mappers are post-norm inside the residual branch,
+    $x + \mathrm{LayerNorm}(\mathrm{MLP}(\cdot))$, while only their processor is
+    pre-norm.  We differ in which stage gets which, not in being mixed.
+
+  \item \textbf{Mesh-node inputs.}  All three give mesh nodes three geometric
+    features and nothing else, zero-padded up to the grid width so one embedder
+    serves both.  Ours gives latent nodes $\attrz$ and a Linear of its own ---
+    the same idea without the padding trick.
+
+\end{itemize}
+
+\subsection*{Processor}
+
+\textit{GraphCast ran \gcsteps\ message-passing steps over a multimesh, levels
+\gcmeshlevels\ merged into one graph so that long edges existed explicitly.
+GenCast deleted the multimesh and replaced the whole stage with \genlayers\
+pre-norm transformer blocks on the finest mesh alone, sparsified by a $k$-hop
+mask.  FGN kept that file unchanged and scaled it to \fgnlayers\ blocks.}
+
+\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.45em}
+
+  \item \textbf{Their neighbourhood is $k$ hops on the mesh graph, not a radius.}
+    The mask is literally {\tt mask = adj\_mat ** attention\_k\_hop}, a sparse
+    matrix power of the mesh adjacency with self-loops, so node $i$ attends to
+    $j$ exactly when a walk of at most $k$ mesh edges joins them.  With
+    $k = \genkhop$ at level \dmmeshlevel\ that is \genballnodes\ of
+    \dmmeshnodes\ nodes, and because the mesh is near-uniform it behaves like a
+    geodesic disc of roughly \genballkm\,km --- isotropic by construction rather
+    than by a metric query.  It is built once on the host and never
+    recomputed.  Ours is a band on the node \emph{index} instead: the mask is
+    $|i-j|\le\Nw$, and the graph plays no part in it.
+
+  \item \textbf{The one axis on which we already match is density.}  Their ball
+    is \gendensity\% of the mesh; our window is $2\Nw+1$ of \valNz\ nodes, or
+    \valwindowfrac\%.  Nearly the same fraction of the mesh, arrived at
+    independently and shaped differently.
+
+  \item \textbf{They also permute the mesh to get a band --- in the other
+    direction.}  A reverse Cuthill--McKee ordering is applied so that the
+    \emph{graph} mask comes out banded and a block-sparse attention kernel can
+    skip whole tiles.  The band is the optimisation; the graph is still the
+    definition.
+
+  \item \textbf{Both sides carry vestigial edge plumbing.}  GenCast computes mesh
+    edge features and then discards them --- its {\tt MeshTransformer} reads node
+    features and the edge \emph{indices} only.  Our {\tt NoOpGraphProvider} and
+    the dropped {\tt edge\_attr} / {\tt edge\_index} reach the same place by a
+    different route.
+
+  \item \textbf{Conditional LayerNorm is the lineage's structural extension
+    point.}  Both GenCast and FGN strip the learned scale and offset out of every
+    LayerNorm and supply them from a FiLM layer driven by one global vector: the
+    diffusion noise level in GenCast, a learned \fgnnoisedim-element noise vector
+    in FGN, \fgnfilmlayers\ such layers in all.  Repointing that vector is
+    essentially the whole architectural difference between the two.  Ours are
+    stock {\tt torch.nn.LayerNorm} with their own affine, so there is no slot for
+    a global signal --- worth knowing before a forcing, an analysis time or an
+    observation-density summary needs somewhere to enter.
+
+  \item \textbf{Their residual branches start at exactly zero.}  Both attention
+    and MLP output projections are zero-initialised, so every block is an
+    identity at initialisation and training begins from encoder-to-decoder alone.
+    Ours use default {\tt torch} init; anemoi exposes
+    {\tt initialise\_data\_extractor\_zero} for the decoder head and nothing
+    equivalent for the processor.
+
+\end{itemize}
+
+
+\subsection*{Decoder}
+
+\textit{GraphCast read each grid node from the three vertices of the mesh
+triangle containing it, ran one message-passing step and a readout MLP, and fed
+that decoder the \emph{encoder's} grid latent rather than the raw input.  GenCast
+and FGN changed none of it.}
+
+\begin{itemize}[leftmargin=1.1em]\setlength{\itemsep}{0.45em}
+
+  \item \textbf{Three neighbours on the way out, in all four models.}  So the
+    cardinality is not a departure --- page 6 previously read as though it were.
+    The difference is what the three are: theirs are the vertices of the
+    containing triangle, so the grid node is guaranteed to lie inside the patch
+    it reads from, where our $k$-nearest-neighbour graph gives no such guarantee
+    and can draw all \valdecdegmax\ from one side at a coast or a mask edge.
+
+  \item \textbf{The long skip is the real gap.}  All three feed the decoder the
+    encoder's grid latent --- embedded, message-passed, and carried around the
+    entire processor --- so their decoder residual lands on a processed
+    representation.  Ours feeds the raw un-embedded $\inputvec$, re-embedded by a
+    second independent Linear.  This is the clearest single ablation on either
+    page.
+
+  \item \textbf{Their readout MLP deliberately has no LayerNorm.}  GraphCast
+    states it outright --- every MLP is followed by a LayerNorm except the
+    decoder's --- and FGN's grid decoder is the one module in the network with no
+    FiLM.  Ours is {\tt LayerNorm} then {\tt Linear}, and is also the layer that
+    bypasses {\tt layer\_kernels}.
+
+  \item \textbf{Prognostic against diagnostic is the same index-set mechanism.}
+    A target that also appears in the inputs is predicted as an increment on the
+    last input step and added back; one that does not is predicted directly.  No
+    separate branch, in their code or ours.  Their diagnostic is 6-hour
+    precipitation, ours is {\tt sla}, and since $\idxprog = \varnothing$ we sit
+    permanently in the ``predicted directly'' case.  Their increments are
+    normalised by the per-variable, per-level standard deviation of the
+    \emph{differences}, with the mean not subtracted.
+
+\end{itemize}
+
 \end{multicols}
 
 \end{document}
