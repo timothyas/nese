@@ -53,4 +53,3 @@ dependencies:
   - pip
   - pip:
     - xmovie @ git+https://github.com/timothyas/xmovie.git@21f4c541ba46b88bb14e98c52f1d57f0d61c0508
-    - nnja-ai[complete]>=1.0.0
