@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# Runs inside the Tykky container during `conda-containerize update`.
+# @DATAPREP_DIR@ is substituted by build-env.sh before this is passed to Tykky.
+#
+set -euo pipefail
+
+DATAPREP_DIR="@DATAPREP_DIR@"
+
+# Editable install; deps already come from environment/olivia/environment.yaml.
+python -m pip install --no-deps --no-build-isolation -e "$DATAPREP_DIR"
+
+python -c "import nese.dataprep, mpi4py; print('post-install ok')"

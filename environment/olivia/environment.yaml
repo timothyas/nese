@@ -1,6 +1,13 @@
+# Copied from ../environment.yaml for the Olivia HPC machine.
+# Diff from ../environment.yaml:
+#   - drops `mpich` and `mpi=*=mpich`; instead pins `openmpi=5.0.*=external_*`, a
+#     contentless build that defers to Olivia's system OpenMPI 5.0.x (the `nese`
+#     modulefile loads OpenMPI/5.0.9-GCC-14.3.0 at runtime). The `external_*` builds
+#     live only on the conda-forge/label/mpi-external channel, added below.
 name: nese
 channels:
   - conda-forge
+  - conda-forge/label/mpi-external
 dependencies:
   - python=3.13
   # Base array ops
@@ -30,10 +37,9 @@ dependencies:
   - ipykernel
   - jupyterlab_vim
   - ffmpeg
-  # HPC / MPI
+  # HPC / MPI -- link mpi4py against the system OpenMPI (module-loaded at runtime)
   - mpi4py
-  - mpich
-  - mpi=*=mpich
+  - openmpi=5.0.*=external_*
   # docs
   - sphinx
   - myst-parser
