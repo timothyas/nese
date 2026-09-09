@@ -5,8 +5,9 @@ a container with [hpc-container-wrapper](https://documentation.sigma2.no/hpc_mac
 (Tykky). There is no `conda activate` / `conda run -n nese` here.
 Instead, load a
 modulefile that puts the container's `bin/` on `PATH`.
+It's a bit more complicated for the GPU (anemoi) environment, see below.
 
-## Build / rebuild
+## `nese` CPU Build / Rebuild Process
 
 ```bash
 bash environment/olivia/build-env.sh
@@ -119,6 +120,187 @@ Source: <https://documentation.sigma2.no/hpc_machines/olivia/openmpi.html>
 with `openmpi=5.0.*=external_*` (a contentless build that defers to the system
 OpenMPI), and adds the `conda-forge/label/mpi-external` channel those builds live
 on. Mirror any other change to `environment/environment.yaml` here.
+
+## nese-anemoi (GPU) environment
+
+`nese-anemoi` is the GPU counterpart of `nese`: a **training + inference** image
+for the anemoi suite. The plotting / notebook / docs stack (cartopy, cmocean,
+seaborn, xmovie, jupyter, sphinx) is deliberately left out -- cartopy has no
+aarch64 wheel and forces `numpy>=2`, and none of it is needed to train or run
+inference (anemoi's plot callbacks use only matplotlib, which the NGC image
+already has, and default to the cartopy-free `equirectangular` projection). Do
+eval/plotting in the CPU `nese` env, or add an overlay to this image.
+
+It is **not** a Tykky container: on
+Olivia every GPU node is a GH200 (aarch64 Grace CPU + Hopper GPU), conda-forge has
+no linux-aarch64 CUDA build of PyTorch, and NRIS's guidance is to use the NVIDIA
+NGC PyTorch container. So `nese-anemoi` is a custom Apptainer image: NRIS's staged
+NGC arm64 PyTorch container (`pytorch_nvidia_25.06_arm64.sif` -- torch 2.8 / CUDA
+12.9 / Python 3.12) extended with the anemoi PyPI packages and editable
+`anemoi-core/{graphs,models,training}`, `nese-inference`, `nese/training`. torch /
+torchvision / CUDA / NCCL / **flash-attn** / Transformer Engine are the container's
+and are never touched by pip (the NGC image already ships `flash_attn`, so there is
+no source build). The `%post` install runs **without `--upgrade`**, so every
+package NGC already provides (numpy 1.26, scipy, numcodecs, ...) is kept and only
+the missing anemoi bits are added, resolved against NGC's numpy.
+
+### Build / rebuild
+
+The image is aarch64 and its `%post` runs arm64 binaries, so the build must run on
+an `accel` node (login nodes are x86_64). It needs **no GPU**:
+
+```bash
+salloc --nodes=1 --cpus-per-task=64 --mem=200G --gpus-per-node=0 \
+       --qos=devel --time=01:00:00 --partition=accel --account=nn2993k
+bash environment/olivia/build-anemoi-env.sh
+```
+
+This:
+1. checks the host is aarch64, the source trees exist, and `anemoi-core` is on
+   `feature/ordering-kwarg-schema` (training configs need its `nest_ordering`
+   schema kwarg);
+2. exports the proxy (as `http_proxy` *and* `APPTAINERENV_http_proxy` -- `%post`
+   does not inherit the caller's env);
+3. renders `nese-anemoi.def.in` and runs
+   `apptainer build --fakeroot --bind /cluster` (`.tmp` + `mv`, so an interrupted
+   build leaves no half-written `.sif`);
+4. writes the modulefile to `$NESE_ANEMOI_MODULES_ROOT/nese-anemoi/olivia.lua`.
+
+Defaults (override by exporting before running):
+
+| var | default |
+|---|---|
+| `NESE_ANEMOI_ENV_PREFIX` | `/cluster/projects/nn2993k/timith/sw/nese-anemoi` |
+| `NESE_ANEMOI_SIF` | `$NESE_ANEMOI_ENV_PREFIX/nese-anemoi.sif` |
+| `NESE_ANEMOI_BASE_SIF` | `/cluster/work/support/container/pytorch_nvidia_25.06_arm64.sif` |
+| `NESE_ANEMOI_NGC_URL` | `docker://nvcr.io/nvidia/pytorch:25.06-py3` |
+| `NESE_ANEMOI_MODULES_ROOT` | `/cluster/projects/nn2993k/timith/sw/modules` |
+| `NESE_ANEMOI_CORE_DIR` | `/cluster/projects/nn2993k/timith/anemoi-core` |
+| `NESE_INFERENCE_DIR` | `/cluster/projects/nn2993k/timith/nese-inference` |
+| `NESE_TRAINING_DIR` | `/cluster/projects/nn2993k/timith/nese/training` |
+
+The base image is referenced straight from NRIS's staged path -- it is not copied.
+If NRIS removes or bumps it, pull our own arm64 copy and point `NESE_ANEMOI_BASE_SIF`
+at it:
+
+```bash
+apptainer pull --arch arm64 "$NESE_ANEMOI_BASE_SIF" docker://nvcr.io/nvidia/pytorch:25.06-py3
+```
+
+(needs the proxy and a large `APPTAINER_CACHEDIR`; anonymous NGC pulls may need
+`APPTAINER_DOCKER_USERNAME=$oauthtoken` + an NGC API key.)
+
+### Use
+
+```bash
+module load nese-anemoi        # conflicts with `nese`
+```
+
+The module is thin: it sets `NESE_ANEMOI_SIF` and the proxy and puts **nothing** on
+`PATH`. Run tools explicitly:
+
+```bash
+apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" python ...
+apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" anemoi-training train --config-name=training ...
+```
+
+`.py` edits in `anemoi-core`, `nese-inference`, `nese/training` are live (editable
+installs, source bind-mounted from `/cluster`). Rebuild only after changing a
+**dependency**, **entry point**, or **version**, or after editing
+`requirements-anemoi.txt` / `nese-anemoi.def.in`.
+
+### Training jobs
+
+`environment/olivia/examples/` has two templates -- copy one next to a flat
+`training.yaml` recipe and `sbatch` it from there:
+
+- `anemoi-train-1node.slurm` -- one GH200 node, 4 GPUs. NVLink-C2C only, so
+  `apptainer exec --nv` is all that is needed.
+- `anemoi-train-multinode.slurm` -- multiple nodes. NCCL over Slingshot needs the
+  host libfabric / NCCL / aws-ofi-nccl / OpenMPI bound into the container; the
+  script carries the NRIS bind list and module set (confirm versions with
+  `module spider`).
+
+anemoi-training drives DDP through PyTorch-Lightning's SLURM integration -- launch
+with `srun` (one task per GPU); no `torchrun`.
+
+### Adding a package
+
+- **Permanent:** add it to `requirements-anemoi.txt` (PyPI), or to the `%post`
+  `apt-get` line (system lib) / the editable loop (another local repo) in
+  `nese-anemoi.def.in`, then rebuild.
+- **Throwaway (no rebuild):** an Apptainer overlay --
+  `apptainer overlay create --sparse --size 5120 ov.img`, then
+  `apptainer exec --overlay ov.img "$NESE_ANEMOI_SIF" pip install <pkg>` in a
+  `--gpus-per-node=0` job, and run with `--overlay ov.img:ro`.
+
+### Keeping the anemoi env files in sync
+
+`environment/olivia/requirements-anemoi.txt` is a hand-maintained pip translation
+of `environment/environment-anemoi.yaml` (the Mac/conda reference) for the NGC
+container. Mirror changes there, applying:
+
+- both files are training+inference only -- the plotting / notebook / docs stack
+  is in neither (see the yaml header);
+- drop everything NGC already ships (`pytorch`, `torchvision`, `numpy`, `scipy`,
+  `numba`, `pandas`, `matplotlib`, `zarr`, `numcodecs`, `pydantic`, `networkx`,
+  ...) -- the install runs without `--upgrade` so NGC's versions win anyway; keep
+  only a short "guardrail" section pinning ranges that matter (`numpy<2`,
+  `zarr<3`, ...);
+- `python=3.13` -> the container's 3.12 (also anemoi's stated max);
+- conda -> pip renames: `pytorch_geometric` -> `torch-geometric`;
+- `anemoi-core` packages are editable (`%post`), not listed.
+
+### Troubleshooting (nese-anemoi)
+
+- **`exec format error`** running the image: you are on a login node (x86_64).
+  Build and run on `accel`.
+- **`%post` network failures** during build: the proxy did not reach the build
+  sandbox -- check `APPTAINERENV_http_proxy` is exported (the build script does
+  this).
+- **`mount /cluster: destination /cluster doesn't exist in container`** during
+  `%post`: the def's `%setup` (`mkdir ${APPTAINER_ROOTFS}/cluster`) creates the
+  bind target -- a def-file build cannot auto-create it. If you also see
+  `destination is already in the mount point list`, run the build from a dir that
+  is not under `/cluster` (the build script uses a `/tmp` build dir for this).
+- **`uv: not found`** / **`externally-managed-environment`** in `%post`: the raw
+  NGC image has no `uv` and its pip is PEP-668 marked. The def uses
+  `python -m pip install --break-system-packages` for this; if a future base image
+  behaves differently, adjust the `PIP=` line in `nese-anemoi.def.in`.
+- **`ResolutionImpossible` / `conflicting dependencies`** in `%post`: NGC's own
+  `/etc/pip/constraint.txt` pins the whole NVIDIA ecosystem, including loose deps
+  the anemoi suite needs newer. The def ignores that file and builds a minimal
+  constraint pinning only the compiled stack (`torch`/`torchvision`/`torchaudio`/
+  `triton`/`numpy`/`flash-attn`/`transformer-engine`) to the image's versions, and
+  installs without `--upgrade`. If a package still hard-requires `numpy>=2` (NGC
+  ships 1.26), pin *that package* to its last numpy-1.26-compatible release in
+  `requirements-anemoi.txt` rather than letting numpy move.
+- **`cartopy` / plotting**: intentionally not in the image (no aarch64 wheel,
+  forces `numpy>=2`). If you need map projections with coastlines for eval on a
+  GPU node, add cartopy via an overlay: `apt`-provide `libgeos-dev libproj-dev`
+  outside the container is not possible, so build the overlay from a def that
+  `%post`s `env -u PIP_CONSTRAINT pip install cartopy`. Simpler: plot in the CPU
+  `nese` env.
+- **torch got clobbered**:
+  `apptainer exec --nv "$NESE_ANEMOI_SIF" python -c "import torch; print(torch.__version__, torch.version.cuda)"`
+  must print `2.8...` / `12.9`. A `+cpu` build or a plain-PyPI version means a
+  requirement dodged `PIP_CONSTRAINT` -- pin it in `requirements-anemoi.txt`.
+- **`pip check`** warnings about `anemoi-inference==0.11.2` vs the editable
+  `anemoi-models` / `-graphs` / `-training` versions are expected and harmless.
+- **`Boolean1DMask` CPU/GPU device mismatch** at scaler construction on the first
+  GPU run -- see `experimental/local-sla-16yr/scaling_up.md`.
+- **Benign build warnings** (image is fine):
+  - `pynvml 12.0.0 requires nvidia-ml-py<13` -- NGC's `pynvml` is a deprecated
+    re-export stub; anemoi needs `nvidia-ml-py>=13`. Nothing on the train/infer
+    path imports `pynvml`.
+  - `nvidia-dali-cuda120 requires packaging<=24.2` -- a dep pulled `packaging` 26;
+    DALI is unused.
+  - `%test`: `mkdir /root/.config/... Read-only file system` from matplotlib /
+    earthkit-data -- `$HOME` is read-only *during the build test only*. At runtime
+    `apptainer exec` bind-mounts your real `$HOME`. The example job scripts also
+    set a per-job `MPLCONFIGDIR`.
+  - `bind mounting /cluster ... already in the mount point list` -- harmless dedup
+    warning; the bind works.
 
 ## File System Notes
 

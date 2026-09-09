@@ -8,6 +8,13 @@
   container, used via `module load nese`. Build/rebuild it and mutate its packages only
   through `environment/olivia/` (`build-env.sh` + `environment.yaml`); see
   `environment/olivia/README.md`.
+  On Olivia, `nese-anemoi` is a **custom Apptainer image**, not a Tykky container: NGC
+  arm64 PyTorch + the anemoi suite + editable anemoi-core / nese-inference / nese-training.
+  Load with `module load nese-anemoi` (thin: sets `$NESE_ANEMOI_SIF`, nothing on PATH) and
+  run tools via `apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" <tool>`. It runs on
+  `accel` (GH200, aarch64) nodes only and conflicts with `nese`. Build/mutate only through
+  `environment/olivia/` (`build-anemoi-env.sh` + `requirements-anemoi.txt` +
+  `nese-anemoi.def.in`), from an `accel` node.
 - Prefer installing packages from conda-forge (e.g. `conda install -n nese -c conda-forge <pkg>`) over pip when a conda-forge build is available.
 - Prefer staying in xarray natively rather than dropping to numpy, unless absolutely necessary.
   Avoid manual loops with numpy when xarray broadcasting will work.
