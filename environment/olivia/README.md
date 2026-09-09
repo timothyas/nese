@@ -58,9 +58,29 @@ python ...
 nese-dataprep inspect
 ```
 
+`module load nese` also exports the Olivia HTTP proxy
+(`http_proxy`/`https_proxy` = `10.63.2.48:3128`), which login and compute nodes
+both need for internet access; `module unload nese` reverts it.
+
 Editing `nese-dataprep` source is live (editable install). Re-run `build-env.sh`
 only after changing its **dependencies**, **entry points**, or **version**, or after
 editing `environment/olivia/environment.yaml`.
+
+### Copernicus Marine
+
+Note that before creating data with `nese-dataprep` you'll want to login to
+copernicus marine with
+
+```bash
+module load nese          # sets https_proxy
+copernicusmarine login
+```
+
+And before building a big dataset we can sanity check that it worked with
+
+```bash
+nese-dataprep inspect cmems_l3_sla
+```
 
 ## Running MPI jobs
 
@@ -99,3 +119,26 @@ Source: <https://documentation.sigma2.no/hpc_machines/olivia/openmpi.html>
 with `openmpi=5.0.*=external_*` (a contentless build that defers to the system
 OpenMPI), and adds the `conda-forge/label/mpi-external` channel those builds live
 on. Mirror any other change to `environment/environment.yaml` here.
+
+## File System Notes
+
+I'm new to Olivia, so these notes detail the setup in terms of file systems used
+and environment specs+how-to's
+
+Filesystems
+* [Project Area](https://documentation.sigma2.no/files_storage/clusters.html#project-area)
+  for repos and persistent data
+    * `/cluster/projects/<project>/<username>`
+    * 1 TiB per project (currently we have 15 TiB, using ~11)
+    * shared amongst users
+* [Project Work Area](https://documentation.sigma2.no/files_storage/clusters.html#project-work-area)
+  for semi-persistent files...
+    * `/cluster/work/projects/<project>/<username>`
+    * Once file system is 70% full, files older than 21 days are deleted
+    * After 90%, files older than 17 days are deleted
+* [Job Scratch Area](https://documentation.sigma2.no/files_storage/clusters.html#job-scratch-area)
+  for temporary scratch during jobs
+    * `LOCALSCRATCH=/localscratch/$SLURM_JOB_ID` for CPUs
+    * `/cluster/gpuscratch/jobs/$SLURM_JOB_ID` for GPUs
+    * files are removed automatically after running
+    * this is local to disk, so only useful for caching etc with multi-node jobs
