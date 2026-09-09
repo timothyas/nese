@@ -14,8 +14,8 @@ and a README with tips (e.g., including file system notes).
 
 ## Build the dataset
 
-See `submit_1node.sh` and `submit_4node.sh` for 1 and 4 node versions on the
-`small` and `large` partitions, respectively.
+Only 1 node is necessary, the 4 node is just there for reference.
+With 1 node and 128 tasks, it took ~13 minutes to build the whole dataset.
 
 ```bash
 sbatch submit_1node.sh
