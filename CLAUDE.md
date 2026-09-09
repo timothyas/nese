@@ -10,3 +10,4 @@
 - Prefer installing packages from conda-forge (`conda install -n nese -c conda-forge <pkg>`) over pip when a conda-forge build is available.
 - Prefer staying in xarray natively rather than dropping to numpy, unless absolutely necessary. Libraries like xesmf naturally handle extra dimensions (e.g. ensemble members), so avoid manual loops with numpy when xarray broadcasting will work.
 - Avoid writing excessive comments, and instead write readable code
+- Never use git commands that are not read-only unless explicitly instructed to do so
