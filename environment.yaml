@@ -28,8 +28,16 @@ dependencies:
   - ipython
   - ipykernel
   - jupyterlab_vim
+  - ffmpeg
+  # HPC / MPI
+  - mpi4py
+  - mpich
+  - mpi=*=mpich
+  # docs
+  - sphinx
+  - myst-parser
+  - sphinx-book-theme
   # gridding
-  - xesmf
   - healpy
   # data access
   - copernicusmarine
