@@ -1,5 +1,19 @@
 # Local SLA-Only Prototype
 
+A slightly larger laptop prototype compared to `../local-sla-02yr`.
+Again this is just to build out initial data preparation, training, inference,
+evaluation, and visualization pipelines and to make sure things are working.
+
+Goals:
+* Ensure the data prep is good to go before burning CPU hours. We've run
+  into a number of issues scaling up in @$WORK/nese-dataprep and fixed
+  those. 15 years is apparently a good stress test, even with only sla.
+* Make sure the neural network is or can actually learn something, having more data
+  helps confidence here
+* Solve some issues related to loss function definition, config details, etc, when more
+  missions are present.
+* Establish the initial evaluation pipeline
+
 Trained on laptop, only predicting SLA.
 Uses:
 * 15 years of training data: 2000--2014 (inclusive)
@@ -19,6 +33,8 @@ Uses:
         * `dropout_p = 0`
     * Encoder & Decoder:
         * 4 attention heads
+
+
 ## Versions
 
 ### Version 0

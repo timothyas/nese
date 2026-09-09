@@ -1,7 +1,8 @@
 # Local SLA Only
 ## Well, also with bathymetry/elevation, land fraction, and masking
 
-This is just a dumb test I can run on my macbook.
+This is just a simple test I can run on my macbook to see if the engineering is
+working.
 
 ## Pull in the data
 
