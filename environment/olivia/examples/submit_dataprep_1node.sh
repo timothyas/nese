@@ -1,5 +1,15 @@
 #!/bin/bash -l
 
+### Why 128 tasks per node
+#
+# Olivia CPU nodes have 256 cores (no SMT (Simultaneous Multi Thread)) and ~740 GiB RAM.
+# Per-rank memory here is
+# small (rank 0 peaks ~1-2 GiB for the one-time GEBCO regrid), so memory does not
+# limit the count. 128 balances download concurrency against proxy connections and
+# Lustre metadata load (per-rank log + zarr chunk writes). Tune down to 64 if CMEMS
+# throttles; 256 costs nothing extra (nodes are billed whole) if profiling shows
+# bandwidth headroom.
+
 #SBATCH --account=nn2993k
 #SBATCH --job-name=olivia-sla-baseline
 #SBATCH --output=slurm/%x-%j.out
