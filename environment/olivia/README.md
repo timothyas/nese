@@ -1,13 +1,59 @@
 # Olivia environment setup
 
-Olivia forbids native `conda`/`pip` installs, so the `nese` environment is built as
-a container with [hpc-container-wrapper](https://documentation.sigma2.no/hpc_machines/olivia/software_stack.html#python-r-and-ana-conda)
-(Tykky). There is no `conda activate` / `conda run -n nese` here.
-Instead, load a
-modulefile that puts the container's `bin/` on `PATH`.
-It's a bit more complicated for the GPU (anemoi) environment, see below.
+Olivia forbids native `conda`/`pip` installs.
+This README documents how to make CPU and GPU environments that are accessed by
+loading a modulefile, i.e., by running `module load <environment>`.
 
-## `nese` CPU Build / Rebuild Process
+## CPU Environment: `nese`
+
+```bash
+module use /cluster/projects/nn2993k/timith/sw/modules   # add to ~/.bashrc to persist
+module load nese
+
+python ...
+nese-dataprep inspect
+```
+
+Built as a container with
+[hpc-container-wrapper](https://documentation.sigma2.no/hpc_machines/olivia/software_stack.html#python-r-and-ana-conda)
+(Tykky).
+There is no `conda activate` / `conda run -n nese` here.
+Instead, we load a
+modulefile that puts the container's `bin/` on `PATH`.
+
+### Running MPI jobs
+
+The `nese` module loads `OpenMPI/5.0.9-GCC-14.3.0` (so `mpi4py` finds the system
+`libmpi`) and sets the transport vars for single-node jobs:
+
+```bash
+OMPI_MCA_pml=ob1
+OMPI_MCA_btl=sm,self
+```
+
+So we don't need to set these in SLURM scripts.
+Launch with `srun`, since single-node `cxi` can break under `mpirun`.
+
+```bash
+srun -n "$SLURM_NTASKS" nese-dataprep create recipe.yaml
+# GPU node only: export OMPI_MCA_btl=sm,smcuda,self
+```
+
+For multi-node jobs: **override** the module's single-node vars in the job script.
+
+```bash
+export OMPI_MCA_pml=cm
+export OMPI_MCA_mtl=ofi
+export OMPI_MCA_mtl_ofi_av=table
+export PRTE_MCA_ras_base_launch_orted_on_hn=1
+export FI_PROVIDER=cxi
+export FI_CXI_RX_MATCH_MODE=hybrid
+srun -n "$SLURM_NTASKS" nese-dataprep create recipe.yaml
+```
+
+Source: <https://documentation.sigma2.no/hpc_machines/olivia/openmpi.html>
+
+### Build / Rebuild Process
 
 ```bash
 bash environment/olivia/build-env.sh
@@ -29,12 +75,32 @@ Defaults (override by exporting before running):
 | `NESE_DATAPREP_DIR` | `/cluster/projects/nn2993k/timith/nese-dataprep` |
 | `NESE_MODULES_ROOT` | `/cluster/projects/nn2993k/timith/sw/modules` |
 | `NESE_OPENMPI_MOD` | `OpenMPI/5.0.9-GCC-14.3.0` |
+| `NESE_HTTP_PROXY` | `http://10.63.2.48:3128` |
 
 The build needs internet (proxy) and can be slow, so run it in `tmux`/`screen` or a
 short interactive job.
+The HTTP proxy is exported into the module as `HTTP_PROXY_URL` and
+`HTTPS_PROXY_URL`, so that all applications, like `nese-dataprep` are ready for
+internet access.
 
-### Troubleshooting
+Editing `nese-dataprep` source is live (editable install). Re-run `build-env.sh`
+only after changing its **dependencies**, **entry points**, or **version**, or after
+editing `environment/olivia/environment.yaml`.
 
+### First Usage: Login to Copernicus Marine
+
+Before creating data with `nese-dataprep`, login to copernicus marine with
+
+```bash
+module load nese                    # sets https_proxy
+copernicusmarine login
+nese-dataprep inspect cmems_l3_sla  # sanity-check, accesses CMEMS
+```
+
+### Build Troubleshooting
+
+- **Used GCC-14.3.0 toolchain** rather than the newer GCC-15.2.0 one because the
+  latter's zlib SIGILLs `git` on the Zen4 login nodes.
 - **`mksquashfs ... signal: illegal instruction (core dumped)`** during the base
   image fetch: something on `LD_LIBRARY_PATH` gave `mksquashfs` a library built for
   Zen5 while the login node is Zen4 -- usually a `GCC-15.2.0`-toolchain module (e.g.
@@ -49,71 +115,7 @@ short interactive job.
 - A failed build can leave an empty/partial prefix dir; the script detects that
   (no `share/conf.yaml`) and rebuilds from scratch.
 
-## Use
-
-```bash
-module use /cluster/projects/nn2993k/timith/sw/modules   # add to ~/.bashrc to persist
-module load nese
-
-python ...
-nese-dataprep inspect
-```
-
-`module load nese` also exports the Olivia HTTP proxy
-(`http_proxy`/`https_proxy` = `10.63.2.48:3128`), which login and compute nodes
-both need for internet access; `module unload nese` reverts it.
-
-Editing `nese-dataprep` source is live (editable install). Re-run `build-env.sh`
-only after changing its **dependencies**, **entry points**, or **version**, or after
-editing `environment/olivia/environment.yaml`.
-
-### Copernicus Marine
-
-Note that before creating data with `nese-dataprep` you'll want to login to
-copernicus marine with
-
-```bash
-module load nese          # sets https_proxy
-copernicusmarine login
-```
-
-And before building a big dataset we can sanity check that it worked with
-
-```bash
-nese-dataprep inspect cmems_l3_sla
-```
-
-## Running MPI jobs
-
-The `nese` module loads `OpenMPI/5.0.9-GCC-14.3.0` (so `mpi4py` finds the system
-`libmpi`) and sets the **single-node** transport vars (`OMPI_MCA_pml=ob1`,
-`OMPI_MCA_btl=sm,self`) -- enough for serial work and single-node jobs. The
-GCC-14.3.0 toolchain is used rather than the newer GCC-15.2.0 one because the
-latter's zlib SIGILLs `git` on the Zen4 login nodes. Launch with `srun`
-(single-node `cxi` can break under `mpirun`).
-
-Single-node (CPU): nothing extra needed.
-
-```bash
-srun -n "$SLURM_NTASKS" nese-dataprep create recipe.yaml
-# GPU node only: export OMPI_MCA_btl=sm,smcuda,self
-```
-
-Multi-node: **override** the module's single-node vars in the job script.
-
-```bash
-export OMPI_MCA_pml=cm
-export OMPI_MCA_mtl=ofi
-export OMPI_MCA_mtl_ofi_av=table
-export PRTE_MCA_ras_base_launch_orted_on_hn=1
-export FI_PROVIDER=cxi
-export FI_CXI_RX_MATCH_MODE=hybrid
-srun -n "$SLURM_NTASKS" nese-dataprep create recipe.yaml
-```
-
-Source: <https://documentation.sigma2.no/hpc_machines/olivia/openmpi.html>
-
-## Keeping the two env files in sync
+### Note on cross-machine compatibility
 
 `environment/olivia/environment.yaml` is a hand-maintained copy of
 `environment/environment.yaml` that drops `mpich` / `mpi=*=mpich`, replaces them
@@ -121,17 +123,33 @@ with `openmpi=5.0.*=external_*` (a contentless build that defers to the system
 OpenMPI), and adds the `conda-forge/label/mpi-external` channel those builds live
 on. Mirror any other change to `environment/environment.yaml` here.
 
-## nese-anemoi (GPU) environment
+## GPU Environment: `nese-anemoi`
 
-`nese-anemoi` is the GPU counterpart of `nese`: a **training + inference** image
-for the anemoi suite. The plotting / notebook / docs stack (cartopy, cmocean,
-seaborn, xmovie, jupyter, sphinx) is deliberately left out -- cartopy has no
-aarch64 wheel and forces `numpy>=2`, and none of it is needed to train or run
-inference (anemoi's plot callbacks use only matplotlib, which the NGC image
-already has, and default to the cartopy-free `equirectangular` projection). Do
-eval/plotting in the CPU `nese` env, or add an overlay to this image.
+The module is thin: it sets `NESE_ANEMOI_SIF` and the proxy and puts **nothing** on
+`PATH`.
+Run tools explicitly with `apptainer`:
 
-It is **not** a Tykky container: on
+```bash
+module load nese-anemoi
+apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" python ...
+apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" anemoi-training train --config-name=training ...
+```
+
+The `nese-anemoi` environment is for training, inference, and other
+workflows involving anemoi packages.
+Due to some build issues (e.g., cartopy has no aarch64 wheel and forces
+`numpy>=2`) the specialized plotting, notebook, and documentation packages are
+not included.
+matplotlib is included, however, for basic diagnostic plots during training.
+
+- `anemoi-train-multinode.slurm` -- multiple nodes. NCCL over Slingshot needs the
+  host libfabric / NCCL / aws-ofi-nccl / OpenMPI bound into the container; the
+  script carries the NRIS bind list and module set (confirm versions with
+  `module spider`).
+
+### Build / rebuild
+
+`nese-anemoi` is **not** a Tykky container: on
 Olivia every GPU node is a GH200 (aarch64 Grace CPU + Hopper GPU), conda-forge has
 no linux-aarch64 CUDA build of PyTorch, and NRIS's guidance is to use the NVIDIA
 NGC PyTorch container. So `nese-anemoi` is a custom Apptainer image: NRIS's staged
@@ -144,10 +162,9 @@ no source build). The `%post` install runs **without `--upgrade`**, so every
 package NGC already provides (numpy 1.26, scipy, numcodecs, ...) is kept and only
 the missing anemoi bits are added, resolved against NGC's numpy.
 
-### Build / rebuild
-
 The image is aarch64 and its `%post` runs arm64 binaries, so the build must run on
-an `accel` node (login nodes are x86_64). It needs **no GPU**:
+an `accel` node (login nodes are `x86_64`).
+However, we can do a proper build by requesting 0 GPUs:
 
 ```bash
 salloc --nodes=1 --cpus-per-task=64 --mem=200G --gpus-per-node=0 \
@@ -178,53 +195,17 @@ Defaults (override by exporting before running):
 | `NESE_ANEMOI_CORE_DIR` | `/cluster/projects/nn2993k/timith/anemoi-core` |
 | `NESE_INFERENCE_DIR` | `/cluster/projects/nn2993k/timith/nese-inference` |
 | `NESE_TRAINING_DIR` | `/cluster/projects/nn2993k/timith/nese/training` |
+| `NESE_ANEMOI_HTTP_PROXY` | `http://10.63.2.48:3128` |
 
-The base image is referenced straight from NRIS's staged path -- it is not copied.
-If NRIS removes or bumps it, pull our own arm64 copy and point `NESE_ANEMOI_BASE_SIF`
-at it:
-
-```bash
-apptainer pull --arch arm64 "$NESE_ANEMOI_BASE_SIF" docker://nvcr.io/nvidia/pytorch:25.06-py3
-```
-
-(needs the proxy and a large `APPTAINER_CACHEDIR`; anonymous NGC pulls may need
-`APPTAINER_DOCKER_USERNAME=$oauthtoken` + an NGC API key.)
-
-### Use
-
-```bash
-module load nese-anemoi        # conflicts with `nese`
-```
-
-The module is thin: it sets `NESE_ANEMOI_SIF` and the proxy and puts **nothing** on
-`PATH`. Run tools explicitly:
-
-```bash
-apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" python ...
-apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" anemoi-training train --config-name=training ...
-```
+The base image is referenced straight from NRIS's staged path, it is not copied.
+If NRIS removes or bumps it, we will need to rebuild.
 
 `.py` edits in `anemoi-core`, `nese-inference`, `nese/training` are live (editable
 installs, source bind-mounted from `/cluster`). Rebuild only after changing a
 **dependency**, **entry point**, or **version**, or after editing
 `requirements-anemoi.txt` / `nese-anemoi.def.in`.
 
-### Training jobs
-
-`environment/olivia/examples/` has two templates -- copy one next to a flat
-`training.yaml` recipe and `sbatch` it from there:
-
-- `anemoi-train-1node.slurm` -- one GH200 node, 4 GPUs. NVLink-C2C only, so
-  `apptainer exec --nv` is all that is needed.
-- `anemoi-train-multinode.slurm` -- multiple nodes. NCCL over Slingshot needs the
-  host libfabric / NCCL / aws-ofi-nccl / OpenMPI bound into the container; the
-  script carries the NRIS bind list and module set (confirm versions with
-  `module spider`).
-
-anemoi-training drives DDP through PyTorch-Lightning's SLURM integration -- launch
-with `srun` (one task per GPU); no `torchrun`.
-
-### Adding a package
+### How to add packages
 
 - **Permanent:** add it to `requirements-anemoi.txt` (PyPI), or to the `%post`
   `apt-get` line (system lib) / the editable loop (another local repo) in
@@ -234,7 +215,7 @@ with `srun` (one task per GPU); no `torchrun`.
   `apptainer exec --overlay ov.img "$NESE_ANEMOI_SIF" pip install <pkg>` in a
   `--gpus-per-node=0` job, and run with `--overlay ov.img:ro`.
 
-### Keeping the anemoi env files in sync
+### Note on cross-machine compatibility
 
 `environment/olivia/requirements-anemoi.txt` is a hand-maintained pip translation
 of `environment/environment-anemoi.yaml` (the Mac/conda reference) for the NGC
@@ -247,11 +228,11 @@ container. Mirror changes there, applying:
   ...) -- the install runs without `--upgrade` so NGC's versions win anyway; keep
   only a short "guardrail" section pinning ranges that matter (`numpy<2`,
   `zarr<3`, ...);
-- `python=3.13` -> the container's 3.12 (also anemoi's stated max);
+- Use `python=3.12` instead of `python=3.13`. Note anemoi states 3.12 anyway;
 - conda -> pip renames: `pytorch_geometric` -> `torch-geometric`;
 - `anemoi-core` packages are editable (`%post`), not listed.
 
-### Troubleshooting (nese-anemoi)
+### Build Troubleshooting
 
 - **`exec format error`** running the image: you are on a login node (x86_64).
   Build and run on `accel`.
