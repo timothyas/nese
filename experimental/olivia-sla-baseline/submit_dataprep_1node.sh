@@ -20,5 +20,7 @@ export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 export DASK_NUM_WORKERS=1
 
+module purge
+module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese
 srun nese-dataprep create data.yaml

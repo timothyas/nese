@@ -14,6 +14,8 @@
 
 set -euo pipefail
 
+module purge
+module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese-anemoi
 
 srun --overlap --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" \

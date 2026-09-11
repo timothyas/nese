@@ -14,6 +14,8 @@
 
 set -euo pipefail
 
+module purge
+module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese-anemoi
 
 # Per-job matplotlib cache dir -- avoids 4 ranks racing on ~/.config/matplotlib.
