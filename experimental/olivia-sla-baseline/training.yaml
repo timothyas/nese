@@ -507,7 +507,7 @@ training:
     datasets:
       ocean: []
   max_epochs: null
-  max_steps: 30000
+  max_steps: 10000
   submodules_to_freeze: []
 
 diagnostics:
@@ -592,7 +592,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v0
+      experiment_name: v0.10k
       project_name: olivia-sla-baseline
       terminal: false
       system: false

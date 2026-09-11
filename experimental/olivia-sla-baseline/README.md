@@ -59,6 +59,9 @@ LayerNorms, and a 512->2048->512 MLP.
 
 * Total batch size 16, with 4 GPUs x 4 samples per GPU
 * Effective Learning Rate 1.0e-3
+* Wall-clock time:
+    * 30k training iterations = 1.8 hours (overfit)
+    * 10k training iterations = 35 minutes
 
 Opted not to write inputs or outputs to local / job file systems, since the data
 is very small.
