@@ -2,19 +2,16 @@
 
 ## Rules
 
-- All Python commands must be run in the `nese` or `nese-anemoi` conda environments,
-  the latter used whenever an anemoi package is needed (e.g. `conda run -n nese python ...`).
-  On the Olivia HPC machine there is no `conda run`/`conda activate`: the env is a Tykky
-  container, used via `module load nese`. Build/rebuild it and mutate its packages only
-  through `environment/olivia/` (`build-env.sh` + `environment.yaml`); see
-  `environment/olivia/README.md`.
-  On Olivia, `nese-anemoi` is a **custom Apptainer image**, not a Tykky container: NGC
-  arm64 PyTorch + the anemoi suite + editable anemoi-core / nese-inference / nese-training.
-  Load with `module load nese-anemoi` (thin: sets `$NESE_ANEMOI_SIF`, nothing on PATH) and
-  run tools via `apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" <tool>`. It runs on
-  `accel` (GH200, aarch64) nodes only and conflicts with `nese`. Build/mutate only through
-  `environment/olivia/` (`build-anemoi-env.sh` + `requirements-anemoi.txt` +
-  `nese-anemoi.def.in`), from an `accel` node.
+- When running on MacOS (environment variable $nickname="bucharest"):
+    - All Python commands must be run in the `nese` or `nese-anemoi` conda environments,
+      the latter used whenever an anemoi package is needed (e.g. `conda run -n nese python ...`).
+- When running on Olivia HPC machine (environment variable $nickname="olivia"):
+    - Do not run heavy commands on the login nodes
+    - There is no `conda run`/`conda activate`: the env is a Tykky
+      container
+    - use `module load nese` for CPU work (e.g. nese-dataprep)
+    - use `module load nese-anemoi` for GPU work (e.g. nese-inference or anemoi-training)
+    - Environment notes available at `environment/olivia/README.md`
 - Prefer installing packages from conda-forge (e.g. `conda install -n nese -c conda-forge <pkg>`) over pip when a conda-forge build is available.
 - Prefer staying in xarray natively rather than dropping to numpy, unless absolutely necessary.
   Avoid manual loops with numpy when xarray broadcasting will work.
