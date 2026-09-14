@@ -1,27 +1,8 @@
 # CLAUDE.md
 
-## Rules
+## Context
 
-- When running on MacOS (environment variable $nickname="bucharest"):
-    - All Python commands must be run in the `nese` or `nese-anemoi` conda environments,
-      the latter used whenever an anemoi package is needed (e.g. `conda run -n nese python ...`).
-- When running on Olivia HPC machine (environment variable $nickname="olivia"):
-    - Do not run heavy commands on the login nodes
-    - There is no `conda run`/`conda activate`: the env is a Tykky
-      container
-    - use `module load nese` for CPU work (e.g. nese-dataprep)
-    - use `module load nese-anemoi` for GPU work (e.g. nese-inference or anemoi-training)
-    - Environment notes available at `environment/olivia/README.md`
-- Prefer installing packages from conda-forge (e.g. `conda install -n nese -c conda-forge <pkg>`) over pip when a conda-forge build is available.
-- Prefer staying in xarray natively rather than dropping to numpy, unless absolutely necessary.
-  Avoid manual loops with numpy when xarray broadcasting will work.
-  Do not extract a numpy array from xarray, instead use the named coordinates.
-- Avoid writing excessive comments, and instead write readable code
-- Never use git commands that are not read-only unless explicitly instructed to do so
-
-## Project Context
-
-### Overarching goals and scope
+### Overarching Goals and Scope
 
 * The overall goal is to predict dense fields from sparse observations, like
   data assimilation does
@@ -43,14 +24,58 @@
 * If this works with binned data and a few variables, we will proceed to a more DA-true framework,
   taking in raw observations from a prior window and creating a full state
   estimate. This requires significant engineering we don't want to do now.
-* We are using the anemoi framework with small extensions on top just to get a
-  prototype going
-    * anemoi-core repo is at $WORK/anemoi-core, with
-      anemoi-models, anemoi-graphs, anemoi-training packages locally installed
-      into the nese-anemoi conda environment
-    * Local modifications are being made in $WORK/nese/training/src for now, and
-      extensions can be made as needed. General philosophy is to use as much of
-      anemoi as possible before modifying
+* We are using the anemoi framework with small extensions on top just to get
+  prototypes going. All packages are pip editable installed into the appropriate
+  environment
     * We have created $WORK/nese-dataprep to prepare data
-    * We have created $WORK/nese-inference, which is a very thin layer over
-      inference to run anemoi-inference, and easy options to pivot as needed
+    * For model development, we are using the $WORK/anemoi-core repo with the
+      python packages:
+        * anemoi-graphs - graph creation and manipulation
+        * anemoi-models - neural network model construction
+        * anemoi-training - everything for ML training
+    * Local modifications to anemoi-core are being made in $WORK/nese/training/src for now.
+      General philosophy is to use as much of anemoi as possible before modifying
+    * We have created $WORK/nese-inference to run inference, which is a thin
+      layer over the anemoi-inference package
+    * We have created $WORK/nese-verify for evaluation and visualization
+
+## Environment Rules
+
+General headline rules:
+- Prefer installing packages from conda-forge over pip if possible
+
+When running on MacOS (environment variable $nickname="bucharest"):
+- All Python commands must be run in the `nese` or `nese-anemoi` conda environments,
+  the latter used whenever an anemoi package is needed, e.g. for
+  (e.g. `conda run -n nese python ...`).
+
+When running on Olivia HPC machine (environment variable $nickname="olivia"):
+- Do not run heavy commands on the login nodes
+- There is no `conda run`/`conda activate`: the env is a Tykky
+  container
+- use `module load nese` for CPU work (e.g. nese-dataprep)
+- use `module load nese-anemoi` for GPU work (e.g. nese-inference or anemoi-training)
+
+See more environment notes at `nese/environment/olivia/README.md`
+
+## Software Rules
+
+- Prefer staying in xarray natively rather than dropping to numpy, unless absolutely necessary.
+    * Do not extract a numpy array from xarray unless explicitly told to do so or
+      unless absolute performance is necessary.
+    * Instead, use the named dimensions of xarray Datasets and DataArrays. This is
+      one of the main purposes of xarray.
+    * Do not manually loop over dimensions when xarray can naturally broadcast
+      (and arrays fit in memory)
+- Avoid writing excessive comments, and instead write readable code with
+  intuitive variable names
+- Write human readable code while limiting the number of added lines of code
+- Cover what you write with tests.
+    * See `codecov.yaml` for specific repo targets
+- For documentation: keep most descriptions to the docs/
+  pages, whereas python module headers should only contain useful notes for
+  developers. Do not duplicate information between the two.
+
+## Permissions
+
+- Never use git commands that are not read-only unless explicitly instructed to do so
