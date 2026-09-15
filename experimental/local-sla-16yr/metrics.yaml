@@ -1,0 +1,13 @@
+forecast:
+  store_dir: runs/v4/inference-validation
+verification:
+  dataset: anemoi-hpx6-24h/dataset.zarr
+  observations:
+    sla:
+      observed_as: sla_filtered
+      groups: auto
+      count: "obs_count_{group}"
+
+split:
+  - overlap
+  - seen_at_hour
