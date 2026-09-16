@@ -16,6 +16,7 @@ set -euo pipefail
 # --- config (override via environment) ---------------------------------------
 PREFIX="${NESE_ENV_PREFIX:-/cluster/projects/nn2993k/timith/sw/nese}"
 DATAPREP_DIR="${NESE_DATAPREP_DIR:-/cluster/projects/nn2993k/timith/nese-dataprep}"
+VERIFY_DIR="${NESE_VERIFY_DIR:-/cluster/projects/nn2993k/timith/nese-verify}"
 MODULES_ROOT="${NESE_MODULES_ROOT:-/cluster/projects/nn2993k/timith/sw/modules}"
 # GCC-14.3.0 toolchain, not the newer GCC-15.2.0 one: the latter's zlib is built for
 # Zen5 and SIGILLs git/mksquashfs on the Zen4 login nodes. Same MPI ABI (libmpi.so.40).
@@ -33,11 +34,13 @@ ENV_YAML="$SCRIPT_DIR/environment.yaml"
 
 echo ">> prefix        : $PREFIX"
 echo ">> nese-dataprep : $DATAPREP_DIR"
+echo ">> nese-verify   : $VERIFY_DIR"
 echo ">> modules root  : $MODULES_ROOT"
 echo ">> openmpi        : $OPENMPI_MOD"
 
 [ -f "$ENV_YAML" ] || { echo "!! missing $ENV_YAML" >&2; exit 1; }
 [ -d "$DATAPREP_DIR" ] || { echo "!! missing $DATAPREP_DIR" >&2; exit 1; }
+[ -d "$VERIFY_DIR" ] || { echo "!! missing $VERIFY_DIR" >&2; exit 1; }
 
 # --- 1. internet access from the login node ---------------------------------
 export http_proxy="$HTTP_PROXY_URL"
@@ -73,12 +76,13 @@ else
     conda-containerize new --mamba --prefix "$PREFIX" "$ENV_YAML"
 fi
 
-# --- 5. post-install: editable nese-dataprep -------------------------------
-# Bake DATAPREP_DIR into a generated copy of the post-install script so it does
+# --- 5. post-install: editable nese-dataprep + nese-verify -----------------
+# Bake the source dirs into a generated copy of the post-install script so it does
 # not depend on Tykky forwarding environment into the build container.
 GEN_DIR="$(mktemp -d)"
 trap 'rm -rf "$GEN_DIR"' EXIT
-sed "s#@DATAPREP_DIR@#${DATAPREP_DIR}#g" \
+sed -e "s#@DATAPREP_DIR@#${DATAPREP_DIR}#g" \
+    -e "s#@VERIFY_DIR@#${VERIFY_DIR}#g" \
     "$SCRIPT_DIR/post-install.sh.in" > "$GEN_DIR/post-install.sh"
 chmod +x "$GEN_DIR/post-install.sh"
 conda-containerize update "$PREFIX" --post-install "$GEN_DIR/post-install.sh"
@@ -106,6 +110,7 @@ Verify:
     which python
     python -c "from mpi4py import MPI; print(MPI.Get_library_version())"
     python -c "import nese.dataprep, inspect; print(inspect.getfile(nese.dataprep))"
+    python -c "import nese.verify, inspect; print(inspect.getfile(nese.verify))"
 
 See environment/olivia/README.md for running MPI jobs.
 EOF

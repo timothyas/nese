@@ -5,10 +5,10 @@
 help([[
 The `nese` environment, wrapped with hpc-container-wrapper (Tykky).
 
-Puts @PREFIX@/bin on PATH (python, pytest, nese-dataprep, jupyter, ...) and loads
-@OPENMPI_MOD@ so mpi4py finds the system libmpi at runtime. That OpenMPI is on the
-GCC-14.3.0 toolchain (Zen4-safe) rather than the newer GCC-15.2.0 one, whose zlib
-SIGILLs git on the Zen4 login nodes.
+Puts @PREFIX@/bin on PATH (python, pytest, nese-dataprep, nese-verify, jupyter, ...)
+and loads @OPENMPI_MOD@ so mpi4py finds the system libmpi at runtime. That OpenMPI
+is on the GCC-14.3.0 toolchain (Zen4-safe) rather than the newer GCC-15.2.0 one,
+whose zlib SIGILLs git on the Zen4 login nodes.
 
 Sets the Olivia HTTP proxy (http_proxy/https_proxy = 10.63.2.48:3128) -- login and
 compute nodes reach the internet only through it; copernicusmarine / pip / conda
