@@ -22,6 +22,7 @@
 name: nese-anemoi
 channels:
   - conda-forge
+  - nodefaults  # conda-forge only, otherwise can get zarr/numcodecs issues
 dependencies:
   - python=3.13  # anemoi-core requires <3.14
   # anemoi suite
