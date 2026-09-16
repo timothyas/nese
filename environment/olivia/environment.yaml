@@ -61,4 +61,4 @@ dependencies:
   - pre-commit
   - pip
   - pip:
-    - xmovie @ git+https://github.com/timothyas/xmovie.git@21f4c541ba46b88bb14e98c52f1d57f0d61c0508
+    - xmovie @ git+https://github.com/timothyas/xmovie.git@b6a36ab8b4e5abcaea23a50e79b61f1ef26ca0ba
