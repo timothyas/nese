@@ -8,6 +8,15 @@ verification:
       groups: auto
       count: "obs_count_{group}"
 
-split:
-  - overlap
-  - seen_at_hour
+metrics:
+  split:
+    - overlap
+    - seen_at_hour
+
+movie:
+  loop: t0
+  fhr: 24
+  left_panel: all_input_obs_locations
+  regions:
+    - global
+    - tropical_pacific
