@@ -1,0 +1,59 @@
+# Default environment that subdirectories copy from
+name: nese
+channels:
+  - conda-forge
+  - nodefaults  # conda-forge only, otherwise can get zarr/numcodecs issues
+dependencies:
+  - python=3.13
+  # Base array ops
+  - numpy
+  - scipy
+  - seaborn
+  # xarray and files
+  - xarray
+  - pandas
+  - cf_xarray
+  - cftime
+  - netCDF4
+  - h5netcdf
+  - zarr<3
+  - numcodecs
+  - cfgrib
+  - bottleneck
+  - flox
+  - dask[complete]
+  - fsspec
+  # jupyter and plotting
+  - jupyter
+  - matplotlib
+  - cartopy
+  - cmocean
+  - ipython
+  - ipykernel
+  - jupyterlab_vim
+  - ffmpeg
+  # HPC / MPI
+  - mpi4py
+  - mpich
+  - mpi=*=mpich
+  # docs
+  - sphinx
+  - myst-parser
+  - sphinx-book-theme
+  # gridding
+  - healpy
+  # data access
+  - copernicusmarine
+  # Other NESE related
+  - omegaconf
+  - pydantic>=2
+  # developer
+  - setuptools_scm>=8
+  - pytest
+  - pytest-dependency
+  - coverage
+  - ruff=0.15.20
+  - pre-commit
+  - pip
+  - pip:
+    - xmovie @ git+https://github.com/timothyas/xmovie.git@b6a36ab8b4e5abcaea23a50e79b61f1ef26ca0ba

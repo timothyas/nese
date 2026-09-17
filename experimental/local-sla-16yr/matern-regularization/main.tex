@@ -1,0 +1,731 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage[round,authoryear]{natbib}
+\usepackage[colorlinks=true,allcolors=blue]{hyperref}
+
+\newcommand{\Mnet}{\mathcal{M}_\theta}
+\newcommand{\grid}{\ell}
+\newcommand{\dhat}{\hat{\delta}}
+\newcommand{\rhohat}{\hat{\rho}}
+\newcommand{\shat}{\hat{\sigma}}
+\newcommand{\Ahat}{\hat{A}}
+\newcommand{\Nd}{N_d}
+\newcommand{\Npix}{N_{\mathrm{pix}}}
+
+\title{A Mat\'ern-class regularization term for training against sparse observations}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+The network diagnoses a dense sea level anomaly field but is scored only against sparse
+along-track observations, so at any cell no mission observed in the target bin the loss
+carries no gradient at all. This note adds the missing term: the background term of a
+variational data assimilation cost function, built from the Mat\'ern-class correlation
+operator of \citet{smith2022}, so that the unobserved cells are filled by a controllable
+correlation structure with a probabilistic interpretation rather than by whatever the
+network extrapolates. Notation follows \citet{smith2022} throughout. The implementation
+notes in Section~\ref{sec:impl} record three things the discretization on a land-masked
+HEALPix mesh turns up: $\Phi$ is not isotropic, the operator retains a residual
+anisotropy that we do not correct, and the stencil is first-order inconsistent at
+coastal cells.
+\end{abstract}
+
+\section{The training loss}
+
+\begin{equation}
+\label{eq:loss}
+\mathcal{L} =
+\tfrac{1}{2}\left\| H\!\left(\Mnet(x_t, x_{t-\Delta t}, \ldots)\right) - y_{t+\Delta t}\right\|_2^2
+\;+\; \frac{\lambda_w}{\alpha\,2}\left\|\theta\right\|_2^2
+\;+\; \underbrace{\frac{\lambda_M}{2}\left\| C^{-1/2}\,\Mnet(x_t, x_{t-\Delta t}, \ldots)\right\|_2^2}_{\displaystyle \mathcal{L}_M}
+\end{equation}
+
+\noindent with
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+$\theta$ & parameters \\
+$\Mnet$ & neural network \\
+$x_t$ & input state \\
+$y_{t+\Delta t}$ & observations \\
+$H$ & interpolation (observation operator) \\
+$\lambda_w$ & regularization strength for weights \\
+$\alpha$ & learning rate \\
+$\lambda_M$ & regularization parameter, hopefully not needed \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{description}
+  \item[Weight decay.] The second term of \eqref{eq:loss} corresponds to weight decay
+  only under plain SGD. We use AdamW, so it is written here for illustration and is not
+  literally the term being minimised.
+
+  \item[Background state.] $\mathcal{L}_M$ formally carries $(x-\,x_b)$ rather
+      than $x$ inside the norm. We
+  set $x_b := 0$, which in normalised space is the mean state. This is the only available
+  choice: the predicted field is diagnostic, and the inputs are the sparse per-mission
+  columns, so no dense background field exists to subtract.
+\end{description}
+
+\paragraph{Notation.} Two collisions with \citet{smith2022} are worth naming, since this
+note keeps that paper's symbols everywhere else. First, $\theta(s)$ is the random field
+in \citet{smith2022} but the parameters here, so the field is written $x$. Second, $M$ is
+the exponent of the elliptic operator, and the network is $\Mnet$; the subscript
+distinguishes them. Third, $H$ is the observation operator, so the grid scale introduced
+in Section~\ref{sec:phi} is written $\grid$ rather than $h$.
+
+\section{The correlation operator}
+
+Following \citet{smith2022}, the correlation matrix is specified through its square root,
+
+\begin{align}
+C^{1/2}  &:= \Lambda A^{-M}\det(\Phi)^{-1/2}, \label{eq:chalf}\\
+C^{-1/2} &\phantom{:}= \det(\Phi)^{1/2} A^{M} \Lambda^{-1}
+                     = \det(\Phi)^{1/2} A^{M} \Sigma,
+\qquad \Sigma := \Lambda^{-1}, \label{eq:cinvhalf}
+\end{align}
+
+\noindent where the elliptic operator and its parameters are
+
+\begin{equation}
+\label{eq:A}
+A = \delta(s) - \nabla\cdot K(s) \nabla,
+\qquad
+K = \frac{\Phi\Phi^{T}}{\det(\Phi)},
+\qquad
+\delta(s) = \frac{\dhat}{\det(\Phi)},
+\end{equation}
+
+\begin{equation}
+\label{eq:calib}
+\dhat = \frac{8\nu}{\rhohat^{2}},
+\qquad
+\nu = 2M - \frac{\Nd}{2}.
+\end{equation}
+
+For a surface field $\Nd = 2$, so $\nu = 2M-1$: $M=1$ gives $\nu=1$ and $M=2$ gives
+$\nu=3$. The half-integer case $M=\tfrac12$ is not available in two dimensions, since it
+gives $\nu=0$. The range parameter $\rhohat$ is the distance at which correlation falls to
+$\approx 0.14$, measured in grid cells.
+
+Only \emph{forward} applications of $A$ are needed. This is the practical reason the term
+is affordable: sampling from the prior would require $A^{-M}$ and hence a linear solve,
+but evaluating $\mathcal{L}_M$ requires only $A^{M}$, which is a sparse matrix--vector
+product.
+
+\subsection{The normalization matrix}
+\label{sec:lambda}
+
+$\Lambda$ is fixed by requiring $C$ to be a correlation matrix, i.e.\ to have unit
+diagonal. It is a diagonal matrix throughout, in the same form as \citet{smith2022},
+
+\begin{equation}
+\label{eq:lambda}
+\Lambda = \det(\Phi)^{1/2}\operatorname{diag}\left\{1/\shat_n\right\}_{n=1}^{N},
+\qquad
+\Sigma = \Lambda^{-1} = \det(\Phi)^{-1/2}\operatorname{diag}\left\{\shat_n\right\}_{n=1}^{N},
+\end{equation}
+
+\noindent where $\shat_n$ is the pointwise standard deviation of $A^{-M}$ applied to unit
+white noise, $\shat_n^2 \equiv (A^{-2M})_{nn}$. Substituting into \eqref{eq:cinvhalf} gives
+$C_{nn} = \det(\Phi)^{-1}\Lambda_{nn}^2\shat_n^2 = 1$ as required, and the
+$\det(\Phi)^{1/2}$ in $C^{-1/2}$ cancels against the one inside $\Sigma$:
+
+\begin{equation}
+\label{eq:LM}
+\mathcal{L}_M = \frac{\lambda_M}{2}\left\|A^{M}\Sigma\, x\right\|_2^2
+\qquad\text{with}\qquad
+\Sigma \, x = \left(\shat_1 x_1, \; \shat_2 x_2, \; \ldots, \; \shat_N x_N\right)^{T}.
+\end{equation}
+
+Note $\Sigma$ acts on $x$ \emph{before} the operator is applied, not after. This is worth
+stating because the alternative reading, $\|A^M x / \shat\|^2$, is a different quantity
+and fails the checks below.
+
+\paragraph{$\shat_n$ is a field here, not a scalar.} In the stationary, isotropic,
+unbounded case the marginal variance has the closed form of \citet[Eq.~8]{smith2022},
+
+\begin{equation}
+\label{eq:analytic}
+\shat^2 = \frac{\Gamma(\nu)}{\Gamma\!\left(\nu + \Nd/2\right)\left(4\pi\right)^{\Nd/2}\dhat^{\,\nu}},
+\end{equation}
+
+which depends only on $\dhat$, $\nu$ and $\Nd$ --- a single number, carrying no geometry.
+That is the right object on an unbounded equal-area mesh, and Table~\ref{tab:analytic}
+confirms it: run on a full sphere with no land mask, the estimated $\shat_n$ is spatially
+constant to within the sampling noise of the estimator and agrees with \eqref{eq:analytic}
+to between $1.4\%$ and $12\%$, converging as $\rhohat$ grows and the operator is better
+resolved.
+
+What breaks the scalar is the land mask. Dropping fluxes at a coastal face weakens $A$
+locally, so $\shat_n$ acquires spatial structure that \eqref{eq:analytic} cannot represent
+--- by a factor of up to $20$, as Section~\ref{sec:lowneighbour} shows. We therefore
+estimate $\shat_n$ per cell by randomization \citep{weaver2021},
+$\shat^2_n = \mathbb{E}[(A^{-M}z)_n^2]$ with $z \sim \mathcal{N}(0,I)$, which costs a
+single sparse factorization plus $10^3$ solves, about \SI{3.4}{\second}, once at
+initialization. Where the analytic scalar is adequate it is recovered automatically, so
+nothing is lost by estimating.
+
+\begin{table}[htbp]
+\centering
+\caption{Estimated $\shat_n$ against the analytic scalar \eqref{eq:analytic} on a full
+sphere at $\mathrm{nside}=32$, no land mask. ``Spread'' is the $5$--$95$ percentile range
+of $\shat_n$ over the mesh as a fraction of its median; with $600$ randomization samples
+the estimator's own noise accounts for $\approx 9.5\%$, so $\shat_n$ is constant to within
+the estimate. Reproduced by \texttt{scripts/check\_analytic.py}.}
+\label{tab:analytic}
+\begin{tabular}{cccccc}
+\toprule
+$M$ & $\rhohat$ & $\dhat$ & estimated $\shat_n$ & spread & estimated / analytic \\
+\midrule
+1 & 4  & 0.5000 & 0.44743 & 10.2\% & 1.122 \\
+1 & 8  & 0.1250 & 0.84350 & 10.5\% & 1.057 \\
+1 & 16 & 0.0312 & 1.63995 & 10.7\% & 1.028 \\
+2 & 4  & 1.5000 & 0.09895 & 10.4\% & 1.116 \\
+2 & 8  & 0.3750 & 0.72939 & 10.7\% & 1.028 \\
+2 & 16 & 0.0938 & 5.75555 & 10.7\% & 1.014 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Verification.} With $\Sigma$ so defined, drawing $x \sim \mathcal{N}(0,C)$ on
+the real land-masked mesh gives marginal variance $0.998$ at interior cells and $0.986$ at
+isolated cells against a target of $1$, and
+$\mathbb{E}\!\left[x^{T} C^{-1} x\right] = 33436$ against $N = 33469$. Per-cell, the
+contributions $\left(\left(A^{M}\Sigma x\right)_n\right)^2$ average to $0.999$, $0.999$,
+$1.001$ and $0.972$ across cells with $8$, $3$--$7$, $1$--$2$ and $0$ retained neighbours
+respectively.
+
+\paragraph{What the code implements.} Two departures from \eqref{eq:loss}, both
+deliberate. The implementation omits the $1/2$, because the paired data term
+(\texttt{ObservationMaskedMSE}) is a plain MSE without one and carrying the factor on
+only one term would be inconsistent. And $\lambda_M$ is not a parameter of the
+regularization term: it is \texttt{loss\_weights[1]} of the \texttt{CombinedLoss} that
+holds the two terms, so the strength lives in one place rather than two. What the code
+evaluates is therefore
+
+\begin{equation}
+\label{eq:implemented}
+\texttt{loss\_weights[1]} \times \frac{1}{N}\left\|\Ahat^{M}\hat{\Sigma}\,x\right\|_2^2 ,
+\end{equation}
+
+and anyone wanting the $1/2$ folds it into the weight.
+
+\paragraph{Scaling.} Because \eqref{eq:LM} has expectation $N$ under the prior, defining
+the implemented term as $\tfrac{\lambda_M}{2}\,\|\cdot\|^2 / N$ makes
+$\mathbb{E}[\mathcal{L}_M] = \lambda_M/2$ at any mesh resolution and any $\rhohat$. Paired
+with specifying the range in physical units and converting via
+$\rhohat = \rho/(R\,\grid)$, this makes $\lambda_M$ dimensionless and transferable
+between resolutions.
+
+\section{Implementation notes}
+\label{sec:impl}
+
+The mesh is HEALPix level 6 ($\mathrm{nside}=64$, $\Npix = 49152$) in \textsc{nested}
+ordering, pruned to the $N = 33469$ cells with \texttt{land\_fraction} $< 0.1$. The
+discrete operator uses the eight-neighbour stencil from
+\texttt{healpy.get\_all\_neighbours}, with land neighbours dropped --- the zero-flux
+Neumann condition of \citet{smith2022}.
+
+\paragraph{Index convention.} Throughout this section $i$ and $j$ index \emph{grid
+cells}, never variables or spatial dimensions. Specifically $i$ is the cell whose
+operator row is being written, and $j$ runs over the neighbours of $i$ that survived the
+land mask --- at most the eight returned by \texttt{get\_all\_neighbours}, and fewer at
+the coast. So $\vec{d}_{ij}$ is the offset from the centre of cell $i$ to the centre of
+cell $j$, $\hat{d}_{ij} = |\vec{d}_{ij}|/\grid$ is its length in units of the grid
+scale, $s_{ij}$ is the length of the face they share, and $w_{ij}$ is the weight on that
+pair. Every $\sum_j$ below is over that short neighbour list, not over the whole mesh,
+which is what makes the operator sparse.
+
+\subsection{Choosing $\Phi$}
+\label{sec:phi}
+
+We adopt the same simplification as \citet[\S3.2]{smith2022}: take $\Phi$ diagonal,
+ignoring its off-diagonal elements, with the normalizing length scales
+$L_x(s)$, $L_y(s)$ on the diagonal. In two dimensions,
+
+\begin{equation}
+\label{eq:Phi}
+\Phi = \begin{pmatrix} L_x & 0 \\ 0 & L_y \end{pmatrix},
+\qquad
+\det\Phi = L_x L_y,
+\qquad
+K = \frac{\Phi\Phi^{T}}{\det\Phi}
+  = \begin{pmatrix} L_x/L_y & 0 \\ 0 & L_y/L_x \end{pmatrix},
+\end{equation}
+
+\noindent so $K$ carries the local aspect ratio and its reciprocal, and $\det K = 1$.
+With $\delta(s) = \dhat/\det\Phi$ from \eqref{eq:A}, the operator is
+
+\begin{equation}
+\label{eq:A2d}
+A = \frac{\dhat}{L_x L_y}
+  - \left(\frac{L_x}{L_y}\frac{\partial^2}{\partial x^2}
+        + \frac{L_y}{L_x}\frac{\partial^2}{\partial y^2}\right).
+\end{equation}
+
+This is the balance \citet{smith2022} is after: if the field varies on scale $L_x$ in
+$x$ and $L_y$ in $y$, then both second-derivative terms are $O(x/(L_x L_y))$, the same
+order as the zeroth-order term, so no direction dominates.
+
+\paragraph{The nondimensional operator.} Multiplying \eqref{eq:A2d} through by
+$\det\Phi$ removes the dimensional prefactor entirely:
+
+\begin{equation}
+\label{eq:Ahat}
+\Ahat \;\equiv\; \det(\Phi)\,A
+  \;=\; \dhat - \left(L_x^2 \frac{\partial^2}{\partial x^2}
+                    + L_y^2 \frac{\partial^2}{\partial y^2}\right).
+\end{equation}
+
+$\Ahat$ is what the code actually builds. This is worth being explicit about,
+because it is where the grid scale enters: the length scales appear as the coefficients
+$L_x^2, L_y^2$ multiplying the second derivatives, and nowhere else.
+
+The hat follows \citet{smith2022}: hatted quantities live in the grid-scale normalized
+space, where the operator is isotropic and stationary. $\dhat$, $\rhohat$ and $\shat_n$
+are already in that space, and $\Ahat$ and $\hat{d}_{ij}$ join them.
+
+Nothing is lost by working with $\Ahat$ instead of $A$. Since
+$A^{-M} = \det(\Phi)^{M}\Ahat^{-M}$, the square root \eqref{eq:chalf} collapses to
+$C^{1/2} = \hat{\Lambda}\,\Ahat^{-M}$ with
+$\hat{\Lambda} \equiv \det(\Phi)^{M-1/2}\Lambda$, and the unit-diagonal condition of
+Section~\ref{sec:lambda} becomes simply
+
+\begin{equation}
+\label{eq:lambdahat}
+\hat{\Lambda} = \operatorname{diag}\left\{1/\shat_n\right\}_{n=1}^{N},
+\qquad
+\hat{\Sigma} = \hat{\Lambda}^{-1} = \operatorname{diag}\left\{\shat_n\right\}_{n=1}^{N},
+\qquad
+\shat^2_n \equiv \left(\Ahat^{-2M}\right)_{nn}.
+\end{equation}
+
+Every power of $\det\Phi$ then cancels:
+
+\begin{equation}
+\label{eq:LMhat}
+\mathcal{L}_M
+ = \frac{\lambda_M}{2}\left\|\det(\Phi)^{1/2} A^{M} \Sigma x\right\|_2^2
+ = \frac{\lambda_M}{2}\left\|\Ahat^{M}\hat{\Sigma}\, x\right\|_2^2 .
+\end{equation}
+
+So $\det\Phi$ never has to be evaluated at all, provided the normalization is estimated
+for the same operator that is applied. This is the form the code implements: build
+$\Ahat$, estimate $\shat_n$ from it, and apply \eqref{eq:LMhat}.
+
+\subsection{The normalizing length scales on HEALPix}
+\label{sec:lengths}
+
+Following \citet[\S3.3]{smith2022} we take $L_x, L_y$ from the grid itself. HEALPix gives
+one of these exactly and the other only approximately.
+
+\paragraph{$\det\Phi$ is exact.} Every HEALPix pixel has area exactly $4\pi/\Npix$
+(verified: \texttt{healpy.nside2pixarea} returns $2.55663465\times10^{-4}$~sr for every
+pixel at $\mathrm{nside}=64$, identical to $4\pi/\Npix$). Since $\det\Phi = L_x L_y$ is
+the pixel area, $\det\Phi = 4\pi/\Npix$ holds exactly, whatever the pixel shape.
+
+\paragraph{The isotropic split is an approximation.} Splitting that area as
+$L_x = L_y = \grid$ with
+
+\begin{equation}
+\label{eq:gridscale}
+\grid \equiv \sqrt{4\pi/\Npix}
+\end{equation}
+
+gives $K = I$ by \eqref{eq:Phi}, which is what makes the implementation simple. But
+$\grid$ is the square root of the pixel \emph{area}, not a pixel side length. HEALPix
+pixels are equal-area curvilinear quadrilaterals whose shape varies with latitude, and
+they are not squares. \texttt{healpy}'s own documentation for \texttt{nside2resol}, which
+returns exactly this quantity, describes it as ``a gross approximation given the
+different pixel shapes''.\footnote{\url{https://healpy.readthedocs.io/en/latest/generated/healpy.pixelfunc.nside2resol.html}}
+
+Table~\ref{tab:sides} measures the true side lengths from
+\texttt{healpy.boundaries}. In the equatorial zone ($|\mathrm{lat}| < 41.8^\circ$, the
+four base pixels that tile the equatorial belt) the pixels are square to within
+$0.2\%$ and their sides are within $4\%$ of $\grid$, so $L_x = L_y = \grid$ is a good
+approximation there. In the polar caps the sides run from $0.80\,\grid$ to $1.46\,\grid$
+with a within-pixel aspect ratio up to $1.48$, and the isotropic split is genuinely
+approximate.
+
+\begin{table}[htbp]
+\centering
+\caption{True HEALPix pixel side lengths at $\mathrm{nside}=64$, from
+\texttt{healpy.boundaries}, in units of $\grid = \sqrt{4\pi/\Npix}$. The last column is
+the ratio of longest to shortest side \emph{within} a pixel, which would be $1$ for a
+square. Reproduced by \texttt{scripts/table\_pixel\_shape.py}.}
+\label{tab:sides}
+\begin{tabular}{lcccc}
+\toprule
+$|\mathrm{lat}|$ & min & median & max & within-pixel aspect \\
+\midrule
+$0$--$15$    & 1.002 & 1.005 & 1.007 & 1.000 \\
+$15$--$30$   & 1.000 & 1.001 & 1.003 & 1.000 \\
+$30$--$41.8$ & 1.003 & 1.015 & 1.042 & 1.002 \\
+$41.8$--$60$ & 0.826 & 1.042 & 1.453 & 1.368 \\
+$60$--$75$   & 0.805 & 1.023 & 1.458 & 1.425 \\
+$75$--$90$   & 0.798 & 1.017 & 1.455 & 1.475 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Numerically, $\grid = \SI{0.9161}{\degree} = \SI{101.87}{\kilo\metre}$ at
+$\mathrm{nside}=64$ and $\SI{1.8323}{\degree} = \SI{203.74}{\kilo\metre}$ at
+$\mathrm{nside}=32$.
+
+\textbf{We take $L_x = L_y = \grid$ and hence $K = I$}, accepting the polar-cap error.
+Section~\ref{sec:aniso} measures what that costs in the discrete operator.
+
+\subsection{Discretizing the operator}
+\label{sec:discrete}
+
+Following the finite-volume approach, integrate the elliptic term of \eqref{eq:Ahat}
+over the control volume $V_i$ of cell $i$ and apply the divergence theorem:
+
+\begin{equation}
+\label{eq:fv}
+\int_{V_i} \nabla\cdot K\nabla x \; \mathrm{d}V
+ = \oint_{\partial V_i} \left(K\nabla x\right)\cdot \hat{n} \; \mathrm{d}S
+ \approx \sum_{j} k_{ij}\, s_{ij} \, \frac{x_j - x_i}{d_{ij}},
+\end{equation}
+
+where the sum runs over the faces cell $i$ shares with its neighbours, $s_{ij}$ is the
+shared face length, $d_{ij}$ the centre-to-centre distance, and the gradient normal to
+the face is approximated by the two-point difference. Dividing by $V_i$ and taking
+$K = I$,
+
+\begin{equation}
+\label{eq:tpfa}
+\left(\grid^2 \nabla^2 x\right)_i
+ \approx \frac{\grid^2}{V_i}\sum_j \frac{s_{ij}}{d_{ij}}\left(x_j - x_i\right)
+ = \sum_j \frac{s_{ij}}{d_{ij}}\left(x_j - x_i\right),
+\end{equation}
+
+\noindent because $V_i = \grid^2$ exactly on an equal-area mesh. \emph{This is where the
+grid scale enters and immediately leaves again.} It appears in \eqref{eq:Ahat} as the
+coefficient $\grid^2$, and cancels against the cell area in \eqref{eq:tpfa}, leaving a
+purely geometric stencil. The discrete operator is therefore
+
+\begin{equation}
+\label{eq:Adiscrete}
+\left(\Ahat{}x\right)_i
+ = \left(\dhat + \sum_j w_{ij}\right) x_i - \sum_j w_{ij} x_j ,
+\end{equation}
+
+and the zero-flux Neumann condition is imposed simply by omitting the faces that abut
+land from the sum --- no flux crosses them, so they contribute nothing.
+
+\paragraph{Choice of weights.} Equation~\eqref{eq:tpfa} suggests $w_{ij} = s_{ij}/d_{ij}$,
+the two-point flux approximation, over the four faces each pixel actually shares. That
+scheme is only second-order consistent when the line joining two cell centres is
+orthogonal to their shared face, which HEALPix satisfies near the equator but not towards
+the poles. We therefore use a least-squares consistent stencil over all eight neighbours
+instead. Taylor expanding \eqref{eq:Adiscrete} about cell $i$ with
+$\vec{d}_{ij}$ the offset to neighbour $j$ in units of $\grid$,
+
+\begin{equation}
+\sum_j w_{ij}\left(x_j - x_i\right)
+ = \underbrace{\left(\sum_j w_{ij}\vec{d}_{ij}\right)\cdot\nabla x}_{\text{must vanish}}
+ + \frac{1}{2}\sum_j w_{ij}\, \vec{d}_{ij}^{\,T} \mathcal{H} \vec{d}_{ij}
+ + O(\vec{d}^{\,3}),
+\end{equation}
+
+with $\mathcal{H}$ the Hessian. Matching $\grid^2\nabla^2 x$ requires two conditions:
+
+\begin{equation}
+\label{eq:consistency}
+\sum_j w_{ij}\vec{d}_{ij} = 0
+\qquad\text{and}\qquad
+T_i \equiv \frac{1}{2}\sum_j w_{ij}\, \vec{d}_{ij}\vec{d}_{ij}^{\,T} = I .
+\end{equation}
+
+The first holds automatically wherever the neighbours are symmetrically placed. For the
+second, take $w_{ij} = c/|\vec{d}_{ij}|^2$; then
+$T_i = \tfrac{c}{2}\sum_j \hat{u}_{ij}\hat{u}_{ij}^{T}$ depends only on the neighbour
+\emph{directions}, and its trace gives $\tfrac{c}{2} n_i = 2$, so $c = 4/n_i$ with
+$n_i = 8$ the nominal neighbour count:
+
+\begin{equation}
+\label{eq:weights}
+\boxed{\;w_{ij} = \frac{4}{8\,\hat{d}_{ij}^{\,2}}\;}
+\qquad \hat{d}_{ij} = |\vec{d}_{ij}|/\grid .
+\end{equation}
+
+On a square lattice this assigns $0.5$ to edge-adjacent and $0.25$ to corner neighbours,
+and $0.5\,\grid^2\nabla^2 + 0.25\cdot 2\grid^2\nabla^2 = \grid^2\nabla^2$ as required; the
+measured medians on the real mesh are $0.496$ and $0.258$. Because $w \propto
+|\vec{d}|^{-2}$ makes $T_i$ blind to distance, the pixel elongation of
+Table~\ref{tab:sides} cancels out of the isotropic part of the operator entirely.
+
+Table~\ref{tab:weights} confirms that this is the better of the two schemes on this mesh:
+\eqref{eq:weights} satisfies the trace condition of \eqref{eq:consistency} to four
+decimal places everywhere, while the two-point flux scheme is off by $1.3\%$ overall and
+$9.2\%$ in the polar caps, and is also the more anisotropic of the two.
+
+\begin{table}[htbp]
+\centering
+\caption{Consistency of the two candidate stencils at $\mathrm{nside}=64$ on the full
+sphere, from \eqref{eq:consistency}. $\mathrm{tr}(T)/2 = 1$ and
+$\lambda_{\max}/\lambda_{\min} = 1$ would be exact. Medians.
+Reproduced by \texttt{scripts/check\_weights.py}.}
+\label{tab:weights}
+\begin{tabular}{lcccc}
+\toprule
+ & \multicolumn{2}{c}{$\mathrm{tr}(T)/2$} & \multicolumn{2}{c}{$\lambda_{\max}/\lambda_{\min}$} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}
+ & equatorial & polar & equatorial & polar \\
+\midrule
+two-point flux, $w = s_{ij}/d_{ij}$, 4 faces & 1.0086 & 1.0919 & 1.302 & 2.340 \\
+implemented, \eqref{eq:weights}, 8 neighbours & 0.9999 & 0.9999 & 1.140 & 1.675 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+A useful by-product of the face matching in Table~\ref{tab:weights}: the four shared
+faces map to the \texttt{SW}, \texttt{NW}, \texttt{NE} and \texttt{SE} slots of
+\texttt{healpy.get\_all\_neighbours}, so HEALPix's true grid axes lie on the
+\emph{diagonals} of that compass labelling. Table~\ref{tab:phi} shows the consequence in
+the neighbour spacings: the diagonal slots sit at $1.005$--$1.042\,\grid$ while the
+compass-aligned ones are the far neighbours at $1.18$--$1.79\,\grid$.
+
+\begin{table}[htbp]
+\centering
+\caption{Neighbour spacings and stencil anisotropy at $\mathrm{nside}=64$, by latitude
+band. Distances are medians in units of $\grid$; $L_x/L_y$ is the ratio of the
+east--west to north--south far-neighbour spacing. Reproduced by
+\texttt{scripts/table\_phi.py}.}
+\label{tab:phi}
+\begin{tabular}{lccccc}
+\toprule
+$|\mathrm{lat}|$ & shared face & far nbr (E--W) & far nbr (N--S) & $L_x/L_y$ & $\lambda_{\max}/\lambda_{\min}$ \\
+\midrule
+$0$--$15$    & 1.005 & 1.523 & 1.313 & 1.160 & 1.159 \\
+$15$--$30$   & 1.001 & 1.423 & 1.406 & 1.012 & 1.055 \\
+$30$--$41.8$ & 1.015 & 1.252 & 1.590 & 0.791 & 1.260 \\
+$41.8$--$60$ & 1.042 & 1.179 & 1.783 & 0.656 & 1.705 \\
+$60$--$75$   & 1.022 & 1.227 & 1.732 & 0.714 & 1.675 \\
+$75$--$90$   & 1.017 & 1.248 & 1.692 & 0.755 & 1.618 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Anisotropy}
+\label{sec:aniso}
+
+Section~\ref{sec:discrete} showed that the trace condition of
+\eqref{eq:consistency} is met exactly. What does not follow is the traceless part: the
+choice $L_x = L_y = \grid$ of Section~\ref{sec:lengths} sets $K = I$, but the pixels it
+describes are not isotropic, and the stencil inherits that. The last column of
+Table~\ref{tab:phi} gives the eigenvalue ratio $\lambda_{\max}/\lambda_{\min}$ of $T_i$:
+between $1.06$ and $1.70$ depending on latitude, worst in the band $42^\circ$--$60^\circ$,
+with median $1.18$ over the mesh and a $95$th percentile of $2.26$. It tracks the
+within-pixel aspect ratio of Table~\ref{tab:sides}, as it should --- both are small in
+the equatorial zone and appear together in the polar caps.
+
+\textbf{We take $K = I$ regardless, as a stated assumption.} The consequence is that
+correlation ellipses are elongated by up to $\sqrt{1.70}\approx 1.3$ in the mid-latitudes
+rather than being circular. This is consistent with, and the origin of, the residual
+directional spread of $\approx 0.04$ in correlation units reported in
+Section~\ref{sec:validation}.
+
+The justification is proportionality: $\lambda_M$ and $\rho$ are tuned quantities, and a
+$1.3{:}1$ distortion of the prior's correlation ellipses is small next to the uncertainty
+in what the correlation length should be in the first place. The fix, should it ever
+matter, is available and cheap: set $K_i = T_i^{-1}$ from the measured second-moment
+tensor, folded into the edge weights at initialisation, at the cost of making the weights
+direction-dependent rather than a scalar per edge.
+
+\subsection{Low-neighbour points}
+\label{sec:lowneighbour}
+
+Of the $N = 33469$ retained cells, $30064$ keep all eight neighbours, $3295$ have three to
+seven, $98$ have one or two, and $12$ have none at all. The isolated cells are the
+Kattegat, the Gulf of Bothnia, the White Sea, one cell in the Philippines, and eight in
+the Canadian Arctic Archipelago and Baffin region. Their own \texttt{land\_fraction} is
+$0.004$--$0.093$, so they are genuine ocean, ringed by cells that failed the threshold.
+
+\paragraph{Diagnosis.} Dropping land fluxes makes the stencil \emph{first-order
+inconsistent} at boundary cells. A consistent Laplacian must annihilate a linear field,
+i.e.\ $\sum_j w_{ij}\vec{d}_{ij} = 0$; the measured median of
+$\left|\sum_j w_{ij}\vec{d}_{ij}\right|$ is $0.0071$ at interior cells but $0.7847$ at
+cells with three to seven neighbours. Such a cell therefore responds to a linear field at
+$O(|\nabla x|\grid)$ where the interior responds at $O(\nabla^2 x\,\grid^2)$. The
+Laplacian is simultaneously under-weighted there: $\mathrm{tr}(T)/2$ is $0.75$ at
+three-to-seven-neighbour cells and $0.25$ at one-to-two-neighbour cells, against $1$ in
+the interior.
+
+\paragraph{Consequences.} Both effects inflate $\shat$, and the inflation grows with the
+correlation length exactly as Fig.~4 of \citet{smith2022} shows (Table~\ref{tab:sigma}).
+The penalty consequence is Table~\ref{tab:coast}. A field drawn \emph{from the prior}
+gives unit contribution everywhere, so the normalization is exact by its own measure; the
+excess is specific to fields that violate the Neumann boundary condition, which any
+realistic ocean field does.
+
+\begin{table}[htbp]
+\centering
+\caption{$\shat/\shat_{\text{interior}}$ at $M=1$, by retained-neighbour count and
+correlation range. Reproduces Fig.~4 of \citet{smith2022}.}
+\label{tab:sigma}
+\begin{tabular}{lcccc}
+\toprule
+$\rhohat$ (cells) & 2 & 4 & 8 & 16 \\
+range (\si{\kilo\metre}) & 204 & 407 & 815 & 1630 \\
+\midrule
+3--7 neighbours & 1.17 & 1.31 & 1.43 & 1.50 \\
+1--2 neighbours & 1.71 & 2.54 & 3.44 & 3.75 \\
+isolated        & 2.18 & 4.44 & 9.36 & 19.0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{Per-cell penalty contribution relative to the interior, $M=1$, $\rhohat=4$, for a
+generic smooth field with non-zero normal gradient at the coast.}
+\label{tab:coast}
+\begin{tabular}{lccc}
+\toprule
+ & 3--7 nbrs & 1--2 nbrs & isolated \\
+\midrule
+normalised, $\Sigma$ from \eqref{eq:lambda} & $2.14\times$ & $7.19\times$ & $13.9\times$ \\
+unnormalised, $\Sigma$ constant ($\Lambda = I$) & $0.86\times$ & $0.72\times$ & $0.70\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Note that the two rows of Table~\ref{tab:coast} err in opposite directions. Leaving
+$\Lambda = I$ does not avoid the problem; it under-constrains the same cells instead.
+
+\paragraph{Decision.} \textbf{We drop the regularization term at low-neighbour points},
+controlled by a \texttt{min\_neighbours} threshold. The default of $3$ removes the $110$
+cells with fewer than three neighbours --- $0.33\%$ of the mesh, and the $7.2\times$ and
+$13.9\times$ rows of Table~\ref{tab:coast} --- while retaining the $3295$ cells at
+$2.14\times$. Raising the threshold to $8$ removes all $3405$ boundary cells, about
+$10\%$ of the mesh.
+
+The reasoning is that these cells do not merit more engineering than that. They are an
+artefact of where the \texttt{land\_fraction} threshold happens to fall and would change
+or disappear if it moved, and the Laplacian at a cell with no neighbours is not a
+meaningful object in the first place. If dropping them proves too blunt --- for instance
+if it leaves visible artefacts at the coast --- the next step is to cap the amplitude
+instead, clipping $\shat$ at a fixed multiple of its interior value, which bounds the
+excess in Table~\ref{tab:coast} while keeping the interior exact.
+
+\paragraph{Alternatives considered and rejected.} Two more principled fixes were tested
+and are recorded here so they are not re-derived later.
+
+\begin{enumerate}
+  \item \emph{Gradient-consistency projection.} Project $w_i$ onto the constraint
+  $\sum_j w_{ij}\vec{d}_{ij} = 0$ and rescale to restore $\mathrm{tr}(T)/2 = 1$. This
+  works for three-to-seven-neighbour cells, driving the gradient response to zero and the
+  trace to $1.00$. But it annihilates one-to-two-neighbour cells entirely
+  ($\mathrm{tr}(T)/2 \to 0$, since two constraints exhaust two degrees of freedom) and
+  introduces $2500$ negative weights with minimum $-320$, which would very likely cost
+  the positive-definiteness that makes $C$ a valid covariance. A non-negativity-constrained
+  formulation might recover it, but was not pursued.
+
+  \item \emph{Trace renormalisation at the boundary.} Rescale boundary weights so
+  $\mathrm{tr}(T)/2 = 1$ everywhere, keeping all weights positive. This improves the
+  three-to-seven-neighbour cells from $2.14\times$ to $1.51\times$ and their $\shat$ ratio
+  from $1.31$ to $1.12$, but does nothing for isolated cells. It also makes the first-order
+  inconsistency \emph{worse}, since scaling the weights up amplifies it:
+  $\left|\sum_j w_{ij}\vec{d}_{ij}\right|$ rises from $0.78$ to $1.06$ at
+  three-to-seven-neighbour cells and from $0.55$ to $3.20$ at one-to-two-neighbour cells.
+  And it is no longer the strict zero-flux Neumann condition of \citet{smith2022} --- it
+  is closer to a mirror boundary condition.
+\end{enumerate}
+
+\section{Validation against the analytical correlation function}
+\label{sec:validation}
+
+Because $A$ is symmetric, $\mathrm{Cov} = A^{-M}A^{-M,T} = A^{-2M}$ exactly, so no
+sampling is needed to check the discretization. Taking a single column of $A^{-2M}$ by
+sparse factorization and normalising it by its own diagonal gives the discrete
+correlation as a function of distance from that source cell, which is compared against
+
+\begin{equation}
+\label{eq:matern}
+r(d;\rhohat,M) = \frac{1}{2^{\nu-1}\Gamma(\nu)} z^{\nu} K_\nu(z),
+\qquad
+z = \sqrt{8\nu}\,\frac{d}{\rhohat}.
+\end{equation}
+
+Table~\ref{tab:validation} reports this on a full sphere at $\mathrm{nside}=32$ --- no
+land mask, so that stencil quality is isolated from the boundary effects of
+Section~\ref{sec:lowneighbour} --- from three source cells at different latitudes, since
+HEALPix pixel shape varies with latitude even though area does not.
+
+\begin{table}[htbp]
+\centering
+\caption{Discrete versus analytical correlation, $\mathrm{nside}=32$, full sphere. Entries
+are equator / mid-latitude / near-pole source cells. The effective range
+$\rho_{\text{emp}}$ is the distance at which the discrete correlation crosses the
+analytical value $r(\rhohat)$. Directional spread is the standard deviation of the
+discrete correlation across all cells in the band $0.8\rhohat < d < 1.2\rhohat$, which
+would be zero for a perfectly isotropic operator.}
+\label{tab:validation}
+\begin{tabular}{ccccccc}
+\toprule
+$M$ & $\nu$ & $\rhohat$ & $r(\rhohat)$ & $\max|\text{err}|$ & $\rho_{\text{emp}}/\rhohat$ & directional spread \\
+\midrule
+1 & 1 & 4 & 0.140 & 0.13 / 0.15 / 0.14 & 0.91 / 0.88 / 0.85 & 0.031 / 0.034 / 0.034 \\
+1 & 1 & 8 & 0.140 & 0.07 / 0.12 / 0.10 & 0.93 / 0.81 / 1.01 & 0.034 / 0.037 / 0.040 \\
+2 & 3 & 4 & 0.138 & 0.13 / 0.16 / 0.16 & 0.94 / 0.88 / 0.85 & 0.039 / 0.041 / 0.043 \\
+2 & 3 & 8 & 0.138 & 0.05 / 0.14 / 0.09 & 0.98 / 0.89 / 1.01 & 0.045 / 0.047 / 0.053 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Three readings of Table~\ref{tab:validation}:
+
+\begin{itemize}
+  \item The effective range is within about $15\%$ of the requested $\rhohat$, so
+  $\rhohat$ is a calibrated parameter rather than a proxy for one.
+
+  \item The analytical $r(\rhohat)$ comes out at $0.140$ for $\nu=1$ and $0.138$ for
+  $\nu=3$, the property asserted by Fig.~1 of \citet{smith2022}. This is the check that
+  confirms the calibration $\dhat = 8\nu/\rhohat^2$ in \eqref{eq:calib}; dropping the
+  $\nu$ breaks it for $M \neq 1$.
+
+  \item The maximum absolute error is dominated by separations below two grid cells,
+  where no discrete stencil can reproduce the continuum Green's function --- the $\nu=1$
+  Mat\'ern has a cusp at the origin. It falls as $\rhohat$ grows, as expected.
+
+  \item The directional spread of $0.03$--$0.05$ is the residual anisotropy of
+  Section~\ref{sec:aniso} expressed in correlation units.
+\end{itemize}
+
+\begin{thebibliography}{9}
+
+\bibitem[Smith(2022)]{smith2022}
+T.~A. Smith.
+\newblock A practical formulation for an anisotropic and nonstationary Mat\'ern class
+correlation operator.
+\newblock \emph{ESS Open Archive}, 2022.
+\newblock \url{https://doi.org/10.1002/essoar.10511974.1}.
+
+\bibitem[Lindgren et al.(2011)]{lindgren2011}
+F.~Lindgren, H.~Rue, and J.~Lindstr\"om.
+\newblock An explicit link between Gaussian fields and Gaussian Markov random fields: the
+stochastic partial differential equation approach.
+\newblock \emph{Journal of the Royal Statistical Society B}, 73(4):423--498, 2011.
+
+\bibitem[Weaver et al.(2021)]{weaver2021}
+A.~T. Weaver, M.~Chrust, B.~M\'en\'etrier, and A.~Piacentini.
+\newblock An evaluation of methods for normalizing diffusion-based covariance operators in
+variational data assimilation.
+\newblock \emph{Quarterly Journal of the Royal Meteorological Society}, 147(734):289--320,
+2021.
+
+\end{thebibliography}
+
+\end{document}

@@ -1,0 +1,34 @@
+
+📦 Path       : graph.dataMasked.pt
+💽 Size       : 4.3 MiB (4533196)
+
+🪩  Nodes summary
+
+   Nodes name │ Num. nodes │ Attributes │ Attribute dim │ Min. latitude │ Max. latitude │ Min. longitude │ Max. longitude
+   ───────────┼────────────┼────────────┼───────────────┼───────────────┼───────────────┼────────────────┼───────────────
+   ocean      │      33469 │            │             0 │      -77.5491 │        89.269 │              0 │        359.297
+   hidden     │      12288 │            │             0 │       -88.538 │        88.538 │              0 │        358.594
+   ───────────┴────────────┴────────────┴───────────────┴───────────────┴───────────────┴────────────────┴───────────────
+
+
+🌐  Edges summary
+
+   Source │ Target │ Num. edges │ Isolated Source │ Isolated Target │ Min edges/target │ Max edges/target │ Attribute dim │                     Attributes
+   ───────┼────────┼────────────┼─────────────────┼─────────────────┼──────────────────┼──────────────────┼───────────────┼───────────────────────────────
+   ocean  │ hidden │     107950 │               0 │            2967 │                1 │               15 │             3 │ edge_length(1D), edge_dirs(2D)
+   hidden │ ocean  │     100407 │            2991 │               0 │                3 │                3 │             3 │ edge_length(1D), edge_dirs(2D)
+   ───────┴────────┴────────────┴─────────────────┴─────────────────┴──────────────────┴──────────────────┴───────────────┴───────────────────────────────
+
+
+📊 Attribute distributions
+
+   Type │ Source         │        Name │         Dtype │     Min. │         Mean │    Max. │ Std. dev.
+   ─────┼────────────────┼─────────────┼───────────────┼──────────┼──────────────┼─────────┼──────────
+   Edge │ ocean-->hidden │ edge_length │ torch.float32 │ 0.291465 │     0.685278 │       1 │  0.226039
+   Edge │ ocean-->hidden │   edge_dirs │ torch.float32 │ -1.41421 │  -0.00145805 │ 1.41421 │         1
+   Edge │ hidden-->ocean │ edge_length │ torch.float32 │ 0.283659 │     0.646834 │       1 │  0.214941
+   Edge │ hidden-->ocean │   edge_dirs │ torch.float32 │ -1.41421 │ -0.000326384 │ 1.41421 │         1
+   ─────┴────────────────┴─────────────┴───────────────┴──────────┴──────────────┴─────────┴──────────
+
+🔋 Graph ready.
+

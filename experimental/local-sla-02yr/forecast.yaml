@@ -1,0 +1,36 @@
+debugging_info:
+  root_dir: runs/no-removed-nodes
+  run_id: e3a8ff96-1290-46fa-881e-d03ba14e82a9
+checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
+output:
+  netcdf: ${debugging_info.root_dir}/inference/${date}.nc
+date: 2000-07-02T12
+lead_time: 24h
+allow_nans: true
+initial_state_categories: [dynamic_forcings]
+precision: "32"
+device: cpu
+
+input:
+  dataset:
+    join:
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+        select:
+          - sla_filtered_ers_2
+          - sla_filtered_gfo
+          - sla_filtered_topex_poseidon
+      - dataset: anemoi-hpx6-24h/obs_count_f32.zarr
+        select:
+          - ers_2
+          - gfo
+          - topex_poseidon
+        rename:
+          ers_2: obs_count_ers_2
+          gfo: obs_count_gfo
+          topex_poseidon: obs_count_topex_poseidon
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+        select:
+          - sla_filtered_topex_poseidon
+        rename:
+          sla_filtered_topex_poseidon: sla
+      - dataset: gebco-anemoi-hpx6/dataset.zarr

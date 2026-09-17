@@ -1,0 +1,184 @@
+% ---------------------------------------------------------------------------
+% Encoder of AnemoiModelEncProcDec (GraphTransformerForwardMapper), drawn at the
+% block level of "Attention Is All You Need" Fig. 1, with every wire annotated
+% by its array shape.
+%
+% The tikzpicture only -- \input it into a document whose preamble loads
+% notation.tex and the tikz libraries listed in network_diagram.tex.
+%
+% Layout: three lanes flowing left to right --
+%   DATA   (top)     x-space nodes:  psi -> Linear -> LayerNorm -> key, value
+%   EDGE   (middle)  encoder edges:  a_e -> Linear -> eps
+%   LATENT (bottom)  z-space nodes:  a_z -> Linear -> LayerNorm -> query, self
+% converging at the graph attention block, after which the latent stream
+% continues alone along the middle line.
+%
+% Every node is placed off the \row*/\col* registers below, so the figure is
+% reflowed by editing numbers in one place rather than by moving nodes.
+% ---------------------------------------------------------------------------
+
+% --- lane (row) positions ---------------------------------------------------
+\def\rowdata{0}          % data-space lane
+\def\rowedge{-6.0}       % edge lane; also the latent stream after attention
+\def\rowlat{-12.0}        % latent-space lane
+\def\rowbypass{4.2}      % raw psi running over the top to the decoder
+\def\rowconn{-9.0}       % graph connectivity entering the attention block
+\def\rowselfskip{-16.0}  % self branch routed under the attention block
+\def\rowdstskip{-18.6}   % pre-norm latent skip routed under everything
+\def\rowffskip{-3.0}     % skip around the feed forward
+
+% --- column positions -------------------------------------------------------
+\def\colA{0}        % inputs
+\def\colcat{4.8}    % concatenation
+\def\colB{7.7}      % embedding Linear
+\def\colC{11.4}     % LayerNorm
+\def\colD{15.4}     % q / k / v / edge projections
+\def\colsplit{13.4} % where a LayerNorm output branches in two
+\def\colE{21.6}     % graph attention
+\def\colF{26.6}     % residual 1
+\def\colG{29.4}     % projection
+\def\colH{32.6}     % residual 2
+\def\colI{35.6}     % LayerNorm + feed forward
+\def\colJ{38.6}     % residual 3
+\def\colK{40.8}     % output
+
+\def\stack{1.15}    % vertical offset of paired sub-boxes
+
+\begin{tikzpicture}[
+  x=1cm, y=1cm, font=\large,
+  blk/.style     = {rounded corners=3pt, draw=trapline, fill=trapfill,
+                    line width=1.1pt, align=center, inner sep=5pt,
+                    minimum height=1.2cm, minimum width=2.1cm},
+  attnblk/.style = {blk, fill=attnfill},
+  sum/.style     = {circle, draw=trapline, fill=white, line width=1.1pt,
+                    inner sep=0pt, minimum size=0.72cm},
+  term/.style    = {align=center, inner sep=2pt},
+  wire/.style    = {-{Stealth[length=3.4mm,width=2.8mm]}, line width=1.1pt,
+                    line cap=round, rounded corners=5pt},
+  plain/.style   = {line width=1.1pt, line cap=round, rounded corners=5pt},
+  shp/.style     = {font=\normalsize, inner sep=2pt, fill=white,
+                    fill opacity=0.85, text opacity=1},
+  tag/.style     = {font=\normalsize\itshape, inner sep=2pt},
+  lane/.style    = {font=\small\bfseries, anchor=south west},
+]
+
+% =========================== lane labels ====================================
+% anchored on the left edge of the input boxes so nothing overhangs the
+% bounding box (the standalone crop would clip it)
+\node[lane, text=dataclr]   at ({\colA-1.8}, {\rowdata+\stack+0.55}) {data};
+\node[lane, text=edgeclr]   at ({\colA-1.8}, {\rowedge+0.55})        {edges};
+\node[lane, text=latentclr] at ({\colA-1.8}, {\rowlat+0.55})         {latent};
+
+% =========================== DATA LANE ======================================
+\node[blk, text width=3.4cm] (uin)  at (\colA, {\rowdata+\stack})
+  {data state\\[1pt]{\normalsize$\datavec(t{-}\NT{+}1)\dots\datavec(t)$}};
+\node[blk, text width=3.4cm] (axin) at (\colA, {\rowdata-\stack})
+  {node attributes\\$\attrx$};
+\node[sum] (cat)  at (\colcat, \rowdata) {\scriptsize$\|$};
+\node[blk] (embx) at (\colB, \rowdata) {Linear};
+\node[blk] (lnx)  at (\colC, \rowdata) {LayerNorm};
+\node[blk] (link) at (\colD, {\rowdata+1.15}) {Linear};
+\node[blk] (linv) at (\colD, {\rowdata-1.15}) {Linear};
+\coordinate (xsplit) at (\colsplit, \rowdata);
+
+\draw[wire, dataclr] (uin.east)  -- node[shp, above, pos=0.45]
+  {\shapethree{\NT}{\Nx}{\Nu}} (cat);
+\draw[wire, dataclr] (axin.east) -- node[shp, below, pos=0.45]
+  {\shapetwo{\Nx}{\Nax}} (cat);
+\draw[wire, dataclr] (cat) -- node[shp, above] {\shapetwo{\Nx}{\Npsi}}
+                             node[tag, below, text=dataclr] {$\inputvec$} (embx);
+\draw[wire, dataclr] (embx) -- node[shp, above] {\shapetwo{\Nx}{\Nphi}} (lnx);
+\draw[plain, dataclr] (lnx.east) -- (xsplit);
+\draw[wire, dataclr] (xsplit) |- (link.west);
+\draw[wire, dataclr] (xsplit) |- (linv.west);
+
+% the mapper returns its source input untouched; it is the decoder's dst input
+\draw[wire, dataclr, densely dashed] (cat.north) |- (\colK, \rowbypass)
+  node[shp, above, pos=0.62] {\shapetwo{\Nx}{\Npsi}}
+  node[term, anchor=west, xshift=3pt, align=left, font=\small]
+  {returned unchanged;\\destination input\\of the decoder};
+
+% =========================== EDGE LANE ======================================
+\node[blk, text width=3.4cm] (aein) at (\colA, \rowedge)
+  {edge attributes\\$\attre$};
+\node[blk] (line) at (\colD, \rowedge) {Linear};
+\node[term, anchor=west, align=left, font=\small, text=edgeclr,
+      fill=white, inner sep=2pt] (conn)
+  at ({\colB-1.4}, \rowconn) {graph connectivity\ \ $2\!\times\!\NEE$};
+
+\draw[wire, edgeclr] (aein) -- node[shp, above] {\shapetwo{\NEE}{\Nae}} (line);
+
+% =========================== LATENT LANE ====================================
+\node[blk, text width=3.4cm] (azin) at (\colA, \rowlat)
+  {node attributes\\$\attrz$};
+\node[blk] (embz) at (\colB, \rowlat) {Linear};
+\node[blk] (lnz)  at (\colC, \rowlat) {LayerNorm};
+\node[blk] (linq) at (\colD, {\rowlat+1.15}) {Linear};
+\node[blk] (lins) at (\colD, {\rowlat-1.15}) {Linear};
+\coordinate (zsplit) at (\colsplit, \rowlat);
+
+\draw[wire, latentclr] (azin) -- node[shp, above] {\shapetwo{\Nz}{\Naz}} (embz);
+\draw[wire, latentclr] (embz) -- node[shp, above] {\shapetwo{\Nz}{\Nphi}} (lnz);
+\draw[plain, latentclr] (lnz.east) -- (zsplit);
+\draw[wire, latentclr] (zsplit) |- (linq.west);
+\draw[wire, latentclr] (zsplit) |- (lins.west);
+
+% =========================== ATTENTION ======================================
+\node[attnblk, minimum height=15.6cm, text width=5.4cm] (attn) at (\colE, \rowedge)
+  {\textbf{Graph Multi-Head}\\[1pt]\textbf{Attention}\\[3pt]
+   {\small $\NH$ heads $\times$ $\Nc$ channels}\\[10pt]
+   {\large$\displaystyle
+      \attn_{ij}=\operatorname*{softmax}_{i\in\nbhd(j)}
+      \frac{\query_j\cdot(\keyv_i+\edgeemb_{ij})}{\sqrt{\Nc}}$}\\[9pt]
+   {\large$\displaystyle
+      \sum_{i\in\nbhd(j)}\attn_{ij}\,(\valuev_i+\edgeemb_{ij})$}};
+
+\draw[wire, dataclr] (link.east) -- node[shp, above]
+  {\shapethree{\Nx}{\NH}{\Nc}} node[tag, below, text=dataclr] {$\keyv$}
+  (link.east -| attn.west);
+\draw[wire, dataclr] (linv.east) -- node[tag, below, text=dataclr] {$\valuev$}
+  (linv.east -| attn.west);
+\draw[wire, edgeclr] (line.east) -- node[shp, above, pos=0.42]
+  {\shapethree{\NEE}{\NH}{\Nc}} node[tag, below, pos=0.42, text=edgeclr] {$\edgeemb$}
+  (line.east -| attn.west);
+\draw[wire, latentclr] (linq.east) -- node[shp, above]
+  {\shapethree{\Nz}{\NH}{\Nc}} node[tag, below, text=latentclr] {$\query$}
+  (linq.east -| attn.west);
+\draw[plain, edgeclr, densely dotted] (conn.east) -- (conn.east -| attn.west);
+
+% =========================== POST-ATTENTION CHAIN ===========================
+\node[sum] (res1) at (\colF, \rowedge) {\scriptsize$+$};
+\node[blk] (proj) at (\colG, \rowedge) {Linear};
+\node[sum] (res2) at (\colH, \rowedge) {\scriptsize$+$};
+\node[blk, text width=2.4cm] (ff) at (\colI, \rowedge)
+  {LayerNorm\\MLP};
+\node[sum] (res3) at (\colJ, \rowedge) {\scriptsize$+$};
+\node[term, anchor=west, align=left] (out) at ({\colK+0.2}, \rowedge)
+  {$\latentvec$\\[2pt]{\small to processor}};
+
+\draw[wire, latentclr] (attn.east) -- (res1);
+\draw[wire, latentclr] (res1) -- (proj);
+\node[tag, above=6pt of res1, text=trapline, align=center]
+  {\small added \emph{before} the\\[-1pt]\small output projection};
+\draw[wire, latentclr] (proj) -- node[shp, above] {\shapetwo{\Nz}{\Nphi}} (res2);
+\draw[wire, latentclr] (res2) -- (ff);
+\draw[wire, latentclr] (ff) -- (res3);
+\draw[wire, latentclr] (res3) -- node[shp, above] {\shapetwo{\Nz}{\Nphi}} (out);
+
+
+% residual 1 -- the self branch, added in attention space, ahead of the
+% output projection (AIAYN draws that projection inside its attention box)
+\draw[wire, latentclr] (lins.south) |- ({\colF}, \rowselfskip) -- (res1.south);
+\node[shp] at ({(\colD+\colF)/2}, \rowselfskip) {\shapetwo{\Nz}{\Nphi}};
+\node[tag, anchor=west, text=latentclr]
+  at ({\colD+1.25}, {\rowlat-1.15}) {$\selfv$};
+
+% residual 2 -- pre-norm skip taken from the latent embedding
+\draw[wire, latentclr] (embz.south) |- ({\colH}, \rowdstskip) -- (res2.south);
+\node[shp] at ({(\colC+\colH)/2}, \rowdstskip) {\shapetwo{\Nz}{\Nphi}};
+
+% residual 3 -- pre-norm skip around the MLP
+\draw[wire, latentclr] ({(\colH+\colI)/2}, \rowedge) |- ({\colJ}, \rowffskip)
+  -- (res3.north);
+
+\end{tikzpicture}

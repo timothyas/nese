@@ -1,0 +1,70 @@
+% Literal values for the DeepMind lineage (GraphCast, GenCast, FGN / WeatherNext 2).
+%
+% *** HAND-MAINTAINED.  This is the one \newcommand file here that is NOT
+% *** generated -- dims.tex and symbols_table.tex come out of extract_dims.py and
+% *** are overwritten by make.  These numbers describe someone else's models, so
+% *** no checkpoint of ours can produce them; the discipline that survives is
+% *** that they live in exactly one place and each one carries its source.
+%
+% Provenance matters more than usual here, because the three models' papers,
+% their shipped configs and their released checkpoints disagree in places:
+%
+%   [P] stated in the paper
+%   [C] only in a shipped config file in the repo
+%   [K] only recoverable by decoding a released checkpoint
+%   [D] derived arithmetic (mesh construction, BFS on the mesh), not quoted anywhere
+%
+% Traps worth remembering, all of them hit while collecting these:
+%   * google-deepmind/graphcast was RENAMED to google-deepmind/weathernext (same
+%     repo id, old URLs 301-redirect, old graphcast/*.py paths 404).  All three
+%     models now live in one tree -- weathernext1_graph/, weathernext1_gen/,
+%     weathernext2/ -- over a shared utils/.  GenCast and FGN import the same
+%     utils/sparse_transformer.py.
+%   * GenCast's paper D.3 gives 41162 mesh nodes / 246960 edges where the code
+%     produces 40962 / 245760.  The code is unambiguous; the paper looks like a
+%     typo.  We quote the code.
+%   * The demo notebooks' random-init defaults (attention_k_hop 16, mesh_size 4)
+%     are NOT the paper models.  Do not read hyperparameters off a notebook.
+%   * GraphCast's radius_query_fraction_edge_length appears in the paper and in
+%     the demo notebook but never in library code.
+
+% --- shared across the lineage -----------------------------------------------
+\newcommand{\dmradiusfrac}{0.6}          % [P] GraphCast S3.3 fn.5; [K] GenCast ckpts; [C] WN2.json
+\newcommand{\dmradiuskm}{79}             % [D] 0.6 x longest level-6 edge, chord, on a unit sphere
+\newcommand{\dmmeshnodes}{40{,}962}      % [D] level-6 icosahedral mesh; contradicts GenCast D.3
+\newcommand{\dmmeshlevel}{6}             % [P] all three
+\newcommand{\dmdecdeg}{3}                % [C] in_mesh_triangle_indices, containing face
+
+% --- GraphCast ----------------------------------------------------------------
+\newcommand{\gclatent}{512}              % [P] S3.7
+\newcommand{\gcsteps}{16}                % [P] S3.5, unshared weights
+\newcommand{\gcparams}{36.7}             % [P] main text, millions
+\newcommand{\gcencdeg}{39.5}             % [D] 1{,}618{,}746 G2M edges [P] / 40962 mesh nodes
+\newcommand{\gcmeshlevels}{0--6}         % [P] S3.5, merged into one multimesh
+
+% --- GenCast (denoiser core) --------------------------------------------------
+\newcommand{\genlatent}{512}             % [K] released checkpoint
+\newcommand{\genlayers}{16}              % [K][P] D.3
+\newcommand{\genheads}{4}                % [K]
+\newcommand{\genheaddim}{128}            % [K] 512/4; the splash kernel asserts a multiple of 128
+\newcommand{\genffw}{2048}               % [K] 4 x d_model
+\newcommand{\genkhop}{32}                % [K] checkpoint, corroborated by [P] D.3
+\newcommand{\genparams}{57}              % [P] quoted in the FGN paper, millions
+\newcommand{\genballnodes}{3{,}169}      % [D] BFS, 1+3k(k+1) for a degree-6 node
+\newcommand{\gendensity}{7.7}            % [D] 3169/40962, per cent
+\newcommand{\genballkm}{900}             % [D] 32 hops x ~28 km mean level-6 edge
+\newcommand{\genaggnorm}{16}             % [K] grid2mesh_aggregate_normalization
+\newcommand{\gennoisedim}{16}            % [K] noise_encoder output_sizes (32, 16)
+
+% --- FGN / WeatherNext 2 ------------------------------------------------------
+\newcommand{\fgnlatent}{768}             % [C] WeatherNext2.json; [P] A.3
+\newcommand{\fgnlayers}{24}              % [C][P] A.3
+\newcommand{\fgnheads}{6}                % [C][P] A.3
+\newcommand{\fgnffw}{3072}               % [C] 4 x d_model
+\newcommand{\fgnkhop}{32}                % [C] ONLY -- the FGN paper never mentions the sparsity
+\newcommand{\fgnparams}{180}             % [P] Sec. 2.3, millions
+\newcommand{\fgnedgewidth}{32}           % [C][P] A.3, cut down from GenCast's 512
+\newcommand{\fgnaggnorm}{4}              % [C] aggregate_normalization
+\newcommand{\fgnnoisedim}{32}            % [C][P] A.3, the FiLM conditioning vector
+\newcommand{\fgnfilmlayers}{57}          % [D] count over the config; 49 of them in the processor
+\newcommand{\fgnheaddim}{128}            % [C] key_size / value_size, unchanged from GenCast

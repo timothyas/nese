@@ -1,0 +1,104 @@
+Bootstrap: localimage
+From: @BASE_SIF@
+
+# Template. environment/olivia/build-anemoi-env.sh substitutes @...@ and runs
+#   apptainer build --fakeroot --bind /cluster <sif> <rendered def>
+# on an aarch64 `accel` node. Extends the NVIDIA NGC PyTorch container (arm64)
+# with the anemoi suite + editable anemoi-core / nese-inference / nese-training.
+# torch / torchvision / CUDA / NCCL are the container's and are left untouched.
+# NOTE: %files source paths resolve against the build CWD; build-anemoi-env.sh
+# substitutes @REQUIREMENTS_TXT@ with an absolute path.
+
+%setup
+    # `apptainer build` from a def file uses a --writable sandbox and will NOT
+    # auto-create bind destinations. The NGC base has no /cluster, so
+    # `--bind /cluster` (for the editable source trees during %post) needs this.
+    mkdir -p "${APPTAINER_ROOTFS}/cluster"
+
+%files
+    @REQUIREMENTS_TXT@ /opt/nese-anemoi/requirements.txt
+
+%environment
+    export PYTHONSTARTUP=""
+
+%post
+    set -eu
+    export http_proxy="@HTTP_PROXY@" https_proxy="@HTTP_PROXY@"
+
+    # The raw NGC image has no `uv`; use its pip.
+    # NGC's own /etc/pip/constraint.txt pins the whole NVIDIA ecosystem incl. loose
+    # deps (nvidia-ml-py, ...) that the anemoi suite needs newer -- using it as-is
+    # makes the resolve impossible. Instead build a MINIMAL constraint: pin only
+    # the compiled torch stack to exactly what the image ships, so nothing here can
+    # pull a wheel over it, and let everything else float.
+    : "${PIP_CONSTRAINT:?the NGC base image should set this; wrong/old base image?}"
+    python - /tmp/nese-anemoi-constraint.txt <<'PY'
+import sys, importlib.metadata as md
+# the compiled stack that must not move: torch ABI + numpy ABI + anything
+# NGC built as a CUDA extension against them.
+pin = ("torch", "torchvision", "torchaudio", "triton", "pytorch-triton",
+       "numpy", "flash-attn", "flash_attn", "transformer-engine",
+       "transformer_engine", "transformer-engine-torch")
+with open(sys.argv[1], "w") as f:
+    for name in pin:
+        try:
+            f.write(f"{name}=={md.version(name)}\n")
+        except md.PackageNotFoundError:
+            pass
+PY
+    cat /tmp/nese-anemoi-constraint.txt
+    export PIP_CONSTRAINT=/tmp/nese-anemoi-constraint.txt
+
+    PIP="python -m pip install --no-cache-dir --root-user-action=ignore --break-system-packages"
+
+    # 1. anemoi suite + what it needs on top of NGC's stack. NO --upgrade: keep
+    #    every package NGC already ships (numpy 1.26, scipy, numcodecs 0.13, ...)
+    #    and install only what is missing, resolved against NGC's numpy. This is a
+    #    training+inference image -- no cartopy/jupyter/docs (see requirements-anemoi.txt).
+    $PIP -r /opt/nese-anemoi/requirements.txt
+
+    # best-effort: anemoi-utils[provenance] can use this; old package, may not
+    # build on py3.12 -- not worth failing the image over.
+    $PIP nvsmi || echo ">> nvsmi skipped (provenance GPU info degrades gracefully)"
+
+    # 2. editable anemoi-core over the PyPI copies. Source trees are bind-mounted
+    #    from /cluster during the build and at runtime, so .py edits stay live.
+    #    %post runs as (mapped) root; the trees are owned by the user, so git
+    #    setuptools_scm would refuse them without this.
+    git config --global --add safe.directory '*'
+    for p in @ANEMOI_CORE_DIR@/graphs @ANEMOI_CORE_DIR@/models @ANEMOI_CORE_DIR@/training ; do
+        $PIP --no-deps --no-build-isolation -e "$p"
+    done
+
+    # 3. editable nese layer (nese-inference registers the `nese-zarr`
+    #    anemoi.inference.outputs plugin, so it must be installed, not just imported)
+    $PIP --no-deps --no-build-isolation -e @NESE_INFERENCE_DIR@
+    $PIP --no-deps --no-build-isolation -e @NESE_TRAINING_DIR@
+
+%test
+# Import-only check (runs at the end of `apptainer build`; no GPU required).
+# $HOME is /root and read-only in the finished image; point config/cache dirs at
+# /tmp so matplotlib / earthkit-data init quietly (at runtime $HOME is bind-mounted).
+export HOME=/tmp MPLCONFIGDIR=/tmp XDG_CONFIG_HOME=/tmp XDG_CACHE_HOME=/tmp
+python - <<'PY'
+import torch, numpy
+import anemoi.models, anemoi.graphs, anemoi.training, nese_training, nese.inference  # noqa: F401
+try:
+    import flash_attn
+    fa = flash_attn.__version__
+except Exception as e:                       # noqa: BLE001  (no GPU at build time)
+    fa = f"unverified ({type(e).__name__})"
+from importlib.metadata import entry_points
+names = {e.name for e in entry_points(group="anemoi.inference.outputs")}
+assert "nese-zarr" in names, names
+if not torch.__version__.startswith("2.8"):
+    print("WARNING: expected torch 2.8 from NGC 25.06, got", torch.__version__)
+if fa.startswith("unverified"):
+    print("NOTE: flash_attn not confirmed at build time --", fa, "-- check on a GPU node")
+print(f"nese-anemoi %test OK -- torch {torch.__version__}, numpy {numpy.__version__}, flash_attn {fa}")
+PY
+
+%labels
+    org.nese.env    nese-anemoi
+    org.nese.base   @BASE_SIF@
+    org.nese.built  @VERSION@

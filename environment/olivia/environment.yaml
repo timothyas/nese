@@ -1,0 +1,64 @@
+# Copied from ../environment.yaml for the Olivia HPC machine.
+# Diff from ../environment.yaml:
+#   - drops `mpich` and `mpi=*=mpich`; instead pins `openmpi=5.0.*=external_*`, a
+#     contentless build that defers to Olivia's system OpenMPI 5.0.x (the `nese`
+#     modulefile loads OpenMPI/5.0.9-GCC-14.3.0 at runtime). The `external_*` builds
+#     live only on the conda-forge/label/mpi-external channel, added below.
+name: nese
+channels:
+  - conda-forge
+  - conda-forge/label/mpi-external
+  - nodefaults  # conda-forge only, otherwise can get zarr/numcodecs issues
+dependencies:
+  - python=3.13
+  # Base array ops
+  - numpy
+  - scipy
+  - seaborn
+  # xarray and files
+  - xarray
+  - pandas
+  - cf_xarray
+  - cftime
+  - netCDF4
+  - h5netcdf
+  - zarr<3
+  - numcodecs
+  - cfgrib
+  - bottleneck
+  - flox
+  - dask[complete]
+  - fsspec
+  # jupyter and plotting
+  - jupyter
+  - matplotlib
+  - cartopy
+  - cmocean
+  - ipython
+  - ipykernel
+  - jupyterlab_vim
+  - ffmpeg
+  # HPC / MPI -- link mpi4py against the system OpenMPI (module-loaded at runtime)
+  - mpi4py
+  - openmpi=5.0.*=external_*
+  # docs
+  - sphinx
+  - myst-parser
+  - sphinx-book-theme
+  # gridding
+  - healpy
+  # data access
+  - copernicusmarine
+  # Other NESE related
+  - omegaconf
+  - pydantic>=2
+  # developer
+  - setuptools_scm>=8
+  - pytest
+  - pytest-dependency
+  - coverage
+  - ruff=0.15.20
+  - pre-commit
+  - pip
+  - pip:
+    - xmovie @ git+https://github.com/timothyas/xmovie.git@b6a36ab8b4e5abcaea23a50e79b61f1ef26ca0ba

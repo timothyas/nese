@@ -1,0 +1,72 @@
+overwrite: false
+nodes:
+  data:
+    node_builder:
+      _target_: anemoi.graphs.nodes.HEALPixNodes
+      resolution: 6
+      nest_ordering: true
+    attributes:
+      area_weight:
+        _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
+        norm: unit-max
+        fill_value: 0
+      sea_mask:
+        _target_: nese_training.graph_attributes.DatasetVariableBelow
+        dataset: /Users/timith/work/nese/experimental/local-sla-02yr/gebco-anemoi-hpx6/dataset.zarr
+        variable: land_fraction
+        threshold: 0.1
+  hidden:
+    node_builder:
+      _target_: anemoi.graphs.nodes.HEALPixNodes
+      resolution: 5
+      nest_ordering: false
+    attributes:
+      area_weight:
+        _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
+        norm: unit-max
+        fill_value: 0
+edges:
+- source_name: data
+  target_name: hidden
+  edge_builders:
+  #- _target_: anemoi.graphs.edges.MutualKNNEdges
+  #  num_nearest_neighbours: 8
+  - _target_: anemoi.graphs.edges.CutOffEdges
+    cutoff_distance_km: 200
+    source_mask_attr_name: sea_mask
+  attributes:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+- source_name: hidden
+  target_name: data
+  edge_builders:
+  - _target_: anemoi.graphs.edges.KNNEdges
+    num_nearest_neighbours: 3
+    target_mask_attr_name: sea_mask
+  attributes:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+attributes:
+  nodes:
+    area_weight:
+      _target_: anemoi.graphs.nodes.attributes.SphericalAreaWeights
+      norm: unit-max
+      fill_value: 0
+  edges:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+post_processors:
+- _target_: anemoi.graphs.processors.RemoveUnconnectedNodes
+  nodes_name: data
