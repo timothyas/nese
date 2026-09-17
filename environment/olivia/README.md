@@ -65,8 +65,9 @@ This:
    is a runtime-only dep, pulled in by the modulefile, not needed for the build);
 2. `conda-containerize new` from `environment/olivia/environment.yaml` (skipped if the
    prefix already exists);
-3. `conda-containerize update` to install `nese-dataprep` and `nese-verify` editable
-   (`pip install -e`); both provide subpackages of the shared `nese` namespace;
+3. `conda-containerize update` to install `nese-logistics`, `nese-dataprep`, and
+   `nese-verify` editable (`pip install -e`); both provide subpackages of the shared
+   `nese` namespace;
 4. writes the modulefile to `$NESE_MODULES_ROOT/nese/olivia.lua`.
 
 Defaults (override by exporting before running):
@@ -74,6 +75,7 @@ Defaults (override by exporting before running):
 | var | default |
 |---|---|
 | `NESE_ENV_PREFIX` | `/cluster/projects/nn2993k/timith/sw/nese` |
+| `NESE_LOGISTICS_DIR` | `/cluster/projects/nn2993k/timith/nese-logistics` |
 | `NESE_DATAPREP_DIR` | `/cluster/projects/nn2993k/timith/nese-dataprep` |
 | `NESE_VERIFY_DIR` | `/cluster/projects/nn2993k/timith/nese-verify` |
 | `NESE_MODULES_ROOT` | `/cluster/projects/nn2993k/timith/sw/modules` |
@@ -86,7 +88,7 @@ The HTTP proxy is exported into the module as `HTTP_PROXY_URL` and
 `HTTPS_PROXY_URL`, so that all applications, like `nese-dataprep` are ready for
 internet access.
 
-`nese-dataprep` and `nese-verify` source code can be edited, since they are
+`nese-logistics`, `nese-dataprep`, and `nese-verify` source code can be edited, since they are
 editable installs.
 It is only necessary to re-run `build-env.sh` if there are changes to:
 * their package dependencies,

@@ -1,17 +1,21 @@
 #!/bin/bash
 #
 # Runs inside the Tykky container during `conda-containerize update`.
-# @DATAPREP_DIR@ and @VERIFY_DIR@ are substituted by build-env.sh before this is
-# passed to Tykky.
+# @LOGISTICS_DIR@, @DATAPREP_DIR@, and @VERIFY_DIR@ are substituted by
+# build-env.sh before this is passed to Tykky.
 #
 set -euo pipefail
 
+LOGISTICS_DIR="@LOGISTICS_DIR@"
 DATAPREP_DIR="@DATAPREP_DIR@"
 VERIFY_DIR="@VERIFY_DIR@"
 
 # Editable installs; deps already come from environment/olivia/environment.yaml.
-# Both packages share the PEP 420 `nese` namespace.
+# All packages share the PEP 420 `nese` namespace.
+# nese-logistics first: nese-dataprep and nese-verify import it, and
+# --no-deps will not fetch it.
+python -m pip install --no-deps --no-build-isolation -e "$LOGISTICS_DIR"
 python -m pip install --no-deps --no-build-isolation -e "$DATAPREP_DIR"
 python -m pip install --no-deps --no-build-isolation -e "$VERIFY_DIR"
 
-python -c "import nese.dataprep, nese.verify, mpi4py; print('post-install ok')"
+python -c "import nese.logistics, nese.dataprep, nese.verify, mpi4py; print('post-install ok')"

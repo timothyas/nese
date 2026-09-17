@@ -15,6 +15,7 @@ set -euo pipefail
 
 # --- config (override via environment) ---------------------------------------
 PREFIX="${NESE_ENV_PREFIX:-/cluster/projects/nn2993k/timith/sw/nese}"
+LOGISTICS_DIR="${NESE_LOGISTICS_DIR:-/cluster/projects/nn2993k/timith/nese-logistics}"
 DATAPREP_DIR="${NESE_DATAPREP_DIR:-/cluster/projects/nn2993k/timith/nese-dataprep}"
 VERIFY_DIR="${NESE_VERIFY_DIR:-/cluster/projects/nn2993k/timith/nese-verify}"
 MODULES_ROOT="${NESE_MODULES_ROOT:-/cluster/projects/nn2993k/timith/sw/modules}"
@@ -33,12 +34,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_YAML="$SCRIPT_DIR/environment.yaml"
 
 echo ">> prefix        : $PREFIX"
+echo ">> nese-logistics: $LOGISTICS_DIR"
 echo ">> nese-dataprep : $DATAPREP_DIR"
 echo ">> nese-verify   : $VERIFY_DIR"
 echo ">> modules root  : $MODULES_ROOT"
 echo ">> openmpi        : $OPENMPI_MOD"
 
 [ -f "$ENV_YAML" ] || { echo "!! missing $ENV_YAML" >&2; exit 1; }
+[ -d "$LOGISTICS_DIR" ] || { echo "!! missing $LOGISTICS_DIR" >&2; exit 1; }
 [ -d "$DATAPREP_DIR" ] || { echo "!! missing $DATAPREP_DIR" >&2; exit 1; }
 [ -d "$VERIFY_DIR" ] || { echo "!! missing $VERIFY_DIR" >&2; exit 1; }
 
@@ -76,12 +79,13 @@ else
     conda-containerize new --mamba --prefix "$PREFIX" "$ENV_YAML"
 fi
 
-# --- 5. post-install: editable nese-dataprep + nese-verify -----------------
+# --- 5. post-install: editable nese-logistics, nese-dataprep, nese-verify  -
 # Bake the source dirs into a generated copy of the post-install script so it does
 # not depend on Tykky forwarding environment into the build container.
 GEN_DIR="$(mktemp -d)"
 trap 'rm -rf "$GEN_DIR"' EXIT
-sed -e "s#@DATAPREP_DIR@#${DATAPREP_DIR}#g" \
+sed -e "s#@LOGISTICS_DIR@#${LOGISTICS_DIR}#g" \
+    -e "s#@DATAPREP_DIR@#${DATAPREP_DIR}#g" \
     -e "s#@VERIFY_DIR@#${VERIFY_DIR}#g" \
     "$SCRIPT_DIR/post-install.sh.in" > "$GEN_DIR/post-install.sh"
 chmod +x "$GEN_DIR/post-install.sh"
