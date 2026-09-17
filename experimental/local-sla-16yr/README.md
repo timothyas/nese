@@ -6,7 +6,7 @@ evaluation, and visualization pipelines and to make sure things are working.
 
 Goals:
 * Ensure the data prep is good to go before burning CPU hours. We've run
-  into a number of issues scaling up in @$WORK/nese-dataprep and fixed
+  into a number of issues scaling up in nese-dataprep and fixed
   those. 15 years is apparently a good stress test, even with only sla.
 * Make sure the neural network is or can actually learn something, having more data
   helps confidence here
@@ -64,6 +64,8 @@ lengths/directions and the fixed node coordinate features.
 * `trainable_size = 0` ... get rid of these and see how it impacts "lines" in
   predictions
 
+These adjustments had hardly any noticeable impact.
+
 Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)**.
 
 | Stage | Trainable params | MB |
@@ -85,6 +87,8 @@ entirely from the node embeddings and the trainable edge attributes.
 
 * With forcings
 * `trainable_size = 0`
+
+The forcings slightly reduced RMSE and Bias, but it wasn't significant.
 
 Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)**.
 
@@ -110,6 +114,9 @@ processor is untouched, as it only ever sees the 128 hidden channels.
 * Remove land points with nese-dataprep, rather than with masking
     * Keep `land_fraction` with `min-max` normalization,
       even though this just indicates coastal points
+
+As expected, everything looks the same, but we've removed some unnecessary
+nodes.
 
 Model size: **~1.25 M trainable parameters, 5.0 MB of weights (fp32)** -- identical to
 version 2.
@@ -151,40 +158,6 @@ Same as verison 3, but with a Matern loss penalty turned on, defined with
     * `order` = M = 2
     * `rho_hat` = 8 ~= 815 km to correlation drops to 0.14
     * only turned on at points with at least 3 neighbors
-
-
-### Version Np
-
-Capturing epistemic uncertainty with dropout.
-Note: the dropout implementation blows up memory on the CPU, but is basically
-free on the GPU.
-So, this will wait for now.
-
-* With forcings
-* `trainable_size = 0`
-* Remove land points with nese-dataprep
-* `dropout_p = 0.1`
-
-### Version Nt
-
-* With forcings
-* `trainable_size = 0`
-* Remove land points with nese-dataprep
-* Randomly remove 30% of input and target observations
-
-### Version Nb
-
-
-### After that ...
-
-* Predict full state at multiple time steps, or `obs(t-win, t) -> x(t)` with
-  removed points
-* Tackle some of the network oddities noted when visualizing the architecture
-* Use a "pooled" error metric for the loss, normalizing over observation counts
-  rather than just num missions (probably not impactful, but cleaner)
-* dropout > 0, note this only affects training. anemoi-inference is
-  deterministic
-
 
 ## Step-by-step
 
