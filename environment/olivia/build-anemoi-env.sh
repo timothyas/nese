@@ -149,7 +149,7 @@ Verify (imports + CUDA visibility; no training run):
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" python -c \\
       "import sys, anemoi.models, anemoi.graphs, anemoi.training, nese_training, nese.logistics, nese.inference; print(sys.version)"
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" python -c \\
-      "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"   # must say 'Open MPI'
+      "import mpi4py; mpi4py.rc.initialize=False; from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"   # must say 'Open MPI'
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" python -c \\
       "from importlib.metadata import entry_points; print('nese-zarr' in {e.name for e in entry_points(group='anemoi.inference.outputs')})"
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" anemoi-training --help

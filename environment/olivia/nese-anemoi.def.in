@@ -95,7 +95,14 @@ import torch, numpy, dask.array  # noqa: F401
 import anemoi.models, anemoi.graphs, anemoi.training  # noqa: F401
 import nese_training, nese.logistics, nese.inference  # noqa: F401
 
-# A bundled-MPICH wheel would import just as happily and be the wrong MPI.
+# Which MPI mpi4py linked -- a bundled-MPICH wheel would import just as happily
+# and be the wrong one. Importing mpi4py.MPI normally runs MPI_Init, which aborts
+# here: the build runs inside an salloc, so OpenMPI sees SLURM_* and demands a PMI
+# it was not built against. MPI_Get_library_version is valid before MPI_Init, so
+# skip the init entirely -- this is a linkage check, not an MPI run.
+import mpi4py
+mpi4py.rc.initialize = False
+mpi4py.rc.finalize = False
 from mpi4py import MPI
 mpi = MPI.Get_library_version().splitlines()[0].strip()
 assert mpi.startswith("Open MPI"), f"mpi4py linked {mpi!r}, expected the container's HPC-X Open MPI"

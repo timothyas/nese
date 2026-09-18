@@ -332,10 +332,23 @@ container. Mirror changes there, applying:
   one about `nese-inference`'s `nese-logistics @ git+...` direct URL being satisfied
   by the editable local clone.
 - **mpi4py linked the wrong MPI**:
-  `apptainer exec "$NESE_ANEMOI_SIF" python -c "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"`
+  ```bash
+  apptainer exec "$NESE_ANEMOI_SIF" python -c \
+    "import mpi4py; mpi4py.rc.initialize=False; from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"
+  ```
   must print `Open MPI`. `MPICH` means a PyPI wheel slipped past the `--no-binary`
   in `%post`; the image's `%test` fails the build on this, so it should never reach
   a run.
+- **`OPAL ERROR: Unreachable in pmix3x_client.c` / "appears to have been direct
+  launched using srun, but OMPI was not built with SLURM's PMI support"** from a
+  plain `import mpi4py.MPI`: importing `mpi4py.MPI` runs `MPI_Init`, and inside an
+  `salloc`/`srun` the container's OpenMPI sees `SLURM_*`, assumes it was direct
+  launched, and looks for a Slurm PMI it was not built against. This is why the
+  `%test` and the check above set `mpi4py.rc.initialize = False`
+  (`MPI_Get_library_version` is valid before `MPI_Init`), and why real runs go
+  through the container's own `mpirun` with `OMPI_MCA_plm=isolated` rather than
+  `srun -n N`. A bare `python -c "import mpi4py.MPI"` on a login node, outside any
+  allocation, initialises fine.
 - **`mpirun` inside the container hangs, or complains it cannot find `srun`**:
   `OMPI_MCA_plm=isolated` is missing. Without it OpenMPI 4.1 sees `SLURM_*` and
   tries to launch through the host's `srun`, which is not in the image.
