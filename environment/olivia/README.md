@@ -220,6 +220,13 @@ salloc --nodes=1 --cpus-per-task=64 --mem=200G --gpus-per-node=0 \
 bash environment/olivia/build-anemoi-env.sh
 ```
 
+If you want a unique log for each build attempt, it might be useful to pipe the
+output to a log file as follows:
+
+```bash
+bash environment/olivia/build-anemoi-env.sh 2>&1 | tee ~/nese-anemoi-build-$(date +%Y%m%d-%H%M%S).log
+```
+
 This:
 1. checks the host is aarch64, the source trees exist, and `anemoi-core` is on
    `feature/ordering-kwarg-schema` (training configs need its `nest_ordering`
