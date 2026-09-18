@@ -18,5 +18,4 @@ movie:
   fhr: 24
   left_panel: all_input_obs_locations
   regions:
-    - global
     - tropical_pacific
