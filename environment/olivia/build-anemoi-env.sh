@@ -11,7 +11,7 @@
 # Unlike the CPU `nese` env (Tykky / conda-containerize), this is a custom
 # Apptainer image: conda-forge has no linux-aarch64 CUDA PyTorch, and NRIS says to
 # use the NGC PyTorch container. We extend that container (arm64) with the anemoi
-# suite + editable anemoi-core / nese-inference / nese-training. See
+# suite + editable anemoi-core / nese-logistics / nese-inference / nese-training. See
 # environment/olivia/README.md.
 #
 set -euo pipefail
@@ -23,6 +23,7 @@ BASE_SIF="${NESE_ANEMOI_BASE_SIF:-/cluster/work/support/container/pytorch_nvidia
 NGC_URL="${NESE_ANEMOI_NGC_URL:-docker://nvcr.io/nvidia/pytorch:25.06-py3}"
 MODULES_ROOT="${NESE_ANEMOI_MODULES_ROOT:-/cluster/projects/nn2993k/timith/sw/modules}"
 ANEMOI_CORE_DIR="${NESE_ANEMOI_CORE_DIR:-/cluster/projects/nn2993k/timith/anemoi-core}"
+NESE_LOGISTICS_DIR="${NESE_LOGISTICS_DIR:-/cluster/projects/nn2993k/timith/nese-logistics}"
 NESE_INFERENCE_DIR="${NESE_INFERENCE_DIR:-/cluster/projects/nn2993k/timith/nese-inference}"
 NESE_TRAINING_DIR="${NESE_TRAINING_DIR:-/cluster/projects/nn2993k/timith/nese/training}"
 HTTP_PROXY_URL="${NESE_ANEMOI_HTTP_PROXY:-http://10.63.2.48:3128/}"
@@ -41,6 +42,7 @@ echo ">> prefix         : $PREFIX"
 echo ">> image          : $SIF"
 echo ">> base image     : $BASE_SIF"
 echo ">> anemoi-core    : $ANEMOI_CORE_DIR"
+echo ">> nese-logistics : $NESE_LOGISTICS_DIR"
 echo ">> nese-inference : $NESE_INFERENCE_DIR"
 echo ">> nese-training  : $NESE_TRAINING_DIR"
 echo ">> modules root   : $MODULES_ROOT"
@@ -59,7 +61,7 @@ fi
 [ -n "${SLURM_JOB_ID:-}" ] || echo "!! warning: no SLURM allocation -- the build is heavy, use salloc on 'accel'" >&2
 
 for d in "$ANEMOI_CORE_DIR/graphs" "$ANEMOI_CORE_DIR/models" "$ANEMOI_CORE_DIR/training" \
-         "$NESE_INFERENCE_DIR" "$NESE_TRAINING_DIR"; do
+         "$NESE_LOGISTICS_DIR" "$NESE_INFERENCE_DIR" "$NESE_TRAINING_DIR"; do
     [ -d "$d" ] || { echo "!! missing source dir: $d" >&2; exit 1; }
 done
 [ -f "$DEF_IN" ] || { echo "!! missing $DEF_IN" >&2; exit 1; }
@@ -108,6 +110,7 @@ sed -e "s#@BASE_SIF@#${BASE_SIF}#g" \
     -e "s#@REQUIREMENTS_TXT@#${REQ}#g" \
     -e "s#@HTTP_PROXY@#${HTTP_PROXY_URL}#g" \
     -e "s#@ANEMOI_CORE_DIR@#${ANEMOI_CORE_DIR}#g" \
+    -e "s#@NESE_LOGISTICS_DIR@#${NESE_LOGISTICS_DIR}#g" \
     -e "s#@NESE_INFERENCE_DIR@#${NESE_INFERENCE_DIR}#g" \
     -e "s#@NESE_TRAINING_DIR@#${NESE_TRAINING_DIR}#g" \
     -e "s#@VERSION@#${VERSION}#g" \
@@ -144,7 +147,9 @@ Done. To use the environment:
 Verify (imports + CUDA visibility; no training run):
 
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" python -c \\
-      "import sys, anemoi.models, anemoi.graphs, anemoi.training, nese_training, nese.inference; print(sys.version)"
+      "import sys, anemoi.models, anemoi.graphs, anemoi.training, nese_training, nese.logistics, nese.inference; print(sys.version)"
+    apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" python -c \\
+      "from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"   # must say 'Open MPI'
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" python -c \\
       "from importlib.metadata import entry_points; print('nese-zarr' in {e.name for e in entry_points(group='anemoi.inference.outputs')})"
     apptainer exec --bind /cluster "\$NESE_ANEMOI_SIF" anemoi-training --help

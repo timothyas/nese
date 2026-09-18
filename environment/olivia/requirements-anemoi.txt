@@ -14,8 +14,11 @@
 #     kept and only the lines below are added.
 #   - NO torch / torchvision / numpy here (frozen to NGC's by the minimal
 #     PIP_CONSTRAINT the def builds).
-#   - anemoi-core (graphs/models/training), nese-inference, nese-training are
-#     editable installs done in %post, not listed here.
+#   - anemoi-core (graphs/models/training), nese-logistics, nese-inference,
+#     nese-training are editable installs done in %post, not listed here.
+#   - mpi4py is NOT here either: PyPI's manylinux wheels bundle their own MPICH,
+#     so it gets its own `--no-binary` line in %post, built against the
+#     container's HPC-X OpenMPI.
 # Mirror relevant changes to ../environment-anemoi.yaml here.
 
 # --- guardrails: satisfied by the NGC image, pinned to catch a bad base image ---
@@ -44,6 +47,9 @@ nvidia-ml-py>=13.580.82
 typeguard>=4
 plotly>=5.19
 omegaconf
+# core dask only -- the pip package, unlike the conda one, is not a metapackage, so
+# no distributed/bokeh/pyarrow. nese-inference preallocates its zarr store with it.
+dask
 healpy
 matplotlib
 xarray

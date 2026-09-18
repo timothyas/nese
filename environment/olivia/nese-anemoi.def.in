@@ -4,7 +4,8 @@ From: @BASE_SIF@
 # Template. environment/olivia/build-anemoi-env.sh substitutes @...@ and runs
 #   apptainer build --fakeroot --bind /cluster <sif> <rendered def>
 # on an aarch64 `accel` node. Extends the NVIDIA NGC PyTorch container (arm64)
-# with the anemoi suite + editable anemoi-core / nese-inference / nese-training.
+# with the anemoi suite + editable anemoi-core / nese-logistics / nese-inference /
+# nese-training.
 # torch / torchvision / CUDA / NCCL are the container's and are left untouched.
 # NOTE: %files source paths resolve against the build CWD; build-anemoi-env.sh
 # substitutes @REQUIREMENTS_TXT@ with an absolute path.
@@ -57,6 +58,12 @@ PY
     #    training+inference image -- no cartopy/jupyter/docs (see requirements-anemoi.txt).
     $PIP -r /opt/nese-anemoi/requirements.txt
 
+    # mpi4py against the container's own HPC-X OpenMPI (/opt/hpcx/ompi). PyPI's
+    # manylinux wheels bundle MPICH, which would build and import fine and then be
+    # the wrong MPI -- hence --no-binary. nese-inference runs one rank per initial
+    # condition through it.
+    MPICC=/opt/hpcx/ompi/bin/mpicc $PIP --no-binary=mpi4py "mpi4py>=4"
+
     # best-effort: anemoi-utils[provenance] can use this; old package, may not
     # build on py3.12 -- not worth failing the image over.
     $PIP nvsmi || echo ">> nvsmi skipped (provenance GPU info degrades gracefully)"
@@ -70,8 +77,11 @@ PY
         $PIP --no-deps --no-build-isolation -e "$p"
     done
 
-    # 3. editable nese layer (nese-inference registers the `nese-zarr`
-    #    anemoi.inference.outputs plugin, so it must be installed, not just imported)
+    # 3. editable nese layer. nese-logistics, nese-inference and nese-training are
+    #    three subpackages of one PEP 420 `nese` namespace. nese-inference registers
+    #    the `nese-zarr` anemoi.inference.outputs plugin, so it must be installed,
+    #    not just imported.
+    $PIP --no-deps --no-build-isolation -e @NESE_LOGISTICS_DIR@
     $PIP --no-deps --no-build-isolation -e @NESE_INFERENCE_DIR@
     $PIP --no-deps --no-build-isolation -e @NESE_TRAINING_DIR@
 
@@ -81,8 +91,14 @@ PY
 # /tmp so matplotlib / earthkit-data init quietly (at runtime $HOME is bind-mounted).
 export HOME=/tmp MPLCONFIGDIR=/tmp XDG_CONFIG_HOME=/tmp XDG_CACHE_HOME=/tmp
 python - <<'PY'
-import torch, numpy
-import anemoi.models, anemoi.graphs, anemoi.training, nese_training, nese.inference  # noqa: F401
+import torch, numpy, dask.array  # noqa: F401
+import anemoi.models, anemoi.graphs, anemoi.training  # noqa: F401
+import nese_training, nese.logistics, nese.inference  # noqa: F401
+
+# A bundled-MPICH wheel would import just as happily and be the wrong MPI.
+from mpi4py import MPI
+mpi = MPI.Get_library_version().splitlines()[0].strip()
+assert mpi.startswith("Open MPI"), f"mpi4py linked {mpi!r}, expected the container's HPC-X Open MPI"
 try:
     import flash_attn
     fa = flash_attn.__version__
@@ -95,7 +111,8 @@ if not torch.__version__.startswith("2.8"):
     print("WARNING: expected torch 2.8 from NGC 25.06, got", torch.__version__)
 if fa.startswith("unverified"):
     print("NOTE: flash_attn not confirmed at build time --", fa, "-- check on a GPU node")
-print(f"nese-anemoi %test OK -- torch {torch.__version__}, numpy {numpy.__version__}, flash_attn {fa}")
+print(f"nese-anemoi %test OK -- torch {torch.__version__}, numpy {numpy.__version__}, "
+      f"flash_attn {fa}, {mpi}")
 PY
 
 %labels
