@@ -171,7 +171,7 @@ srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env OMPI_MCA_pml=ob1 \
     --env OMPI_MCA_btl=self,vader \
     "$NESE_ANEMOI_SIF" \
-    mpirun -n 4 nese-inference run config.yaml
+    mpirun -n 4 --oversubscribe --bind-to none nese-inference run config.yaml
 ```
 
 See `examples/submit_inference_1node.sh` for the full job script.
@@ -190,9 +190,13 @@ name.
 
 Multi-node inference is **untested**. It would mean giving up the in-container
 launch: bind the host OpenMPI as `anemoi-train-multinode.slurm` does
-(`--bind "$EBROOTOPENMPI":/opt/openmpi`) and launch with `srun --mpi=pmix`. A sweep
-large enough to want it is also large enough to just submit as several one-node jobs
-over disjoint `date_range`s.
+(`--bind "$EBROOTOPENMPI":/opt/openmpi`) and launch with `srun --mpi=pmix`.
+
+Splitting a sweep across several one-node jobs instead is possible, but each job
+needs its own `store_dir`: the store's `t0` axis is laid out from that run's own
+`date_range`, and a second job pointed at the same store hits `FileExistsError`, or
+deletes the first job's output if the config says `overwrite: true`. Concatenate the
+per-job stores on `t0` afterwards.
 
 ### Build / rebuild
 
@@ -349,6 +353,12 @@ container. Mirror changes there, applying:
   through the container's own `mpirun` with `OMPI_MCA_plm=isolated` rather than
   `srun -n N`. A bare `python -c "import mpi4py.MPI"` on a login node, outside any
   allocation, initialises fine.
+- **"There are not enough slots available in the system to satisfy the N slots
+  that were requested"**: OpenMPI asked Slurm for a slot count and got the number of
+  *tasks* (1), not the number of cores the task holds. Add `--oversubscribe
+  --bind-to none` to the `mpirun` line -- nothing is actually oversubscribed, and
+  without `--bind-to none` the ranks all bind to the single core OpenMPI thinks the
+  job has.
 - **`mpirun` inside the container hangs, or complains it cannot find `srun`**:
   `OMPI_MCA_plm=isolated` is missing. Without it OpenMPI 4.1 sees `SLURM_*` and
   tries to launch through the host's `srun`, which is not in the image.
