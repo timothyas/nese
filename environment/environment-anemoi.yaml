@@ -10,6 +10,7 @@
 #   pip install --no-deps --no-build-isolation -e $WORK/anemoi-core/graphs
 #   pip install --no-deps --no-build-isolation -e $WORK/anemoi-core/models
 #   pip install --no-deps --no-build-isolation -e $WORK/anemoi-core/training
+#   pip install --no-deps -e $WORK/nese-logistics
 #   pip install --no-deps -e $WORK/nese-inference
 #   pip install --no-deps -e $WORK/nese/training
 #
@@ -70,6 +71,12 @@ dependencies:
   - xarray
   - pyyaml
   - netCDF4
+  - dask-core  # only dask.array (the preallocated zarr container); the 'dask' meta
+               # pulls distributed+bokeh+pyarrow
+  # nese-logistics: one rank per initial condition in a nese-inference sweep.
+  # MPICH, as `environment.yaml` does -- more reliable on the macOS dev machine.
+  - mpich
+  - mpi4py
   # jupyter and plotting
   - jupyter
   - ipython

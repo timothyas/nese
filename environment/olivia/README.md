@@ -146,6 +146,9 @@ apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" anemoi-training train --c
 
 The `nese-anemoi` environment is for training, inference, and other
 workflows involving anemoi packages.
+It carries the anemoi suite plus editable `anemoi-core`, `nese-logistics`,
+`nese-inference` and `nese-training`, and -- for parallel inference sweeps --
+`dask` and an `mpi4py` built against the container's own OpenMPI.
 Due to some build issues (e.g., cartopy has no aarch64 wheel and forces
 `numpy>=2`) the specialized plotting, notebook, and documentation packages are
 not included.
@@ -156,6 +159,45 @@ matplotlib is included, however, for basic diagnostic plots during training.
   script carries the NRIS bind list and module set (confirm versions with
   `module spider`).
 
+### Running parallel inference
+
+A `nese-inference` sweep runs one MPI rank per initial condition, so a GH200 node
+runs four forecasts at a time. Launch the container's **own** `mpirun` from a single
+Slurm task:
+
+```bash
+srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
+    --env OMPI_MCA_plm=isolated \
+    --env OMPI_MCA_pml=ob1 \
+    --env OMPI_MCA_btl=self,vader \
+    "$NESE_ANEMOI_SIF" \
+    mpirun -n 4 --oversubscribe --bind-to none nese-inference run config.yaml
+```
+
+See `examples/submit_inference_1node.sh` for the full job script.
+
+Not `srun -n 4 apptainer exec ...`: that would make the container's MPI talk to the
+host's Slurm PMI, and the container's HPC-X OpenMPI 4.1 is not the host's OpenMPI 5.
+Launching inside one task sidesteps the question entirely, which is affordable here
+because the ranks only ever barrier -- the sweep writes disjoint regions of one zarr
+store and needs no other communication (see nese-inference `docs/parallel.md`).
+
+The two `OMPI_MCA` overrides are load-bearing. `plm=isolated` stops OpenMPI, which
+sees `SLURM_*` in the environment, from trying to launch its `orted` helper through
+an `srun` that does not exist inside the container. `btl=self,vader` is the 4.1
+spelling of shared memory; `sm`, which the CPU `nese` module sets, is the OpenMPI 5
+name.
+
+Multi-node inference is **untested**. It would mean giving up the in-container
+launch: bind the host OpenMPI as `anemoi-train-multinode.slurm` does
+(`--bind "$EBROOTOPENMPI":/opt/openmpi`) and launch with `srun --mpi=pmix`.
+
+Splitting a sweep across several one-node jobs instead is possible, but each job
+needs its own `store_dir`: the store's `t0` axis is laid out from that run's own
+`date_range`, and a second job pointed at the same store hits `FileExistsError`, or
+deletes the first job's output if the config says `overwrite: true`. Concatenate the
+per-job stores on `t0` afterwards.
+
 ### Build / rebuild
 
 `nese-anemoi` is **not** a Tykky container: on
@@ -164,7 +206,8 @@ no linux-aarch64 CUDA build of PyTorch, and NRIS's guidance is to use the NVIDIA
 NGC PyTorch container. So `nese-anemoi` is a custom Apptainer image: NRIS's staged
 NGC arm64 PyTorch container (`pytorch_nvidia_25.06_arm64.sif` -- torch 2.8 / CUDA
 12.9 / Python 3.12) extended with the anemoi PyPI packages and editable
-`anemoi-core/{graphs,models,training}`, `nese-inference`, `nese/training`. torch /
+`anemoi-core/{graphs,models,training}`, `nese-logistics`, `nese-inference`,
+`nese/training`. torch /
 torchvision / CUDA / NCCL / **flash-attn** / Transformer Engine are the container's
 and are never touched by pip (the NGC image already ships `flash_attn`, so there is
 no source build). The `%post` install runs **without `--upgrade`**, so every
@@ -179,6 +222,13 @@ However, we can do a proper build by requesting 0 GPUs:
 salloc --nodes=1 --cpus-per-task=64 --mem=200G --gpus-per-node=0 \
        --qos=devel --time=01:00:00 --partition=accel --account=nn2993k
 bash environment/olivia/build-anemoi-env.sh
+```
+
+If you want a unique log for each build attempt, it might be useful to pipe the
+output to a log file as follows:
+
+```bash
+bash environment/olivia/build-anemoi-env.sh 2>&1 | tee ~/nese-anemoi-build-$(date +%Y%m%d-%H%M%S).log
 ```
 
 This:
@@ -202,6 +252,7 @@ Defaults (override by exporting before running):
 | `NESE_ANEMOI_NGC_URL` | `docker://nvcr.io/nvidia/pytorch:25.06-py3` |
 | `NESE_ANEMOI_MODULES_ROOT` | `/cluster/projects/nn2993k/timith/sw/modules` |
 | `NESE_ANEMOI_CORE_DIR` | `/cluster/projects/nn2993k/timith/anemoi-core` |
+| `NESE_LOGISTICS_DIR` | `/cluster/projects/nn2993k/timith/nese-logistics` |
 | `NESE_INFERENCE_DIR` | `/cluster/projects/nn2993k/timith/nese-inference` |
 | `NESE_TRAINING_DIR` | `/cluster/projects/nn2993k/timith/nese/training` |
 | `NESE_ANEMOI_HTTP_PROXY` | `http://10.63.2.48:3128` |
@@ -209,8 +260,8 @@ Defaults (override by exporting before running):
 The base image is referenced straight from NRIS's staged path, it is not copied.
 If NRIS removes or bumps it, we will need to rebuild.
 
-`.py` edits in `anemoi-core`, `nese-inference`, `nese/training` are live (editable
-installs, source bind-mounted from `/cluster`). Rebuild only after changing a
+`.py` edits in `anemoi-core`, `nese-logistics`, `nese-inference`, `nese/training`
+are live (editable installs, source bind-mounted from `/cluster`). Rebuild only after changing a
 **dependency**, **entry point**, or **version**, or after editing
 `requirements-anemoi.txt` / `nese-anemoi.def.in`.
 
@@ -219,6 +270,10 @@ installs, source bind-mounted from `/cluster`). Rebuild only after changing a
 - **Permanent:** add it to `requirements-anemoi.txt` (PyPI), or to the `%post`
   `apt-get` line (system lib) / the editable loop (another local repo) in
   `nese-anemoi.def.in`, then rebuild.
+  The one exception is `mpi4py`: it has its own `%post` line rather than a
+  requirements entry, because PyPI's manylinux wheels bundle their own MPICH and it
+  has to be compiled `--no-binary` against the container's HPC-X OpenMPI
+  (`MPICC=/opt/hpcx/ompi/bin/mpicc`) instead.
 - **Throwaway (no rebuild):** an Apptainer overlay --
   `apptainer overlay create --sparse --size 5120 ov.img`, then
   `apptainer exec --overlay ov.img "$NESE_ANEMOI_SIF" pip install <pkg>` in a
@@ -239,7 +294,8 @@ container. Mirror changes there, applying:
   `zarr<3`, ...);
 - Use `python=3.12` instead of `python=3.13`. Note anemoi states 3.12 anyway;
 - conda -> pip renames: `pytorch_geometric` -> `torch-geometric`;
-- `anemoi-core` packages are editable (`%post`), not listed.
+- `anemoi-core` and the `nese` packages are editable (`%post`), not listed; nor is
+  `mpi4py`, which `%post` compiles against the container's OpenMPI.
 
 ### Build Troubleshooting
 
@@ -276,7 +332,36 @@ container. Mirror changes there, applying:
   must print `2.8...` / `12.9`. A `+cpu` build or a plain-PyPI version means a
   requirement dodged `PIP_CONSTRAINT` -- pin it in `requirements-anemoi.txt`.
 - **`pip check`** warnings about `anemoi-inference==0.11.2` vs the editable
-  `anemoi-models` / `-graphs` / `-training` versions are expected and harmless.
+  `anemoi-models` / `-graphs` / `-training` versions are expected and harmless. So is
+  one about `nese-inference`'s `nese-logistics @ git+...` direct URL being satisfied
+  by the editable local clone.
+- **mpi4py linked the wrong MPI**:
+  ```bash
+  apptainer exec "$NESE_ANEMOI_SIF" python -c \
+    "import mpi4py; mpi4py.rc.initialize=False; from mpi4py import MPI; print(MPI.Get_library_version().splitlines()[0])"
+  ```
+  must print `Open MPI`. `MPICH` means a PyPI wheel slipped past the `--no-binary`
+  in `%post`; the image's `%test` fails the build on this, so it should never reach
+  a run.
+- **`OPAL ERROR: Unreachable in pmix3x_client.c` / "appears to have been direct
+  launched using srun, but OMPI was not built with SLURM's PMI support"** from a
+  plain `import mpi4py.MPI`: importing `mpi4py.MPI` runs `MPI_Init`, and inside an
+  `salloc`/`srun` the container's OpenMPI sees `SLURM_*`, assumes it was direct
+  launched, and looks for a Slurm PMI it was not built against. This is why the
+  `%test` and the check above set `mpi4py.rc.initialize = False`
+  (`MPI_Get_library_version` is valid before `MPI_Init`), and why real runs go
+  through the container's own `mpirun` with `OMPI_MCA_plm=isolated` rather than
+  `srun -n N`. A bare `python -c "import mpi4py.MPI"` on a login node, outside any
+  allocation, initialises fine.
+- **"There are not enough slots available in the system to satisfy the N slots
+  that were requested"**: OpenMPI asked Slurm for a slot count and got the number of
+  *tasks* (1), not the number of cores the task holds. Add `--oversubscribe
+  --bind-to none` to the `mpirun` line -- nothing is actually oversubscribed, and
+  without `--bind-to none` the ranks all bind to the single core OpenMPI thinks the
+  job has.
+- **`mpirun` inside the container hangs, or complains it cannot find `srun`**:
+  `OMPI_MCA_plm=isolated` is missing. Without it OpenMPI 4.1 sees `SLURM_*` and
+  tries to launch through the host's `srun`, which is not in the image.
 - **`Boolean1DMask` CPU/GPU device mismatch** at scaler construction on the first
   GPU run -- see `experimental/local-sla-16yr/scaling_up.md`.
 - **Benign build warnings** (image is fine):
