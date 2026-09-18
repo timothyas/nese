@@ -38,6 +38,8 @@
     * We have created $WORK/nese-inference to run inference, which is a thin
       layer over the anemoi-inference package
     * We have created $WORK/nese-verify for evaluation and visualization
+    * We have created $WORK/nese-logistics as a common "helper" package,
+      providing MPI and Logging support to all of the NESE packages
 
 ## Environment Rules
 
