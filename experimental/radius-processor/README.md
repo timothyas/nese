@@ -78,7 +78,7 @@ that mask block-sparse.
 regardless of node order, which removes the nested-HEALPix asymmetry.
 The hidden mesh is switched to nested ordering because that keeps each 128-node
 block spatially compact, which matters for block sparsity.
-Backends: `sdpa` (dense mask, laptop) and `flex` (`flex_attention` with a
+`attention_implementation`: `scaled_dot_product_attention` (dense mask, laptop) or `flex_attention` (with a
 `BlockMask`, compiled on CUDA, untested on GPU so far).
 Sharded processor edges (multi-GPU model parallelism) are not supported yet.
 
@@ -113,6 +113,6 @@ pair is the open question for Olivia.
 | processor | train loss (epoch) | val loss (10 batches) | wall time |
 |---|---|---|---|
 | sliding window ±512, RING | 1.30 | 1.18 | 6:54 |
-| 1000 km disk, NEST, `sdpa` | 1.28 | 1.16 | 7:07 |
+| 1000 km disk, NEST, `scaled_dot_product_attention` | 1.28 | 1.16 | 7:07 |
 
 The radius processor trains end to end and matches the band at this (tiny) scale.

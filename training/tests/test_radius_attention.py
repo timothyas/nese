@@ -16,16 +16,18 @@ from nese_training.radius_attention import adjacency_mask
 EARTH_RADIUS_KM = 6371.0
 RADIUS_KM = 4000.0
 GLOBAL_RADIUS_KM = 13000.0
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
 def hidden_graph(radius_km: float, nest_ordering: bool = True) -> HeteroData:
+    """Graph on ``DEVICE``, since anemoi's builders pick the device themselves."""
     graph = HEALPixNodes(resolution=2, name="hidden", nest_ordering=nest_ordering).update_graph(HeteroData())
     edges = CutOffEdges("hidden", "hidden", cutoff_distance_km=radius_km, max_num_neighbours=1024)
-    return edges.update_graph(graph)
+    return edges.update_graph(graph).to(DEVICE)
 
 
 def unit_vectors(graph: HeteroData) -> np.ndarray:
-    lat, lon = graph["hidden"].x.numpy().T
+    lat, lon = graph["hidden"].x.cpu().numpy().T
     return np.stack([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)], axis=-1)
 
 
@@ -49,7 +51,7 @@ def batched_edge_index(edge_index: torch.Tensor, num_nodes: int, batch_size: int
 @pytest.mark.parametrize("nest_ordering", [True, False])
 def test_mask_is_symmetric_disk_with_self_attention(nest_ordering):
     graph = hidden_graph(RADIUS_KM, nest_ordering)
-    mask = adjacency_mask(graph["hidden", "to", "hidden"].edge_index, graph["hidden"].num_nodes).numpy()
+    mask = adjacency_mask(graph["hidden", "to", "hidden"].edge_index, graph["hidden"].num_nodes).cpu().numpy()
 
     xyz = unit_vectors(graph)
     chord = np.linalg.norm(xyz[:, None] - xyz[None], axis=-1)
@@ -72,11 +74,11 @@ def test_batched_edges_fold_onto_same_mask():
 
 def test_masked_sdpa_matches_naive_softmax():
     torch.manual_seed(0)
-    query, key, value = torch.randn(3, 2, 4, 50, 8).unbind(0)
-    mask = torch.rand(50, 50) < 0.2
-    mask |= torch.eye(50, dtype=torch.bool)
+    query, key, value = torch.randn(3, 2, 4, 50, 8, device=DEVICE).unbind(0)
+    mask = torch.rand(50, 50, device=DEVICE) < 0.2
+    mask |= torch.eye(50, dtype=torch.bool, device=DEVICE)
 
-    attention = MaskedAttentionWrapper("sdpa")
+    attention = MaskedAttentionWrapper("scaled_dot_product_attention")
     attention.set_mask(mask)
 
     logits = query @ key.transpose(-1, -2) / 8**0.5
@@ -86,14 +88,15 @@ def test_masked_sdpa_matches_naive_softmax():
 
 def test_flex_matches_sdpa():
     torch.manual_seed(0)
-    query, key, value = torch.randn(3, 1, 4, 192, 16).unbind(0)
+    query, key, value = torch.randn(3, 1, 4, 192, 16, device=DEVICE).unbind(0)
     graph = hidden_graph(RADIUS_KM)
     mask = adjacency_mask(graph["hidden", "to", "hidden"].edge_index, graph["hidden"].num_nodes)
 
-    sdpa, flex = MaskedAttentionWrapper("sdpa"), MaskedAttentionWrapper("flex")
+    sdpa, flex = MaskedAttentionWrapper("scaled_dot_product_attention"), MaskedAttentionWrapper("flex_attention")
     sdpa.set_mask(mask)
     flex.set_mask(mask)
-    torch.testing.assert_close(flex(query, key, value, 1), sdpa(query, key, value, 1), atol=1e-5, rtol=1e-5)
+    tolerance = 5e-3 if DEVICE.type == "cuda" else 1e-5  # the flex triton kernel matmuls in tf32
+    torch.testing.assert_close(flex(query, key, value, 1), sdpa(query, key, value, 1), atol=tolerance, rtol=tolerance)
 
 
 def test_global_radius_matches_full_attention_transformer():
@@ -102,11 +105,11 @@ def test_global_radius_matches_full_attention_transformer():
     num_nodes, batch_size = graph["hidden"].num_nodes, 2
     edge_index = batched_edge_index(graph["hidden", "to", "hidden"].edge_index, num_nodes, batch_size)
 
-    reference = TransformerProcessor(**processor_config())
-    radius = RadiusTransformerProcessor(**processor_config())
+    reference = TransformerProcessor(**processor_config()).to(DEVICE)
+    radius = RadiusTransformerProcessor(**processor_config()).to(DEVICE)
     radius.load_state_dict(reference.state_dict())
 
-    x = torch.randn(batch_size * num_nodes, 32)
+    x = torch.randn(batch_size * num_nodes, 32, device=DEVICE)
     shard_info = GraphShardInfo(nodes=[num_nodes])
     torch.testing.assert_close(
         radius(x, batch_size, shard_info, edge_index=edge_index),
@@ -121,9 +124,9 @@ def test_single_layer_only_sees_nodes_inside_radius():
     edge_index = graph["hidden", "to", "hidden"].edge_index
     mask = adjacency_mask(edge_index, num_nodes)
 
-    processor = RadiusTransformerProcessor(**processor_config(num_layers=1)).eval()
+    processor = RadiusTransformerProcessor(**processor_config(num_layers=1)).to(DEVICE).eval()
     shard_info = GraphShardInfo(nodes=[num_nodes])
-    x = torch.randn(num_nodes, 32, requires_grad=True)
+    x = torch.randn(num_nodes, 32, device=DEVICE, requires_grad=True)
 
     query_node = 0
     output = processor(x, 1, shard_info, edge_index=edge_index)
@@ -137,4 +140,30 @@ def test_single_layer_only_sees_nodes_inside_radius():
 def test_requires_hidden_edges():
     processor = RadiusTransformerProcessor(**processor_config())
     with pytest.raises(AssertionError, match="hidden, to, hidden"):
-        processor(torch.randn(10, 32), 1, GraphShardInfo(nodes=[10]))
+        processor(torch.randn(10, 32, device=DEVICE), 1, GraphShardInfo(nodes=[10]))
+
+
+def test_rejects_unknown_attention_implementation():
+    with pytest.raises(ValueError, match="attention_implementation"):
+        RadiusTransformerProcessor(**{**processor_config(), "attention_implementation": "flash_attention"})
+
+
+def test_rejects_dropout_with_flex_attention():
+    config = {**processor_config(), "attention_implementation": "flex_attention", "dropout_p": 0.1}
+    with pytest.raises(ValueError, match="dropout"):
+        RadiusTransformerProcessor(**config)
+
+
+def test_dropout_is_passed_to_masked_sdpa():
+    torch.manual_seed(0)
+    processor = RadiusTransformerProcessor(**{**processor_config(num_layers=1), "dropout_p": 0.5}).to(DEVICE).train()
+    graph = hidden_graph(RADIUS_KM)
+    num_nodes = graph["hidden"].num_nodes
+    edge_index = graph["hidden", "to", "hidden"].edge_index
+
+    x = torch.randn(num_nodes, 32, device=DEVICE)
+    shard_info = GraphShardInfo(nodes=[num_nodes])
+    assert not torch.allclose(
+        processor(x, 1, shard_info, edge_index=edge_index),
+        processor(x, 1, shard_info, edge_index=edge_index),
+    )

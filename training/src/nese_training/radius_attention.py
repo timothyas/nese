@@ -4,7 +4,7 @@ The mask is built from the ``(hidden, to, hidden)`` edge set that anemoi's
 ``StaticGraphProvider`` already passes to ``processor.forward``, so a
 ``CutOffEdges`` set gives a great-circle disk per layer (GenCast-style sparse
 attention, but radius-based rather than k-hop).  Node ordering only matters for
-the block sparsity seen by the ``flex`` backend, not for the stencil.
+the block sparsity seen by the ``flex_attention`` implementation, not for the stencil.
 
 Only single-process (unsharded) edges are supported for now: with a model comm
 group anemoi shards ``edge_index`` per rank, so the full mask would need to be
@@ -12,6 +12,7 @@ gathered first.
 """
 
 from typing import Literal
+from typing import get_args
 from typing import Optional
 
 import torch
@@ -35,12 +36,15 @@ def adjacency_mask(edge_index: Tensor, num_nodes: int) -> Tensor:
     return mask
 
 
+AttentionImplementation = Literal["scaled_dot_product_attention", "flex_attention"]
+
+
 class MaskedAttentionWrapper(nn.Module):
     """Drop-in for anemoi's attention wrappers that applies a fixed node mask."""
 
-    def __init__(self, backend: Literal["sdpa", "flex"] = "sdpa"):
+    def __init__(self, attention_implementation: AttentionImplementation = "scaled_dot_product_attention"):
         super().__init__()
-        self.backend = backend
+        self.attention_implementation = attention_implementation
         self.mask: Optional[Tensor] = None
         self.block_mask = None
         self.flex_attention = None
@@ -48,7 +52,7 @@ class MaskedAttentionWrapper(nn.Module):
     def set_mask(self, mask: Tensor) -> None:
         self.mask = mask
         self.block_mask = None
-        if self.backend == "flex":
+        if self.attention_implementation == "flex_attention":
             from torch.nn.attention.flex_attention import create_block_mask
             from torch.nn.attention.flex_attention import flex_attention
 
@@ -75,7 +79,7 @@ class MaskedAttentionWrapper(nn.Module):
         assert self.mask is not None, "set_mask must be called before the first forward pass"
         assert not causal and window_size is None, "the node mask replaces causal and sliding-window masking"
         assert not softcap and alibi_slopes is None, "softcap and alibi slopes are not supported"
-        if self.backend == "flex":
+        if self.attention_implementation == "flex_attention":
             assert dropout_p == 0.0, "flex_attention does not support attention dropout"
             return self.flex_attention(query, key, value, block_mask=self.block_mask)
         return scaled_dot_product_attention(query, key, value, attn_mask=self.mask, dropout_p=dropout_p)
@@ -84,11 +88,21 @@ class MaskedAttentionWrapper(nn.Module):
 class RadiusTransformerProcessor(TransformerProcessor):
     """``TransformerProcessor`` attending only along the hidden-to-hidden edges."""
 
-    def __init__(self, *, masked_attention_backend: Literal["sdpa", "flex"] = "sdpa", **kwargs) -> None:
+    def __init__(
+        self,
+        *,
+        attention_implementation: AttentionImplementation = "scaled_dot_product_attention",
+        dropout_p: float = 0.0,
+        **kwargs,
+    ) -> None:
+        supported = get_args(AttentionImplementation)
+        if attention_implementation not in supported:
+            raise ValueError(f"attention_implementation must be one of {supported}, got {attention_implementation!r}")
+        if attention_implementation == "flex_attention" and dropout_p > 0.0:
+            raise ValueError("flex_attention does not support attention dropout, set dropout_p to 0")
         kwargs["window_size"] = None
-        kwargs.setdefault("attention_implementation", "scaled_dot_product_attention")
-        super().__init__(**kwargs)
-        self.masked_attention = MaskedAttentionWrapper(masked_attention_backend)
+        super().__init__(attention_implementation="scaled_dot_product_attention", dropout_p=dropout_p, **kwargs)
+        self.masked_attention = MaskedAttentionWrapper(attention_implementation)
         for block in self.proc:
             block.attention.attention = self.masked_attention
 

@@ -10,11 +10,18 @@ data:
       - sla_filtered_ers_2
       - sla_filtered_gfo
       - sla_filtered_haiyang_2a
+      - sla_filtered_haiyang_2a_geodetic
       - sla_filtered_jason_1
       - sla_filtered_jason_1_geodetic
       - sla_filtered_jason_1_interleaved
       - sla_filtered_jason_2
+      - sla_filtered_jason_2_geodetic
+      - sla_filtered_jason_2_interleaved
+      - sla_filtered_jason_3
       - sla_filtered_saral
+      - sla_filtered_saral_geodetic
+      - sla_filtered_sentinel_3a
+      - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
       - obs_count_cryosat_2
@@ -23,11 +30,18 @@ data:
       - obs_count_ers_2
       - obs_count_gfo
       - obs_count_haiyang_2a
+      - obs_count_haiyang_2a_geodetic
       - obs_count_jason_1
       - obs_count_jason_1_geodetic
       - obs_count_jason_1_interleaved
       - obs_count_jason_2
+      - obs_count_jason_2_geodetic
+      - obs_count_jason_2_interleaved
+      - obs_count_jason_3
       - obs_count_saral
+      - obs_count_saral_geodetic
+      - obs_count_sentinel_3a
+      - obs_count_sentinel_3b
       - obs_count_topex_poseidon
       - obs_count_topex_poseidon_interleaved
       - elevation
@@ -52,11 +66,18 @@ data:
       - sla_filtered_ers_2
       - sla_filtered_gfo
       - sla_filtered_haiyang_2a
+      - sla_filtered_haiyang_2a_geodetic
       - sla_filtered_jason_1
       - sla_filtered_jason_1_geodetic
       - sla_filtered_jason_1_interleaved
       - sla_filtered_jason_2
+      - sla_filtered_jason_2_geodetic
+      - sla_filtered_jason_2_interleaved
+      - sla_filtered_jason_3
       - sla_filtered_saral
+      - sla_filtered_saral_geodetic
+      - sla_filtered_sentinel_3a
+      - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
       - obs_count_cryosat_2
@@ -65,11 +86,18 @@ data:
       - obs_count_ers_2
       - obs_count_gfo
       - obs_count_haiyang_2a
+      - obs_count_haiyang_2a_geodetic
       - obs_count_jason_1
       - obs_count_jason_1_geodetic
       - obs_count_jason_1_interleaved
       - obs_count_jason_2
+      - obs_count_jason_2_geodetic
+      - obs_count_jason_2_interleaved
+      - obs_count_jason_3
       - obs_count_saral
+      - obs_count_saral_geodetic
+      - obs_count_sentinel_3a
+      - obs_count_sentinel_3b
       - obs_count_topex_poseidon
       - obs_count_topex_poseidon_interleaved
 
@@ -90,11 +118,18 @@ data:
             sla_filtered_ers_2: obs_count_ers_2
             sla_filtered_gfo: obs_count_gfo
             sla_filtered_haiyang_2a: obs_count_haiyang_2a
+            sla_filtered_haiyang_2a_geodetic: obs_count_haiyang_2a_geodetic
             sla_filtered_jason_1: obs_count_jason_1
             sla_filtered_jason_1_geodetic: obs_count_jason_1_geodetic
             sla_filtered_jason_1_interleaved: obs_count_jason_1_interleaved
             sla_filtered_jason_2: obs_count_jason_2
+            sla_filtered_jason_2_geodetic: obs_count_jason_2_geodetic
+            sla_filtered_jason_2_interleaved: obs_count_jason_2_interleaved
+            sla_filtered_jason_3: obs_count_jason_3
             sla_filtered_saral: obs_count_saral
+            sla_filtered_saral_geodetic: obs_count_saral_geodetic
+            sla_filtered_sentinel_3a: obs_count_sentinel_3a
+            sla_filtered_sentinel_3b: obs_count_sentinel_3b
             sla_filtered_topex_poseidon: obs_count_topex_poseidon
             sla_filtered_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
           # `sla` is not masked to one mission: its truth column is rebuilt from every
@@ -102,13 +137,13 @@ data:
           # one mission only because anemoi needs a diagnostic to exist there -- merging
           # the missions in nese-dataprep would pre-empt what the model is being trained
           # to do. Same spec as the loss, so the mission list stays in one place.
-          composed: ${training.training_loss.datasets.ocean.losses.0.observations}
+          composed: ${training.training_loss.datasets.ocean.observations}
         imputer:
           # Pooled so the fill agrees with the normaliser: an unobserved cell is filled in
           # raw space and centred afterwards, so a per-mission fill under a pooled centre
           # would sit up to 0.25 sigma off zero, varying by mission and so by era.
           _target_: nese_training.processors.PooledObservationImputer
-          pool: ${training.training_loss.datasets.ocean.losses.0.observations}
+          pool: ${training.training_loss.datasets.ocean.observations}
           config:
             default: none
             # Unobserved cells are NaN. Fill with the field mean; CountMaskedMSE (etc) zeroes
@@ -120,16 +155,23 @@ data:
             - sla_filtered_ers_2
             - sla_filtered_gfo
             - sla_filtered_haiyang_2a
+            - sla_filtered_haiyang_2a_geodetic
             - sla_filtered_jason_1
             - sla_filtered_jason_1_geodetic
             - sla_filtered_jason_1_interleaved
             - sla_filtered_jason_2
+            - sla_filtered_jason_2_geodetic
+            - sla_filtered_jason_2_interleaved
+            - sla_filtered_jason_3
             - sla_filtered_saral
+            - sla_filtered_saral_geodetic
+            - sla_filtered_sentinel_3a
+            - sla_filtered_sentinel_3b
             - sla_filtered_topex_poseidon
             - sla_filtered_topex_poseidon_interleaved
             - sla
         normalizer:
-          # One mean/stdev for `sla` and all 13 `sla_filtered_*`. Per-mission statistics
+          # One mean/stdev for `sla` and all 20 `sla_filtered_*`. Per-mission statistics
           # look neutral but are not: a mission's mean is the sea level of the years it
           # flew (the means track observation epoch at r=0.99, 2.6 mm/yr), so per-mission
           # centring subtracts the trend and leaves the one predicted field scored against
@@ -138,7 +180,7 @@ data:
           # `pool` reuses the loss's own `observations` spec, so the mission list is
           # recovered from one place and cannot drift between loss and normaliser.
           _target_: nese_training.processors.PooledObservationNormalizer
-          pool: ${training.training_loss.datasets.ocean.losses.0.observations}
+          pool: ${training.training_loss.datasets.ocean.observations}
           config:
             default: mean-std
             max:
@@ -148,11 +190,18 @@ data:
               - obs_count_ers_2
               - obs_count_gfo
               - obs_count_haiyang_2a
+              - obs_count_haiyang_2a_geodetic
               - obs_count_jason_1
               - obs_count_jason_1_geodetic
               - obs_count_jason_1_interleaved
               - obs_count_jason_2
+              - obs_count_jason_2_geodetic
+              - obs_count_jason_2_interleaved
+              - obs_count_jason_3
               - obs_count_saral
+              - obs_count_saral_geodetic
+              - obs_count_sentinel_3a
+              - obs_count_sentinel_3b
               - obs_count_topex_poseidon
               - obs_count_topex_poseidon_interleaved
             min-max:
@@ -168,20 +217,20 @@ data:
               - insolation
 
 dataloader:
-  prefetch_factor: 1
+  prefetch_factor: 2
   pin_memory: true
   read_group_size: ${system.hardware.num_gpus_per_model}
   num_workers:
-    training: 2
-    validation: 1
+    training: 12
+    validation: 8
     test: 1
   batch_size:
-    training: 8
-    validation: 1
+    training: 4
+    validation: 4
     test: 1
   limit_batches:
     training: null
-    validation: 50
+    validation: null
     test: 1
 
   # `sla` is a duplicate of jason_2's column since it is live during training and validation.
@@ -201,24 +250,24 @@ dataloader:
         dataset_config:
           dataset: ${dataloader.dataset}
           frequency: ${data.frequency}
-        start: '2000-01-01'
-        end: '2014-12-31'
+        start: '1993-11-01'
+        end: '2018-12-31'
   validation:
     datasets:
       ocean:
         dataset_config:
           dataset: ${dataloader.dataset}
           frequency: ${data.frequency}
-        start: '2015-01-01'
-        end: '2015-12-31'
+        start: '2019-01-01'
+        end: '2020-12-31'
   test:
     datasets:
       ocean:
         dataset_config:
           dataset: ${dataloader.dataset}
           frequency: ${data.frequency}
-        start: '2015-01-01'
-        end: '2015-12-31'
+        start: '2019-01-01'
+        end: '2020-12-31'
 
 # Observations are bin averages at discrete timestamps, so "estimate at t from the
 # window (t-48h, t]" would make the target bin one of the input bins -- and the loss
@@ -255,7 +304,7 @@ graph:
       node_builder:
         _target_: anemoi.graphs.nodes.HEALPixNodes
         resolution: 5   # nside=32, 12288 cells, ~1.8 deg
-        nest_ordering: true # compact 128-node blocks for block-sparse attention
+        nest_ordering: true
       attributes: [] # no need for area weights with HEALPix
   edges:
   - source_name: ocean
@@ -265,18 +314,17 @@ graph:
       cutoff_distance_km: 200
     attributes: ${graph.attributes.edges}
   - source_name: hidden
-    target_name: ocean
-    edge_builders:
-    - _target_: anemoi.graphs.edges.KNNEdges
-      num_nearest_neighbours: 3
-    attributes: ${graph.attributes.edges}
-  # Per-layer attention stencil of the RadiusTransformerProcessor
-  - source_name: hidden
     target_name: hidden
     edge_builders:
     - _target_: anemoi.graphs.edges.CutOffEdges
       cutoff_distance_km: 1200
       max_num_neighbours: 1024
+    attributes: ${graph.attributes.edges}
+  - source_name: hidden
+    target_name: ocean
+    edge_builders:
+    - _target_: anemoi.graphs.edges.KNNEdges
+      num_nearest_neighbours: 3
     attributes: ${graph.attributes.edges}
   attributes:
     nodes: []
@@ -290,7 +338,7 @@ graph:
   post_processors: []
 
 model:
-  num_channels: 128
+  num_channels: 512
   cpu_offload: false
   keep_batch_sharded: true
   model:
@@ -313,21 +361,20 @@ model:
 
   processor:
     _target_: nese_training.radius_attention.RadiusTransformerProcessor
-    masked_attention_backend: sdpa
     trainable_size: ${model.trainable_parameters.hidden2hidden}
     sub_graph_edge_attributes: ${model.attributes.edges}
-    num_layers: 4
-    num_chunks: 4
+    num_layers: 16
+    num_chunks: 1
     mlp_hidden_ratio: 4
     mlp_implementation: mlp
-    num_heads: 4
+    num_heads: 16
     dropout_p: 0.0
-    attention_implementation: scaled_dot_product_attention
+    attention_implementation: flex_attention
     qk_norm: false
     softcap: 0.0
     use_alibi_slopes: false
     cpu_offload: ${model.cpu_offload}
-    gradient_checkpointing: true
+    gradient_checkpointing: false
     use_rotary_embeddings: false
     layer_kernels: ${model.layer_kernels}
 
@@ -335,10 +382,10 @@ model:
     _target_: anemoi.models.layers.mapper.GraphTransformerForwardMapper
     trainable_size: ${model.trainable_parameters.data2hidden}
     sub_graph_edge_attributes: ${model.attributes.edges}
-    num_chunks: 4
+    num_chunks: 1
     mlp_hidden_ratio: 4
     mlp_implementation: mlp
-    num_heads: 4
+    num_heads: 16
     qk_norm: false
     cpu_offload: ${model.cpu_offload}
     gradient_checkpointing: false
@@ -350,10 +397,10 @@ model:
     _target_: anemoi.models.layers.mapper.GraphTransformerBackwardMapper
     trainable_size: ${model.trainable_parameters.hidden2data}
     sub_graph_edge_attributes: ${model.attributes.edges}
-    num_chunks: 4
+    num_chunks: 1
     mlp_hidden_ratio: 4
     mlp_implementation: mlp
-    num_heads: 4
+    num_heads: 16
     initialise_data_extractor_zero: false
     qk_norm: false
     cpu_offload: ${model.cpu_offload}
@@ -404,9 +451,9 @@ training:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
       t_initial: ${training.max_steps}
-      warmup_t: 500
+      warmup_t: 1000
       t_in_epochs: false
-    lr: 5.0e-04
+    lr: 2.5e-04
     pl_lr_scheduler:
       interval: step
 
@@ -421,7 +468,7 @@ training:
     ignore_units: true
     ignore_processing_period: true
   deterministic: false
-  precision: 32-true #16-mixed slower on mac
+  precision: 16-mixed
   accum_grad_batches: 1
   num_sanity_val_steps: 2
   gradient_clip:
@@ -448,23 +495,13 @@ training:
   training_loss:
     datasets:
       ocean:
-        _target_: anemoi.training.losses.combined.CombinedLoss
-        loss_weights: [1.0, 0.1]
-        losses:
-        - _target_: nese_training.losses.ObservationMaskedMSE
-          scalers: []
-          observations:
-            sla:
-              observed_as: sla_filtered
-              groups: auto
-              count: "obs_count_{group}"
-        - _target_: nese_training.losses.MaternPenalty
-          scalers: []
-          order: 2              # M, times the operator is applied
-          rho_hat: 8.0          # correlation range in grid cells (~407 km at hpx6)
-          min_neighbours: 3     # drop the 110 cells with 0-2 sea neighbours
-          n_randomisation: 1000
-          seed: 0
+        _target_: nese_training.losses.ObservationMaskedMSE
+        scalers: []
+        observations:
+          sla:
+            observed_as: sla_filtered
+            groups: auto
+            count: "obs_count_{group}"
 
   validation_metrics:
     datasets:
@@ -478,7 +515,7 @@ training:
     datasets:
       ocean: []
   max_epochs: null
-  max_steps: 3000
+  max_steps: 10000
   submodules_to_freeze: []
 
 diagnostics:
@@ -550,7 +587,7 @@ diagnostics:
   debug:
     anomaly_detection: false
   log:
-    interval: 10
+    interval: 100
     # base_schema.py:218-222 reads diagnostics.log.mlflow.enabled and .save_dir
     # unconditionally, so both keys must exist even with the logger off.
     #
@@ -563,8 +600,8 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: radius
-      project_name: local-sla-16yr
+      experiment_name: v0
+      project_name: radius-processor
       terminal: false
       system: false
     wandb:
@@ -583,7 +620,7 @@ diagnostics:
 
 system:
   output:
-    root: /Users/timith/work/nese/experimental/non-banded-processor/runs/${diagnostics.log.mlflow.experiment_name}
+    root: ${system.input.root}/runs/${diagnostics.log.mlflow.experiment_name}
     logs:
       root: logs
       wandb: wandb
@@ -597,17 +634,17 @@ system:
     plots: plots
     profiler: profiler
   input:
-    root: /Users/timith/work/nese/experimental/local-sla-16yr
+    root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
     dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
-    graph: /Users/timith/work/nese/experimental/non-banded-processor/graph.pt
+    graph: ${system.input.root}/graph.pt
     loss_matrices_path: null
     truncation: null
     truncation_inv: null
     warm_start: null
   hardware:
-    accelerator: cpu     # local Mac bring-up; no CUDA
-    num_gpus_per_node: 1
-    num_nodes: 1
+    accelerator: cuda
+    num_gpus_per_node: ${oc.decode:${oc.env:SLURM_GPUS_PER_NODE}}
+    num_nodes: ${oc.decode:${oc.env:SLURM_NNODES}}
     num_gpus_per_model: 1
 
 # `training.training_loss._target_` is validated against a closed enum of built-in
