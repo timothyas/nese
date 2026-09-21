@@ -44,3 +44,8 @@ setenv("HTTP_PROXY",  "http://10.63.2.48:3128/")
 setenv("HTTPS_PROXY", "http://10.63.2.48:3128/")
 setenv("no_proxy", "localhost,127.0.0.1,::1")
 setenv("NO_PROXY", "localhost,127.0.0.1,::1")
+
+-- torch.compile's triton backend looks for libcuda.so, which the NGC image ships
+-- only as libcuda.so.1; without this, compiled kernels (e.g. flex_attention)
+-- fail to lower. APPTAINERENV_ forwards it into the container.
+setenv("APPTAINERENV_TRITON_LIBCUDA_PATH", "/usr/local/cuda/compat/lib/libcuda.so.1")

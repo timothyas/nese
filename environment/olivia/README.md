@@ -154,6 +154,11 @@ Due to some build issues (e.g., cartopy has no aarch64 wheel and forces
 not included.
 matplotlib is included, however, for basic diagnostic plots during training.
 
+The module sets `APPTAINERENV_TRITON_LIBCUDA_PATH`, so `torch.compile`d triton
+kernels (e.g. `flex_attention` in the radius processor) can find `libcuda.so`,
+which the NGC image ships only as `libcuda.so.1`. Without it, compiled kernels
+fail with `AssertionError: libcuda.so cannot found!`.
+
 - `anemoi-train-multinode.slurm` -- multiple nodes. NCCL over Slingshot needs the
   host libfabric / NCCL / aws-ofi-nccl / OpenMPI bound into the container; the
   script carries the NRIS bind list and module set (confirm versions with
