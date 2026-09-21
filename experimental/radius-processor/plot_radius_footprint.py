@@ -33,13 +33,13 @@ from plot_sliding_window import QUERY_POINTS  # noqa: E402
 from plot_sliding_window import add_cartopy_features  # noqa: E402
 from plot_sliding_window import great_circle_km  # noqa: E402
 
-GRAPH = "graph.pt"
+GRAPH = "graph.1200.pt"
 HIDDEN_NAME = "hidden"
 N_PASSES = 4                # processor layers in training.yaml
 N_PASSES_PRODUCTION = 16    # only reported, not plotted
 WINDOW_SIZE = 512           # sliding-window baseline, +/-W tokens
 BLOCK = 128                 # flex_attention default block size
-OUT_DIR = "figures/radius"
+OUT_DIR = "figures/radius-1200"
 
 C_BG, C_REACH, C_WIN, C_QUERY = "darkgray", "dodgerblue", "navy", "goldenrod"
 _ms_latent, _ms_reach, _ms_window, _ms_query = 3, 4.5, 6, 70

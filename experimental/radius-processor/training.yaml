@@ -275,7 +275,7 @@ graph:
     target_name: hidden
     edge_builders:
     - _target_: anemoi.graphs.edges.CutOffEdges
-      cutoff_distance_km: 1000
+      cutoff_distance_km: 1200
       max_num_neighbours: 1024
     attributes: ${graph.attributes.edges}
   attributes:

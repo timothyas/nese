@@ -82,11 +82,18 @@ Backends: `sdpa` (dense mask, laptop) and `flex` (`flex_attention` with a
 `BlockMask`, compiled on CUDA, untested on GPU so far).
 Sharded processor edges (multi-GPU model parallelism) are not supported yet.
 
-**Footprint** (`plot_radius_footprint.py`, figures in `figures/radius/`).
-At nside=32 each node sees 70–79 neighbours within 1000 km; 4 layers reach
-~3900 km (~8% of the mesh), 16 layers reach ~15,000 km (~85% of the mesh).
+**Footprint**
+`plot_radius_footprint.py` produces processor figures.
+As a function of radius at HEALPix level 5:
 
-**Cost**, query-key pairs per head per layer (no timings):
+| radius (km) | Neighbors | % of mesh at 4 passes | % of mesh at 16 passes |
+|---|---|---|---|
+| 1000 | 70-79 | 8% | 85% |
+| 1200 | 295-395 | 12% | 98% |
+| 2000 | 103-109 | 33% | 100% |
+
+
+**Cost at 1000km Radius**, query-key pairs per head per layer (no timings):
 
 | layout | keys per query | % of dense |
 |---|---|---|
