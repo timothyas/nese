@@ -108,11 +108,45 @@ more, because a 128-node ring block spans a whole latitude circle.
 Whether flex attention runs as fast as flash attention per computed
 pair is the open question for Olivia.
 
-**Laptop training** (20 steps each, same data/seed config; logs in `runs/`):
+### Results
 
-| processor | train loss (epoch) | val loss (10 batches) | wall time |
-|---|---|---|---|
-| sliding window ±512, RING | 1.30 | 1.18 | 6:54 |
-| 1000 km disk, NEST, `scaled_dot_product_attention` | 1.28 | 1.16 | 7:07 |
+Error metrics show little change from the baseline.
+The RMSE shows a tiny degradation, and bias shows something similar.
+However, this should probably not be taken seriously given the results in
+`../olivia-sla-baseline`, which show similar order-of-magnitude differences
+between two models with the same specifications, meaning that the differences
+can just come from stochasticity of the training procedure itself.
 
-The radius processor trains end to end and matches the band at this (tiny) scale.
+Comparing the loss curve between the baseline and radius-processor seems to
+indicate that the latter overfits a bit more, which could account for these
+(albeit) tiny degradations.
+The radius-processor validation loss initializes noticeably lower than with the
+sliding window.
+By eyeball, it looks like the radius-processor validation loss flattens out
+around 6000 iterations, whereas this happens around 8000 iterations in the
+sliding window processor.
+
+```
+Radius-processor relative to Baseline, pooled over groups
+---------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06357 ->  0.06386 (  +0.5%)    0.03815 ->  0.03806 (  -0.2%)    0.00207 ->  0.00223 (  +7.6%)
++0h       0.04181 ->  0.04191 (  +0.2%)    0.02609 ->  0.02609 (  +0.0%)    0.00054 ->  0.00057 (  +5.8%)
+-24h      0.04287 ->  0.04297 (  +0.2%)    0.02672 ->  0.02673 (  +0.0%)    0.00065 ->  0.00066 (  +0.5%)
+-48h      0.04300 ->  0.04311 (  +0.3%)    0.02692 ->  0.02692 (  +0.0%)    0.00065 ->  0.00067 (  +2.4%)
+```
+
+### Computational Efficiency
+
+The radius processor (1200 km, flex attention) trains ~14% slower than the sliding window,
+same 10k steps on 4 GH200s:
+
+| run | train it/s (epoch 17) | `Trainer.fit` time | job wallclock | GPU hours |
+|---|---|---|---|---|
+| baseline v0 (2225392) | 5.04 | 34.2 min | 35.3 min | 2.4 |
+| baseline v1 (2307098) | 5.02 | 34.4 min | 35.5 min | 2.4 |
+| radius (2305595) | 4.42 | 39.2 min | 40.5 min | 2.7 |
+
+Baseline run-to-run spread is <1%, so the slowdown is real.
