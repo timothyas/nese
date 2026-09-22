@@ -1,0 +1,21 @@
+forecast:
+  store_dir: runs/v0/inference-2015
+verification:
+  dataset: anemoi-hpx6-24h/dataset.zarr
+  observations:
+    sla:
+      observed_as: sla_filtered
+      groups: auto
+      count: "obs_count_{group}"
+
+metrics:
+  split:
+    - overlap
+    - seen_at_hour
+
+movie:
+  loop: t0
+  fhr: 24
+  left_panel: all_input_obs_locations
+  regions:
+    - tropical_pacific
