@@ -292,7 +292,7 @@ task:
   validation_rollout: null
 
 graph:
-  overwrite: true
+  overwrite: false
   nodes:
     ocean:
       node_builder:
@@ -592,7 +592,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v0.10k
+      experiment_name: v1
       project_name: olivia-sla-baseline
       terminal: false
       system: false
@@ -626,7 +626,7 @@ system:
     plots: plots
     profiler: profiler
   input:
-    root: ${oc.decode:${oc.env:WORK}}/nese/experimental/olivia-sla-baseline
+    root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
     dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
     graph: ${system.input.root}/graph.pt
     loss_matrices_path: null

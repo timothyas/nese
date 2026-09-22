@@ -1,23 +1,30 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=inference-v0.10k
+#SBATCH --job-name=inference.v1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-#SBATCH --gpus-per-node=1
-#SBATCH --cpus-per-task=18
-#SBATCH --mem=200G
-#SBATCH --time=00:20:00
+#SBATCH --ntasks=1
+#SBATCH --gpus-per-node=4
+#SBATCH --cpus-per-task=288
+#SBATCH --mem=808G
+#SBATCH --time=00:30:00
 
 set -euo pipefail
+CONFIG="forecast.yaml"
+NRANKS="${SLURM_GPUS_ON_NODE:?no GPUs allocated -- this script expects --gpus-per-node}"
+THREADS=$(( ${SLURM_CPUS_PER_TASK:-$(nproc)} / NRANKS ))
 
 module purge
 module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese-anemoi
 
-srun --overlap --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" \
+srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
+    --env OMP_NUM_THREADS="$THREADS" \
+    --env OMPI_MCA_plm=isolated \
+    --env OMPI_MCA_pml=ob1 \
+    --env OMPI_MCA_btl=self,vader \
     "$NESE_ANEMOI_SIF" \
-    nese-inference run forecast.yaml
+    mpirun -n "$NRANKS" --oversubscribe --bind-to none nese-inference run "$CONFIG"
