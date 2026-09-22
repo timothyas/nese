@@ -150,3 +150,8 @@ same 10k steps on 4 GH200s:
 | radius (2305595) | 4.42 | 39.2 min | 40.5 min | 2.7 |
 
 Baseline run-to-run spread is <1%, so the slowdown is real.
+
+### TODO
+
+* maybe tweak the block size, which was done for the 1000km radius
+* compare percent of the hidden mesh with sliding window
