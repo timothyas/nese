@@ -64,6 +64,14 @@ class MaskedAttentionWrapper(nn.Module):
             num_nodes = mask.shape[0]
             self.block_mask = create_block_mask(mask_mod, None, None, num_nodes, num_nodes, device=mask.device)
 
+    def __getstate__(self) -> dict:
+        """The mask, block mask, and compiled kernel are rebuilt on the next forward pass.
+
+        Dropping them keeps checkpoints free of the dense mask and of objects that
+        cannot be pickled at all, like the ``mask_mod`` closure.
+        """
+        return {**super().__getstate__(), "mask": None, "block_mask": None, "flex_attention": None}
+
     def forward(
         self,
         query: Tensor,

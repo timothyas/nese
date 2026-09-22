@@ -292,7 +292,7 @@ task:
   validation_rollout: null
 
 graph:
-  overwrite: true
+  overwrite: false  # submit_training.sh builds graph.pt once, before the ranks start
   nodes:
     ocean:
       node_builder:

@@ -79,7 +79,7 @@ regardless of node order, which removes the nested-HEALPix asymmetry.
 The hidden mesh is switched to nested ordering because that keeps each 128-node
 block spatially compact, which matters for block sparsity.
 `attention_implementation`: `scaled_dot_product_attention` (dense mask, laptop) or `flex_attention` (with a
-`BlockMask`, compiled on CUDA, untested on GPU so far).
+`BlockMask`, compiled on CUDA, runs on GH200).
 Sharded processor edges (multi-GPU model parallelism) are not supported yet.
 
 **Footprint**

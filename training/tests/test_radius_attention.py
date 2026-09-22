@@ -1,3 +1,5 @@
+import pickle
+
 import numpy as np
 import pytest
 import torch
@@ -167,3 +169,22 @@ def test_dropout_is_passed_to_masked_sdpa():
         processor(x, 1, shard_info, edge_index=edge_index),
         processor(x, 1, shard_info, edge_index=edge_index),
     )
+
+
+def test_flex_attention_processor_survives_pickling():
+    """anemoi pickles the model at train start, and flex attention state is unpicklable."""
+    torch.manual_seed(0)
+    graph = hidden_graph(RADIUS_KM)
+    num_nodes = graph["hidden"].num_nodes
+    edge_index = graph["hidden", "to", "hidden"].edge_index
+
+    # 64 channels over 4 heads: the flex attention backward needs a head dimension of at least 16.
+    config = {**processor_config(num_layers=1), "attention_implementation": "flex_attention", "num_channels": 64}
+    processor = RadiusTransformerProcessor(**config).to(DEVICE).eval()
+    x = torch.randn(num_nodes, 64, device=DEVICE)
+    shard_info = GraphShardInfo(nodes=[num_nodes])
+    expected = processor(x, 1, shard_info, edge_index=edge_index)
+
+    reloaded = pickle.loads(pickle.dumps(processor))
+    assert reloaded.masked_attention.mask is None
+    torch.testing.assert_close(reloaded(x, 1, shard_info, edge_index=edge_index), expected)
