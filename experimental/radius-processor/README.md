@@ -1,4 +1,4 @@
-# Non-Banded Processor
+# Radius Transformer Processor
 
 Currently, I have been using a sliding window transformer processor, which acts as
 follows.
