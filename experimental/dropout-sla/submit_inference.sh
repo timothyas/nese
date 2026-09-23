@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=inference-v0.10k-2015
+#SBATCH --job-name=inference-v0
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel
@@ -13,7 +13,6 @@
 #SBATCH --time=00:30:00
 
 set -euo pipefail
-CONFIG="forecast.2015.yaml"
 NRANKS="${SLURM_GPUS_ON_NODE:?no GPUs allocated -- this script expects --gpus-per-node}"
 THREADS=$(( ${SLURM_CPUS_PER_TASK:-$(nproc)} / NRANKS ))
 
@@ -27,4 +26,12 @@ srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env OMPI_MCA_pml=ob1 \
     --env OMPI_MCA_btl=self,vader \
     "$NESE_ANEMOI_SIF" \
-    mpirun -n "$NRANKS" --oversubscribe --bind-to none nese-inference run "$CONFIG"
+    mpirun -n "$NRANKS" --oversubscribe --bind-to none nese-inference run inference.validation.yaml
+
+srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
+    --env OMP_NUM_THREADS="$THREADS" \
+    --env OMPI_MCA_plm=isolated \
+    --env OMPI_MCA_pml=ob1 \
+    --env OMPI_MCA_btl=self,vader \
+    "$NESE_ANEMOI_SIF" \
+    mpirun -n "$NRANKS" --oversubscribe --bind-to none nese-inference run inference.2015.yaml

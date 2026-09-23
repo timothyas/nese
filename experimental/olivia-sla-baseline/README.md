@@ -55,6 +55,27 @@ The processor is 88% of the weights. Each processor layer is a plain
 pre-norm transformer block: bias-free QKV + output projection (4 x 512x512), two
 LayerNorms, and a 512->2048->512 MLP.
 
+### Version 1
+
+Is actually the same model, and error is computed to give a very rough estimate
+of the amount of spread stemming from the stochastic nature of model training.
+This should help inform the significance of model changes.
+
+```
+v1 relative to Baseline, pooled over groups
+-------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06357 ->  0.06339 (  -0.3%)    0.03815 ->  0.03800 (  -0.4%)    0.00207 ->  0.00185 ( -10.9%)
++0h       0.04181 ->  0.04164 (  -0.4%)    0.02609 ->  0.02598 (  -0.4%)    0.00054 ->  0.00058 (  +7.8%)
+-24h      0.04287 ->  0.04278 (  -0.2%)    0.02672 ->  0.02665 (  -0.2%)    0.00065 ->  0.00061 (  -6.1%)
+-48h      0.04300 ->  0.04296 (  -0.1%)    0.02692 ->  0.02686 (  -0.2%)    0.00065 ->  0.00065 (  -0.4%)
+```
+
+So basically, changes under a percent we can more or less ignore, and biases of
+the same order of magnitude shouldn't be taken too seriously.
+
 ## Training
 
 * Total batch size 16, with 4 GPUs x 4 samples per GPU
