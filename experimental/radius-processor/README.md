@@ -89,8 +89,23 @@ As a function of radius at HEALPix level 5:
 | radius (km) | Neighbors | % of mesh at 4 passes | % of mesh at 16 passes |
 |---|---|---|---|
 | 1000 | 70-79 | 8% | 85% |
-| 1200 | 295-395 | 12% | 98% |
-| 2000 | 103-109 | 33% | 100% |
+| 1200 | 103-113 | 12% | 98% |
+| 2000 | 293-308 | 33% | 100% |
+
+For comparison, the sliding window (RING order, ±W tokens, no wraparound) reaches
+±(passes × W) tokens, so its coverage depends on latitude: it is smallest at the
+poles, where the index range gets clipped.
+Values are the mean over all latent nodes (minimum in parentheses):
+
+| window W | keys per query | % of mesh at 4 passes | % of mesh at 16 passes |
+|---|---|---|---|
+| 128 | 257 | 8% (4%) | 31% (17%) |
+| 256 | 513 | 16% (8%) | 56% (33%) |
+| 512 (current) | 1025 | 31% (17%) | 89% (67%) |
+| 1024 | 2049 | 56% (33%) | 100% |
+
+At 16 passes, the 1200 km radius covers more of the mesh (98%) than the ±512
+window (89%), with ~10× fewer keys per query in its exact stencil.
 
 
 **Cost at 1000km Radius**, query-key pairs per head per layer (no timings):
@@ -151,7 +166,33 @@ same 10k steps on 4 GH200s:
 
 Baseline run-to-run spread is <1%, so the slowdown is real.
 
+**Block size at 1200 km** (NEST order), query-key pairs per head per layer (no timings):
+
+| Q block × KV block | nonzero tiles | keys per query | × exact disk | % of dense |
+|---|---|---|---|---|
+| 32 × 32 | 5544 | 462 | 4.4 | 3.8 |
+| 64 × 64 | 1704 | 568 | 5.4 | 4.6 |
+| 128 × 64 | 1128 | 752 | 7.1 | 6.1 |
+| 128 × 128 (current) | 824 | 1099 | 10.4 | 8.9 |
+| 256 × 128 | 552 | 1472 | 13.9 | 12.0 |
+
+The exact disk has 106 keys per query.
+Not a single tile is full at any block size, so flex attention evaluates
+`mask_mod` (a gather from the dense N×N mask) in every tile it computes.
+At 128 × 128, the radius processor computes about as many pairs as the ±512
+sliding window (1004), so the 14% slowdown points to a higher cost per pair
+(the `mask_mod` gathers, a less tuned kernel than flash attention) rather
+than to more pairs.
+With `num_channels: 512` and 16 heads, the head dimension is 32. For that size,
+torch 2.10 picks 64 × 64 kernel tiles on Hopper for both the forward and
+backward passes, so the kernel already splits each 128 × 128 mask block into
+four 64 × 64 tiles.
+A 64 block mask therefore cuts 48% of the computed pairs while the kernel
+keeps its tile size, and it is the natural first try.
+128 × 64 is a milder option (−32%).
+The block mask size is set by `block_size` on the processor (`training.yaml`),
+and it must be a multiple of the kernel tile, otherwise flex attention raises an error.
+
 ### TODO
 
-* maybe tweak the block size, which was done for the 1000km radius
-* compare percent of the hidden mesh with sliding window
+* benchmark `block_size: 64` (and `[128, 64]`) against 128 on Olivia

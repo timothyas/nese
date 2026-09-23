@@ -88,15 +88,18 @@ def test_masked_sdpa_matches_naive_softmax():
     torch.testing.assert_close(attention(query, key, value, batch_size=2), expected)
 
 
-def test_flex_matches_sdpa():
+@pytest.mark.parametrize("block_size", [128, 64, (128, 64)])
+def test_flex_matches_sdpa(block_size):
     torch.manual_seed(0)
     query, key, value = torch.randn(3, 1, 4, 192, 16, device=DEVICE).unbind(0)
     graph = hidden_graph(RADIUS_KM)
     mask = adjacency_mask(graph["hidden", "to", "hidden"].edge_index, graph["hidden"].num_nodes)
 
-    sdpa, flex = MaskedAttentionWrapper("scaled_dot_product_attention"), MaskedAttentionWrapper("flex_attention")
+    sdpa = MaskedAttentionWrapper("scaled_dot_product_attention")
+    flex = MaskedAttentionWrapper("flex_attention", block_size)
     sdpa.set_mask(mask)
     flex.set_mask(mask)
+    assert flex.block_mask.BLOCK_SIZE == (block_size if isinstance(block_size, tuple) else (block_size, block_size))
     tolerance = 5e-3 if DEVICE.type == "cuda" else 1e-5  # the flex triton kernel matmuls in tf32
     torch.testing.assert_close(flex(query, key, value, 1), sdpa(query, key, value, 1), atol=tolerance, rtol=tolerance)
 

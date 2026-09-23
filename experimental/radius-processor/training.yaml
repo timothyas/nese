@@ -370,6 +370,7 @@ model:
     num_heads: 16
     dropout_p: 0.0
     attention_implementation: flex_attention
+    block_size: 128   # flex_attention BlockMask tile, int or [q, kv]
     qk_norm: false
     softcap: 0.0
     use_alibi_slopes: false

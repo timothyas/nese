@@ -14,6 +14,7 @@ gathered first.
 from typing import Literal
 from typing import get_args
 from typing import Optional
+from typing import Union
 
 import torch
 from torch import Tensor
@@ -37,14 +38,20 @@ def adjacency_mask(edge_index: Tensor, num_nodes: int) -> Tensor:
 
 
 AttentionImplementation = Literal["scaled_dot_product_attention", "flex_attention"]
+BlockSize = Union[int, tuple[int, int]]
 
 
 class MaskedAttentionWrapper(nn.Module):
     """Drop-in for anemoi's attention wrappers that applies a fixed node mask."""
 
-    def __init__(self, attention_implementation: AttentionImplementation = "scaled_dot_product_attention"):
+    def __init__(
+        self,
+        attention_implementation: AttentionImplementation = "scaled_dot_product_attention",
+        block_size: BlockSize = 128,
+    ):
         super().__init__()
         self.attention_implementation = attention_implementation
+        self.block_size = block_size
         self.mask: Optional[Tensor] = None
         self.block_mask = None
         self.flex_attention = None
@@ -62,7 +69,9 @@ class MaskedAttentionWrapper(nn.Module):
                 return mask[q_idx, kv_idx]
 
             num_nodes = mask.shape[0]
-            self.block_mask = create_block_mask(mask_mod, None, None, num_nodes, num_nodes, device=mask.device)
+            self.block_mask = create_block_mask(
+                mask_mod, None, None, num_nodes, num_nodes, device=mask.device, BLOCK_SIZE=self.block_size
+            )
 
     def __getstate__(self) -> dict:
         """The mask, block mask, and compiled kernel are rebuilt on the next forward pass.
@@ -100,6 +109,7 @@ class RadiusTransformerProcessor(TransformerProcessor):
         self,
         *,
         attention_implementation: AttentionImplementation = "scaled_dot_product_attention",
+        block_size: BlockSize = 128,
         dropout_p: float = 0.0,
         **kwargs,
     ) -> None:
@@ -110,7 +120,7 @@ class RadiusTransformerProcessor(TransformerProcessor):
             raise ValueError("flex_attention does not support attention dropout, set dropout_p to 0")
         kwargs["window_size"] = None
         super().__init__(attention_implementation="scaled_dot_product_attention", dropout_p=dropout_p, **kwargs)
-        self.masked_attention = MaskedAttentionWrapper(attention_implementation)
+        self.masked_attention = MaskedAttentionWrapper(attention_implementation, block_size)
         for block in self.proc:
             block.attention.attention = self.masked_attention
 
