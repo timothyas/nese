@@ -197,12 +197,11 @@ class ObservationMaskedMSE(FunctionalLoss):
     ``topex_poseidon`` and ``jason_2`` as the observing groups for the field ``sla``, observed as
     ``sla_filtered``.
 
-    The per-group loss is unchanged from ``CountMaskedAndWeightedMSE``, but when aggregated
-    per-variable (e.g., when all groups are aggregated to get the SLA loss) only currently
-    live missions are taken into account for the given time. On the other hand,
-    ``CountMaskedAndWeightedMSE`` averages over the total number of observing missions
-    no matter how many were live for the current loss sample
-    (via BaseLoss.reduce, over the entire ``variable`` dimension of the array).
+    Each field's loss is pooled over its groups, weighted by observation count: every
+    observed (group, cell) pair counts once, i.e. ``sum(err**2) / sum(count > 0)`` over all
+    of the field's groups. This is the ``pooled`` score in ``nese-verify``'s metrics, and
+    groups that observed nothing in a sample drop out without diluting it. Fields are then
+    weighted equally, averaging over those observed in the sample.
     """
 
     name: str = "observation_masked_mse"
@@ -266,6 +265,13 @@ class ObservationMaskedMSE(FunctionalLoss):
             )
 
         self.predicted_variables, self.target_variables = predicted, targets
+        fields = list(self.observations)
+        field_of_column = torch.tensor([fields.index(name) for name in predicted[0::2]])
+        self.register_buffer(
+            "field_membership",
+            torch.nn.functional.one_hot(field_of_column, len(fields)).float(),
+            persistent=False,
+        )
         self.predicted_indices_by_layout = _indices_by_layout(
             predicted,
             {IndexSpace.MODEL_OUTPUT: model_output, IndexSpace.DATA_OUTPUT: data_output, IndexSpace.DATA_FULL: data_full},
@@ -301,12 +307,14 @@ class ObservationMaskedMSE(FunctionalLoss):
         predicted = pred[..., 0::2]
 
         mask = (counts > 0).to(pred.dtype)
-        mask = mask / _coverage_divisor(self, mask, self.eps)
+        membership = self.field_membership.to(dtype=mask.dtype)
+        field_coverage = _coverage_divisor(self, mask, 0.0) @ membership
+        live_fields = (field_coverage > 0).sum(dim=-1, keepdim=True).clamp_min(1)
 
-        # reduce() averages the variable dimension over every declared group; rescale so
-        # the divisor counts only the groups that observed something in this sample.
-        live = (counts > 0).any(dim=TensorDim.GRID, keepdim=True).to(pred.dtype)
-        mask = mask * counts.shape[-1] / live.sum(dim=-1, keepdim=True).clamp_min(1.0)
+        # reduce() averages over every (field, group) column; rescale so each field's columns
+        # sum to its pooled mean and the average runs over the live fields only.
+        column_coverage = (field_coverage @ membership.T).clamp_min(self.eps)
+        mask = mask / column_coverage * mask.shape[-1] / live_fields
 
         return torch.square(predicted - values) * mask
 
