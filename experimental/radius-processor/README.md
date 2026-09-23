@@ -62,7 +62,9 @@ The operation is basically as follows:
 * Create a hidden to hidden graph, defining the `CutOffEdges.cutoff_distance_km`
   as the desired radius
     * Note: keep `max_num_neighbours` high to avoid trimming nodes that should
-      be in the radius. With a radius of 1200 km the max num neighbors is
+      be in the radius. With a radius of 1200 km the num neighbors is
+      103-113 (see table below), so the 1024 value in training.yaml is very
+      comfy
 * Define the function `mask_mod` that flex attention takes to create a block
   mask to look up the query key/value pairs
 * Then flex attention operates on each block as a dense attention operation,
@@ -91,7 +93,7 @@ As a function of radius at HEALPix level 5:
 
 See for example
 
-**TODO**
+![](figures/radius-1200/radius_q40_330.jpeg)
 
 For comparison, the sliding window (RING order, ±W tokens, no wraparound) reaches
 ±(passes × W) tokens, so its coverage depends on latitude: it is smallest at the
