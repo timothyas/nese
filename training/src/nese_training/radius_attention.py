@@ -48,10 +48,12 @@ class MaskedAttentionWrapper(nn.Module):
         self,
         attention_implementation: AttentionImplementation = "scaled_dot_product_attention",
         block_size: BlockSize = 128,
+        compile_mode: Optional[str] = None,
     ):
         super().__init__()
         self.attention_implementation = attention_implementation
         self.block_size = block_size
+        self.compile_mode = compile_mode
         self.mask: Optional[Tensor] = None
         self.block_mask = None
         self.flex_attention = None
@@ -63,7 +65,9 @@ class MaskedAttentionWrapper(nn.Module):
             from torch.nn.attention.flex_attention import create_block_mask
             from torch.nn.attention.flex_attention import flex_attention
 
-            self.flex_attention = torch.compile(flex_attention) if mask.is_cuda else flex_attention
+            self.flex_attention = (
+                torch.compile(flex_attention, mode=self.compile_mode) if mask.is_cuda else flex_attention
+            )
 
             def mask_mod(batch, head, q_idx, kv_idx):
                 return mask[q_idx, kv_idx]
@@ -110,6 +114,7 @@ class RadiusTransformerProcessor(TransformerProcessor):
         *,
         attention_implementation: AttentionImplementation = "scaled_dot_product_attention",
         block_size: BlockSize = 128,
+        compile_mode: Optional[str] = None,
         dropout_p: float = 0.0,
         **kwargs,
     ) -> None:
@@ -120,7 +125,7 @@ class RadiusTransformerProcessor(TransformerProcessor):
             raise ValueError("flex_attention does not support attention dropout, set dropout_p to 0")
         kwargs["window_size"] = None
         super().__init__(attention_implementation="scaled_dot_product_attention", dropout_p=dropout_p, **kwargs)
-        self.masked_attention = MaskedAttentionWrapper(attention_implementation, block_size)
+        self.masked_attention = MaskedAttentionWrapper(attention_implementation, block_size, compile_mode)
         for block in self.proc:
             block.attention.attention = self.masked_attention
 

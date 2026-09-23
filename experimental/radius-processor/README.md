@@ -173,7 +173,7 @@ Baseline run-to-run spread is <1%, so the slowdown is real.
 | 32 × 32 | 5544 | 462 | 4.4 | 3.8 |
 | 64 × 64 | 1704 | 568 | 5.4 | 4.6 |
 | 128 × 64 | 1128 | 752 | 7.1 | 6.1 |
-| 128 × 128 (current) | 824 | 1099 | 10.4 | 8.9 |
+| 128 × 128 (v0) | 824 | 1099 | 10.4 | 8.9 |
 | 256 × 128 | 552 | 1472 | 13.9 | 12.0 |
 
 The exact disk has 106 keys per query.
@@ -183,16 +183,48 @@ At 128 × 128, the radius processor computes about as many pairs as the ±512
 sliding window (1004), so the 14% slowdown points to a higher cost per pair
 (the `mask_mod` gathers, a less tuned kernel than flash attention) rather
 than to more pairs.
-With `num_channels: 512` and 16 heads, the head dimension is 32. For that size,
-torch 2.10 picks 64 × 64 kernel tiles on Hopper for both the forward and
-backward passes, so the kernel already splits each 128 × 128 mask block into
-four 64 × 64 tiles.
-A 64 block mask therefore cuts 48% of the computed pairs while the kernel
-keeps its tile size, and it is the natural first try.
-128 × 64 is a milder option (−32%).
+With `num_channels: 512` and 16 heads, the head dimension is 32.
 The block mask size is set by `block_size` on the processor (`training.yaml`),
 and it must be a multiple of the kernel tile, otherwise flex attention raises an error.
+On Olivia (torch 2.8, NGC 25.06) the default kernel tile for this head dimension
+is 128 × 64, and the divisibility check is made against that default before
+`kernel_options` are applied, so a 64 query block only compiles with
+`compile_mode: max-autotune-no-cudagraphs`, which offers smaller candidate tiles.
 
-### TODO
+**Block size timings**, processor forward+backward on one GH200
+(`benchmark_block_size.py`, `training.yaml` dimensions, batch 4, fp16, 30 timed iterations):
 
-* benchmark `block_size: 64` (and `[128, 64]`) against 128 on Olivia
+| block size | compile mode | ms | vs 128 | vs sliding window |
+|---|---|---|---|---|
+| sliding window ±512 (flash attention) | | 145.9 | | |
+| 128 (v0) | default | 173.2 | | +19% |
+| 128 × 64 | default | 155.8 | −10% | +7% |
+| 128 × 64, 64 × 64 kernel tiles | default | 151.1 | −13% | +4% |
+| 128 | max-autotune | 165.6 | −4% | +13% |
+| 128 × 64 | max-autotune | 150.0 | −13% | +3% |
+| **64** | **max-autotune** | **138.4** | **−20%** | **−5%** |
+| 64 × 128 | max-autotune | 148.6 | −14% | +2% |
+| 32 | max-autotune | no valid kernel | | |
+
+Default-mode timings reproduce within ~1 ms across jobs, and peak memory is 16.3 GiB
+for every block size.
+With `block_size: 64` and max-autotune, the radius processor is slightly faster
+than the sliding window.
+The block size does not change the model output, since `mask_mod` still applies
+the exact disk inside each tile.
+
+End to end on 4 GH200s, a 2000 step run with `block_size: 64` and max-autotune
+(`runs/block64`, job 2316088) trains at 5.13 it/s (epoch 3), against 4.42 it/s for the
+radius processor at `block_size: 128` and 5.04 it/s for the sliding window baseline.
+So the radius processor goes from ~14% slower than the sliding window to ~2% faster.
+Note that the sliding window has a smaller perceptive field after 16 processor
+iterations, reaching 89% of the latent mesh versus 98% with the radius
+transformer at r=1200km.
+So with this tuning we get speed and more large-scale context.
+
+**Scaling with number of nodes**
+This is a note to future self for when I eventually want a ~25km resolution data space and
+~100km resolution latent space.
+Basically, expect a bit of tuning since we will have more nodes inside of each
+block, so a larger block size will probably be beneficial.
+Basically, worthwhile to redo this benchmarking.

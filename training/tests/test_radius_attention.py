@@ -88,15 +88,18 @@ def test_masked_sdpa_matches_naive_softmax():
     torch.testing.assert_close(attention(query, key, value, batch_size=2), expected)
 
 
-@pytest.mark.parametrize("block_size", [128, 64, (128, 64)])
-def test_flex_matches_sdpa(block_size):
+@pytest.mark.parametrize(
+    "block_size, compile_mode",
+    [(128, None), ((128, 64), None), (64, "max-autotune-no-cudagraphs")],
+)
+def test_flex_matches_sdpa(block_size, compile_mode):
     torch.manual_seed(0)
     query, key, value = torch.randn(3, 1, 4, 192, 16, device=DEVICE).unbind(0)
     graph = hidden_graph(RADIUS_KM)
     mask = adjacency_mask(graph["hidden", "to", "hidden"].edge_index, graph["hidden"].num_nodes)
 
     sdpa = MaskedAttentionWrapper("scaled_dot_product_attention")
-    flex = MaskedAttentionWrapper("flex_attention", block_size)
+    flex = MaskedAttentionWrapper("flex_attention", block_size, compile_mode)
     sdpa.set_mask(mask)
     flex.set_mask(mask)
     assert flex.block_mask.BLOCK_SIZE == (block_size if isinstance(block_size, tuple) else (block_size, block_size))
@@ -157,6 +160,12 @@ def test_rejects_dropout_with_flex_attention():
     config = {**processor_config(), "attention_implementation": "flex_attention", "dropout_p": 0.1}
     with pytest.raises(ValueError, match="dropout"):
         RadiusTransformerProcessor(**config)
+
+
+def test_compile_mode_is_passed_to_masked_attention():
+    config = {**processor_config(), "attention_implementation": "flex_attention"}
+    processor = RadiusTransformerProcessor(**config, compile_mode="max-autotune-no-cudagraphs")
+    assert processor.masked_attention.compile_mode == "max-autotune-no-cudagraphs"
 
 
 def test_dropout_is_passed_to_masked_sdpa():
