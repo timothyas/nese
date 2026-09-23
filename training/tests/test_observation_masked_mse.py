@@ -1,15 +1,14 @@
-"""Name resolution and live-group averaging in ObservationMaskedMSE.
+"""Name resolution and observation-count pooling in ObservationMaskedMSE.
 
 The loss replaces one CombinedLoss entry per mission with a naming convention, so the
-two things that can fail silently are resolving the wrong set of columns and dividing by
-the wrong number of groups. Both are checked here against the real nese-dataprep names.
+two things that can fail silently are resolving the wrong set of columns and weighting
+the groups wrongly. Both are checked here against the real nese-dataprep names.
 """
 
 import pytest
 import torch
 from anemoi.training.utils.enums import TensorDim
 from anemoi.training.utils.index_space import IndexSpace
-from nese_training.losses import CountMaskedAndWeightedMSE
 from nese_training.losses import ObservationMaskedMSE
 
 GRID = 64
@@ -31,16 +30,23 @@ GROUPS = [
 class FakeIndices:
     """The three name->position maps ObservationMaskedMSE reads off IndexCollection."""
 
-    def __init__(self, groups: list[str], *, drop_counts: tuple[str, ...] = ()) -> None:
-        names = ["sla"]
-        for group in groups:
-            names.append(f"sla_filtered_{group}")
-            if group not in drop_counts:
-                names.append(f"obs_count_{group}")
+    def __init__(
+        self,
+        groups: list[str],
+        *,
+        drop_counts: tuple[str, ...] = (),
+        fields: dict[str, str] | None = None,
+    ) -> None:
+        fields = fields or {"sla": "sla_filtered"}
+        names = list(fields)
+        for observed_as in fields.values():
+            names += [f"{observed_as}_{group}" for group in groups]
+        names += [f"obs_count_{group}" for group in groups if group not in drop_counts]
 
         self.data_full_name_to_position = {name: i for i, name in enumerate(names)}
+        model_output = {name: i for i, name in enumerate(fields)}
         self.data = type("_D", (), {"output": type("_O", (), {"name_to_position": self.data_full_name_to_position})})
-        self.model = type("_M", (), {"output": type("_O", (), {"name_to_position": {"sla": 0}})})
+        self.model = type("_M", (), {"output": type("_O", (), {"name_to_position": model_output})})
 
     @property
     def n_columns(self) -> int:
@@ -133,32 +139,33 @@ def test_string_shorthand_is_accepted() -> None:
     assert len(loss.target_variables) == 2 * len(GROUPS)
 
 
-def test_matches_mean_of_separate_per_mission_terms() -> None:
-    """Regression guard: with every group live this must reproduce exactly what the
-    3-term CombinedLoss config computed, up to CombinedLoss summing where this averages."""
+def test_matches_pooled_mse_over_observed_cells() -> None:
+    """Every observed (group, cell) pair counts once, as in nese-verify's pooled score."""
     indices = FakeIndices(GROUPS)
     generator = torch.Generator().manual_seed(0)
-    observed = {
-        group: torch.rand(GRID, generator=generator) < 0.3 for group in GROUPS
-    }
+    observed = {group: torch.rand(GRID, generator=generator) < 0.3 for group in GROUPS}
     pred, target = make_batch(indices, observed)
+    squared_errors, n_obs = 0.0, 0
     for group in GROUPS:
         column = indices.data_full_name_to_position[f"sla_filtered_{group}"]
         target[..., column] = torch.randn(GRID, generator=generator) * 0.1
+        error = pred[0, 0, 0, :, 0] - target[0, 0, 0, :, column]
+        squared_errors += (error[observed[group]] ** 2).sum()
+        n_obs += observed[group].sum()
 
-    combined = call(make_loss(), pred, target)
+    assert torch.allclose(call(make_loss(), pred, target), squared_errors / n_obs, atol=1e-6)
 
-    separate = []
-    for group in GROUPS:
-        single = CountMaskedAndWeightedMSE()
-        single.add_scaler(dimension=TensorDim.GRID.value, scaler=torch.ones(GRID) / GRID, name="node_weights")
-        columns = [
-            indices.data_full_name_to_position[f"sla_filtered_{group}"],
-            indices.data_full_name_to_position[f"obs_count_{group}"],
-        ]
-        separate.append(single(pred.repeat(1, 1, 1, 1, 2), target[..., columns]))
 
-    assert torch.allclose(combined, sum(separate) / len(separate), atol=1e-6)
+def test_groups_weigh_by_observation_count() -> None:
+    """A group seeing 48 cells outweighs one seeing 16 three to one, not one to one."""
+    indices = FakeIndices(GROUPS)
+    many, few = torch.zeros(GRID, dtype=torch.bool), torch.zeros(GRID, dtype=torch.bool)
+    many[:48], few[48:] = True, True
+    pred, target = make_batch(indices, {"ers_2": many, "gfo": few})
+    target[..., indices.data_full_name_to_position["sla_filtered_gfo"]] = 2.5  # error 2.0
+
+    expected = (48 * 0.5**2 + 16 * 2.0**2) / 64
+    assert torch.allclose(call(make_loss(), pred, target), torch.tensor(expected), atol=1e-5)
 
 
 def test_dead_groups_do_not_dilute_the_loss() -> None:
@@ -175,25 +182,51 @@ def test_dead_groups_do_not_dilute_the_loss() -> None:
     assert torch.allclose(call(few, pred, target), call(many, pred, target), atol=1e-6)
 
 
-def test_declaring_more_groups_would_dilute_without_the_correction() -> None:
-    """The failure mode the live divisor exists to prevent, measured against the
-    uncorrected loss: 3 live of 8 declared reads 3/8 of its true value."""
-    live_groups = GROUPS[:3]
-    indices = FakeIndices(GROUPS)
-    pred, target = make_batch(indices, all_observed(live_groups))
-
-    uncorrected = CountMaskedAndWeightedMSE()
-    uncorrected.add_scaler(dimension=TensorDim.GRID.value, scaler=torch.ones(GRID) / GRID, name="node_weights")
-    columns = []
+def make_two_field_batch(swh_target: float) -> tuple:
+    """sla predicted 0.5 and swh 2.0 against targets of 0 and ``swh_target``, seen together."""
+    fields = {"sla": "sla_filtered", "swh": "swh_denoised"}
+    indices = FakeIndices(GROUPS, fields=fields)
+    loss = ObservationMaskedMSE(
+        observations={name: {"observed_as": observed_as, "groups": "auto"} for name, observed_as in fields.items()},
+        data_indices=indices,
+    )
+    pred = torch.full((1, 1, 1, GRID, 2), 0.5)
+    pred[..., 1] = 2.0
+    target = torch.zeros(1, 1, 1, GRID, indices.n_columns)
+    for group, mask in all_observed(GROUPS[:3]).items():
+        target[..., indices.data_full_name_to_position[f"obs_count_{group}"]] = mask.float()
     for group in GROUPS:
-        columns += [
-            indices.data_full_name_to_position[f"sla_filtered_{group}"],
-            indices.data_full_name_to_position[f"obs_count_{group}"],
-        ]
-    diluted = uncorrected(pred.repeat(1, 1, 1, 1, 2 * len(GROUPS)), target[..., columns])
-    corrected = call(make_loss(groups=GROUPS), pred, target)
+        target[..., indices.data_full_name_to_position[f"swh_denoised_{group}"]] = swh_target
+    return loss, pred, target
 
-    assert torch.allclose(corrected * len(live_groups) / len(GROUPS), diluted, atol=1e-6)
+
+def test_fields_are_weighted_equally() -> None:
+    loss, pred, target = make_two_field_batch(swh_target=0.0)
+    assert torch.allclose(call(loss, pred, target), torch.tensor((0.5**2 + 2.0**2) / 2), atol=1e-5)
+
+
+def test_a_field_without_error_still_counts_as_live() -> None:
+    """Liveness comes from the counts, not the error: a perfect swh halves the sla loss."""
+    loss, pred, target = make_two_field_batch(swh_target=2.0)
+    assert torch.allclose(call(loss, pred, target), torch.tensor(0.5**2 / 2), atol=1e-5)
+
+
+def test_an_unobserved_field_does_not_dilute_the_loss() -> None:
+    fields = {"sla": "sla_filtered", "swh": "swh_denoised"}
+    indices = FakeIndices(GROUPS, fields=fields)
+    loss = ObservationMaskedMSE(
+        observations={
+            "sla": {"observed_as": "sla_filtered", "groups": "auto"},
+            "swh": {"observed_as": "swh_denoised", "groups": ["gfo"]},
+        },
+        data_indices=indices,
+    )
+    pred = torch.full((1, 1, 1, GRID, 2), 0.5)
+    target = torch.zeros(1, 1, 1, GRID, indices.n_columns)
+    for group, mask in all_observed(GROUPS[:3]).items():  # gfo is not among them
+        target[..., indices.data_full_name_to_position[f"obs_count_{group}"]] = mask.float()
+
+    assert torch.allclose(call(loss, pred, target), torch.tensor(0.25), atol=1e-5)
 
 
 def test_unobserved_cells_do_not_affect_the_loss() -> None:
@@ -223,8 +256,7 @@ def test_observed_cells_do_affect_the_loss() -> None:
 
 @pytest.mark.parametrize("n_observed", [4, 16, 32, 64])
 def test_loss_is_invariant_to_coverage(n_observed: int) -> None:
-    """Per-group coverage normalisation is inherited unchanged: a constant per-cell error
-    gives a constant loss however much of the mesh was seen."""
+    """A constant per-cell error gives a constant loss however much of the mesh was seen."""
     mask = torch.zeros(GRID, dtype=torch.bool)
     mask[:n_observed] = True
 
