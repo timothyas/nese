@@ -1,6 +1,6 @@
 debugging_info:
-  root_dir: runs/v0.10k
-  run_id: 5e8dbc90554c42359a623bfb63188a8c
+  root_dir: runs/v2
+  run_id: 87baf0330e4d42849c8722cdd196adea
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
 # multistep_input: 3
@@ -25,3 +25,6 @@ input:
           - sla_filtered_jason_2
         rename:
           sla_filtered_jason_2: sla
+
+logistics:
+  third_party_log_level: warning

@@ -76,6 +76,13 @@ Unseen    0.06357 ->  0.06339 (  -0.3%)    0.03815 ->  0.03800 (  -0.4%)    0.00
 So basically, changes under a percent we can more or less ignore, and biases of
 the same order of magnitude shouldn't be taken too seriously.
 
+### Version 2
+
+Now uses an observation count weighting in the loss, rather than averaging over
+the number of live missions.
+Note that this counts the number of observed cells, not counting up the full obs
+count array.
+
 ## Training
 
 * Total batch size 16, with 4 GPUs x 4 samples per GPU

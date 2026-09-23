@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=inference-v1
+#SBATCH --job-name=inference-v2
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel
@@ -10,7 +10,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=288
 #SBATCH --mem=808G
-#SBATCH --time=00:30:00
+#SBATCH --time=00:05:00
 
 set -euo pipefail
 NRANKS="${SLURM_GPUS_ON_NODE:?no GPUs allocated -- this script expects --gpus-per-node}"

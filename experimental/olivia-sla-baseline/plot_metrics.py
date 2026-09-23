@@ -12,9 +12,9 @@ import xarray as xr
 
 # --- things to update -------------------------------------------------------
 BASELINE_DIR = "runs/v0.10k/inference-validation"
-BASELINE_LABEL = "baseline"
-EXPERIMENT_DIR = "runs/v1/inference-validation"
-EXPERIMENT_LABEL = "v1"
+BASELINE_LABEL = "Live Mission Weighted"
+EXPERIMENT_DIR = "runs/v2/inference-validation"
+EXPERIMENT_LABEL = "Obs Count Weighted"
 PERSISTENCE_DIR = BASELINE_DIR
 PERSISTENCE_LABEL = "persistence"
 

@@ -66,8 +66,8 @@ def read_val_step_loss(client, run, key, step_key):
 
 
 if __name__ == "__main__":
-    logname = "v0.10k"
-    experiment = "v0.10k"
+    logname = "v2"
+    experiment = "v2"
     log_dir = f"runs/{logname}"
     run_dir = f"runs/{experiment}"
     client, run = open_run(f"{log_dir}/logs/mlflow", experiment_name=experiment)
