@@ -62,10 +62,10 @@ def test_latent_is_observed_mean_not_count_weighted(encoder):
     torch.testing.assert_close(single, many)
 
 
-def names() -> list[str]:
+def names(groups: list[str] = GROUPS) -> list[str]:
     return (
-        [f"sla_filtered_{group}" for group in GROUPS]
-        + [f"obs_count_{group}" for group in GROUPS]
+        [f"sla_filtered_{group}" for group in groups]
+        + [f"obs_count_{group}" for group in groups]
         + FORCINGS
         + ["sla"]
     )
@@ -95,8 +95,8 @@ def toy_graph() -> HeteroData:
     return graph.to("cpu")
 
 
-def toy_model(n_step_input: int = 2) -> tuple[FieldEncoderEncProcDec, IndexCollection]:
-    variables = names()
+def toy_model(n_step_input: int = 2, groups: list[str] = GROUPS) -> tuple[FieldEncoderEncProcDec, IndexCollection]:
+    variables = names(groups)
     data_config = OmegaConf.create(
         {
             "forcing": variables[:-1],
@@ -165,3 +165,40 @@ def test_forward_emits_the_diagnostic_on_every_node():
 
     assert y.shape == (1, 1, 1, grid, 1)
     assert torch.isfinite(y).all()
+
+
+def stack_inputs(indices: IndexCollection, columns: dict[str, torch.Tensor]) -> torch.Tensor:
+    return torch.stack([columns[name] for name in indices.model.input.name_to_index], dim=-1)
+
+
+@pytest.mark.parametrize(
+    "groups",
+    [GROUPS + ["sentinel_3a"], GROUPS[:1], ["cryosat_2", "haiyang_2b"]],
+    ids=["more", "fewer", "renamed"],
+)
+def test_weights_transfer_to_a_different_set_of_groups(groups):
+    trained, _ = toy_model()
+    other, indices = toy_model(groups=groups)
+    other.load_state_dict(trained.state_dict())
+
+    grid = other._graph_data["data"].num_nodes
+    y = other({"data": torch.randn(1, 2, 1, grid, len(indices.model.input))})["data"]
+    assert torch.isfinite(y).all()
+
+
+def test_unobserved_extra_group_leaves_prediction_unchanged():
+    trained, trained_indices = toy_model()
+    extended, extended_indices = toy_model(groups=GROUPS + ["sentinel_3a"])
+    extended.load_state_dict(trained.state_dict())
+
+    grid = trained._graph_data["data"].num_nodes
+    shape = (1, 2, 1, grid)
+    columns = {name: torch.randn(shape) for name in names()}
+    columns |= {f"obs_count_{group}": torch.randint(0, 3, shape).float() for group in GROUPS}
+    extra = {"sla_filtered_sentinel_3a": torch.randn(shape), "obs_count_sentinel_3a": torch.zeros(shape)}
+
+    trained.eval(), extended.eval()
+    with torch.no_grad():
+        expected = trained({"data": stack_inputs(trained_indices, columns)})["data"]
+        actual = extended({"data": stack_inputs(extended_indices, columns | extra)})["data"]
+    torch.testing.assert_close(actual, expected)
