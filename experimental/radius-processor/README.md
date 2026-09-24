@@ -219,3 +219,13 @@ This is a note to future self for when I eventually want a ~25km resolution data
 Basically, expect a bit of tuning since we will have more nodes inside of each
 block, so a larger block size will probably be beneficial.
 Basically, worthwhile to redo this benchmarking.
+
+## Version 0
+
+10k iterations, comparable to the previous baseline
+
+## Version 1
+
+6912 iterations = 12 epochs * 576 iterations / epoch
+
+Avoid the overfitting.

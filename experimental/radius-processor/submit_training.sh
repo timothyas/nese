@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=training-v0
+#SBATCH --job-name=training-v1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel
@@ -10,7 +10,7 @@
 #SBATCH --gpus-per-node=4
 #SBATCH --cpus-per-task=72
 #SBATCH --mem=808G
-#SBATCH --time=01:30:00
+#SBATCH --time=00:45:00
 
 set -euo pipefail
 
