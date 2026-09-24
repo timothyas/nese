@@ -79,6 +79,23 @@ design (`commands/config.py:96`), so it will still report `CountMaskedMSE` as in
 against the closed loss enum. That is expected, not a broken config. `config dump` does
 not validate at all.
 
+## Field encoder
+
+`nese_training.field_encoder.FieldEncoderEncProcDec` is optional (select it with
+`model.model._target_`). Instead of one input channel per mission, it maps each
+field's observations through one shared MLP (`1 -> field_channels`) and averages
+over the groups that observed each cell (`count > 0`, the same pooling as the loss).
+Unobserved cells get a zero latent. The field latents replace the `{observed_as}_*`
+and `count` columns in the input concat; all other inputs pass through unchanged.
+
+```yaml
+model:
+  model:
+    _target_: nese_training.field_encoder.FieldEncoderEncProcDec
+    fields: ${training.training_loss.datasets.ocean.observations}
+    field_channels: 32
+```
+
 ## Why the loss is custom
 
 `CountMaskedMSE` needs a per-mission coverage mask at the target time. The existing
