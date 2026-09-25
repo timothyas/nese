@@ -10,7 +10,7 @@
 #SBATCH --mem-per-cpu=4G
 #SBATCH --time=01:00:00
 
-# Note, this took X minutes
+# Note, this took 11 minutes
 
 set -euo pipefail
 
