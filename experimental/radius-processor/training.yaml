@@ -517,7 +517,7 @@ training:
     datasets:
       ocean: []
   max_epochs: null
-  max_steps: 10000
+  max_steps: 6912
   submodules_to_freeze: []
 
 diagnostics:
@@ -602,7 +602,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v0
+      experiment_name: v1
       project_name: radius-processor
       terminal: false
       system: false

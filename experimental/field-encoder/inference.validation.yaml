@@ -1,0 +1,30 @@
+debugging_info:
+  root_dir: runs/v1
+  run_id: 4dd116b205c1489cb809bd477b18c673
+checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
+
+# multistep_input: 3
+# so start is first day with all inputs in validation period
+date_range:
+  start: 2019-01-03T12
+  end: 2020-12-31T12
+  freq: 24h
+
+output:
+  nese-zarr: ${debugging_info.root_dir}/inference-validation
+lead_time: 24h
+allow_nans: true
+initial_state_categories: [dynamic_forcings]
+
+input:
+  dataset:
+    join:
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+        select:
+          - sla_filtered_jason_2
+        rename:
+          sla_filtered_jason_2: sla
+
+logistics:
+  third_party_log_level: warning
