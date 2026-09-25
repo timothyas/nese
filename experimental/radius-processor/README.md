@@ -228,4 +228,37 @@ Basically, worthwhile to redo this benchmarking.
 
 6912 iterations = 12 epochs * 576 iterations / epoch
 
-Avoid the overfitting.
+Avoid the overfitting. It still happens a bit, and performs slightly worse
+compared to `olivia-sla-baseline-v2`, although they are trained for a different
+number of steps.
+Still tiny tiny differences, like up to 1% in RMSE/MAE and 6% in bias (tiny real
+value). So probably shouldn't take it too seriously.
+
+```
+radius-processor-v1 relative to olivia-sla-baseline-v2, pooled over groups
+--------------------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06341 ->  0.06310 (  -0.5%)    0.03795 ->  0.03794 (  -0.0%)    0.00194 ->  0.00206 (  +6.1%)
++0h       0.04160 ->  0.04196 (  +0.9%)    0.02593 ->  0.02620 (  +1.0%)    0.00054 ->  0.00054 (  -0.0%)
+-24h      0.04267 ->  0.04301 (  +0.8%)    0.02657 ->  0.02682 (  +0.9%)    0.00059 ->  0.00059 (  +1.1%)
+-48h      0.04287 ->  0.04317 (  +0.7%)    0.02680 ->  0.02704 (  +0.9%)    0.00061 ->  0.00059 (  -3.1%)
+```
+
+
+
+## Model size
+
+From `runs/v1` `inference-last.ckpt`: **~57.4 M trainable parameters, 230 MB of
+weights (fp32)**.
+
+| Stage | Trainable params | MB |
+|---|---:|---:|
+| Encoder (`GraphTransformerForwardMapper`, 1 block) | **3,498,496** | 14.0 |
+| Processor (16-layer `RadiusTransformerProcessor`, 3,150,848 / layer) | **50,413,568** | 201.7 |
+| Decoder (`GraphTransformerBackwardMapper`, 1 block) | **3,497,473** | 14.0 |
+| **Total** | **57,409,537** | **229.6** |
+
+The processor has the same number of parameters as the sliding window processor
+in `../olivia-sla-baseline`, since the radius only changes the attention mask.

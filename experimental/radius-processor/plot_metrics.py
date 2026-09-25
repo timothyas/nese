@@ -11,11 +11,11 @@ import seaborn as sns
 import xarray as xr
 
 # --- things to update -------------------------------------------------------
-BASELINE_DIR = "../olivia-sla-baseline/runs/v0.10k/inference-validation"
-BASELINE_LABEL = "baseline"
-EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "radius-processor"
-PERSISTENCE_DIR = BASELINE_DIR
+BASELINE_DIR = "../olivia-sla-baseline/runs/v2/inference-validation"
+BASELINE_LABEL = "olivia-sla-baseline-v2"
+EXPERIMENT_DIR = "runs/v1/inference-validation"
+EXPERIMENT_LABEL = "radius-processor-v1"
+PERSISTENCE_DIR = "../olivia-sla-baseline/runs/v0.10k/inference-validation"
 PERSISTENCE_LABEL = "persistence"
 
 VARIABLE = "sla"
