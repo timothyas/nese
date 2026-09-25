@@ -21,6 +21,7 @@ Lineage
     * v0: obs-count loss for 10k steps
     * v1: reduced to 6912 steps
     * compare to `radius-processor`
+    * v2: for future comparison, also bring in `ers_1` and `ers_1_geodetic`
 
 
 ## Overfitting

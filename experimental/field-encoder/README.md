@@ -98,6 +98,14 @@ Unseen    0.06310 ->  0.06200 (  -1.7%)    0.03794 ->  0.03732 (  -1.6%)    0.00
 
 ![](runs/v1/inference-validation/figures/metrics.seen_at.jpeg)
 
+### Version 2
+
+The original baseline model had left out `ers_1` and `ers_1_geodetic`.
+It's a bit of a nit, but I keep copying things over, so this is the point where
+I bring in those missions.
+Doubtful it will make a huge difference, but this will remove any doubt about
+skill attribution for future modifications.
+
 ## Model size
 
 From `runs/v1` `inference-last.ckpt`: **~57.4 M trainable parameters, 230 MB of
