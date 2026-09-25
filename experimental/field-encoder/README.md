@@ -75,3 +75,52 @@ bin).
 * Qi et al. (2017), *PointNet*, [arXiv:1612.00593](https://arxiv.org/abs/1612.00593)
 * Gorishniy et al. (2022), *On Embeddings for Numerical Features in Tabular Deep
   Learning*, [arXiv:2203.05556](https://arxiv.org/abs/2203.05556)
+
+## Results
+
+### Version 0
+
+10k iterations, comparable to `radius-processor-v0`
+
+### Version 1
+
+6912 iterations, comparable to `radius-processor-v1`.
+This is the first time I'm really seeing the "Unseen" category get a bit better.
+It's still a small difference in absolute value, and only ~1.5%, but
+it is promising.
+This comes at the cost of a slight degradation in the fields observed at input
+time, but this is encouraging because it indicates that the MLP is actually
+learning this generic representation.
+
+
+```
+field-encoder-v1 relative to radius-processor-v1, pooled over groups
+--------------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06310 ->  0.06200 (  -1.7%)    0.03794 ->  0.03732 (  -1.6%)    0.00206 ->  0.00174 ( -15.5%)
++0h       0.04196 ->  0.04225 (  +0.7%)    0.02620 ->  0.02636 (  +0.6%)    0.00054 ->  0.00052 (  -2.7%)
+-24h      0.04301 ->  0.04339 (  +0.9%)    0.02682 ->  0.02704 (  +0.8%)    0.00059 ->  0.00056 (  -4.8%)
+-48h      0.04317 ->  0.04351 (  +0.8%)    0.02704 ->  0.02722 (  +0.7%)    0.00059 ->  0.00059 (  +0.2%)
+```
+
+![](runs/v1/inference-validation/figures/metrics.seen_at.jpeg)
+
+## Model size
+
+From `runs/v1` `inference-last.ckpt`: **~57.4 M trainable parameters, 230 MB of
+weights (fp32)**.
+
+| Stage | Trainable params | MB |
+|---|---:|---:|
+| Field encoder (`sla` MLP, 1 -> 32 -> 32) | **1,120** | 0.0 |
+| Encoder (`GraphTransformerForwardMapper`, 1 block) | **3,486,208** | 13.9 |
+| Processor (16-layer `RadiusTransformerProcessor`, 3,150,848 / layer) | **50,413,568** | 201.7 |
+| Decoder (`GraphTransformerBackwardMapper`, 1 block) | **3,485,185** | 13.9 |
+| **Total** | **57,386,081** | **229.5** |
+
+That is 23,456 fewer parameters than `../radius-processor` v1: the encoder's
+`emb_nodes_src` and the decoder's `emb_nodes_dst` both take 127 input channels
+instead of 151, since the per-group SLA channels are replaced by the `sla`
+latent channels.
