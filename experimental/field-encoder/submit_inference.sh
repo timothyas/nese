@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=inference-v1
+#SBATCH --job-name=inference-v2
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel

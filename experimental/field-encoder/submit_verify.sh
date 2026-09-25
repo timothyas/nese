@@ -1,14 +1,14 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=verify-v1
+#SBATCH --job-name=verify-v2
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=small
 #SBATCH --qos=devel
 #SBATCH --ntasks=64
 #SBATCH --cpus-per-task=2
 #SBATCH --mem-per-cpu=4G
-#SBATCH --time=01:00:00
+#SBATCH --time=00:15:00
 
 set -euo pipefail
 

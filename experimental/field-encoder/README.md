@@ -106,6 +106,23 @@ I bring in those missions.
 Doubtful it will make a huge difference, but this will remove any doubt about
 skill attribution for future modifications.
 
+Marginal gains from including these two missions.
+The differences between the error plots is hilariously small.
+However, the validation loss seems to level out even earlier now, no idea why
+that is...
+
+```
+field-encoder-v2 relative to field-encoder-v1, pooled over groups
+-----------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06200 ->  0.06183 (  -0.3%)    0.03732 ->  0.03717 (  -0.4%)    0.00174 ->  0.00173 (  -0.7%)
++0h       0.04225 ->  0.04220 (  -0.1%)    0.02636 ->  0.02629 (  -0.3%)    0.00052 ->  0.00051 (  -2.5%)
+-24h      0.04339 ->  0.04329 (  -0.2%)    0.02704 ->  0.02695 (  -0.4%)    0.00056 ->  0.00056 (  -0.3%)
+-48h      0.04351 ->  0.04339 (  -0.3%)    0.02722 ->  0.02711 (  -0.4%)    0.00059 ->  0.00062 (  +3.8%)
+```
+
 ## Model size
 
 From `runs/v1` `inference-last.ckpt`: **~57.4 M trainable parameters, 230 MB of
