@@ -20,9 +20,16 @@ module purge
 module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese-anemoi
 
+# mpirun here only ever launches ranks on this node (plm=isolated), but by default it also
+# reads the Slurm allocation and then has to match Slurm's node name to its own. When that
+# match fails, it aborts with "No nodes are available for this job". This happened on
+# ~1 in 4 runs. Disabling the slurm allocation component leaves it just the local host.
+
 srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env OMP_NUM_THREADS="$THREADS" \
     --env OMPI_MCA_plm=isolated \
+    --env OMPI_MCA_ras=^slurm \
+    --env PRTE_MCA_ras=^slurm \
     --env OMPI_MCA_pml=ob1 \
     --env OMPI_MCA_btl=self,vader \
     "$NESE_ANEMOI_SIF" \
@@ -31,6 +38,8 @@ srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
 srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env OMP_NUM_THREADS="$THREADS" \
     --env OMPI_MCA_plm=isolated \
+    --env OMPI_MCA_ras=^slurm \
+    --env PRTE_MCA_ras=^slurm \
     --env OMPI_MCA_pml=ob1 \
     --env OMPI_MCA_btl=self,vader \
     "$NESE_ANEMOI_SIF" \
