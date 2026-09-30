@@ -1,0 +1,61 @@
+overwrite: false
+nodes:
+  ocean:
+    node_builder:
+      _target_: anemoi.graphs.nodes.AnemoiDatasetNodes
+      dataset: /cluster/projects/nn2993k/timith/nese/experimental/diagnose-uvgxt/anemoi-hpx6-24h/dataset.zarr
+    attributes: []
+  hidden:
+    node_builder:
+      _target_: anemoi.graphs.nodes.HEALPixNodes
+      resolution: 5
+      nest_ordering: true
+    attributes: []
+edges:
+- source_name: ocean
+  target_name: hidden
+  edge_builders:
+  - _target_: anemoi.graphs.edges.CutOffEdges
+    cutoff_distance_km: 200
+  attributes:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+- source_name: hidden
+  target_name: hidden
+  edge_builders:
+  - _target_: anemoi.graphs.edges.CutOffEdges
+    cutoff_distance_km: 1200
+    max_num_neighbours: 1024
+  attributes:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+- source_name: hidden
+  target_name: ocean
+  edge_builders:
+  - _target_: anemoi.graphs.edges.KNNEdges
+    num_nearest_neighbours: 3
+  attributes:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+attributes:
+  nodes: []
+  edges:
+    edge_length:
+      _target_: anemoi.graphs.edges.attributes.EdgeLength
+      norm: unit-max
+    edge_dirs:
+      _target_: anemoi.graphs.edges.attributes.EdgeDirection
+      norm: unit-std
+post_processors: []

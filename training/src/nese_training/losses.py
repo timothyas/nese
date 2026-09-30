@@ -1,10 +1,12 @@
 """Losses for observation-supervised state estimation."""
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
 import torch
+from anemoi.datasets import open_dataset
 from anemoi.training.losses.base import BaseLoss
 from anemoi.training.losses.base import FunctionalLoss
 from anemoi.training.losses.base import LossFactoryContextKey
@@ -13,8 +15,16 @@ from anemoi.training.utils.index_space import IndexSpace
 
 from nese_training.matern import HEALPixMaternOperator
 from nese_training.matern import delta_hat
+from nese_training.observations import field_members
+from nese_training.observations import is_vector
 from nese_training.observations import normalise_spec
+from nese_training.observations import pool_statistics
 from nese_training.observations import resolve_groups
+from nese_training.physics import EQUATORIAL_BAND
+from nese_training.physics import MIN_NEIGHBOURS
+from nese_training.physics import GeostrophicVelocity
+from nese_training.physics import geostrophy_defined
+from nese_training.physics import read_static
 
 LOGGER = logging.getLogger(__name__)
 
@@ -174,6 +184,20 @@ class CountMaskedAndWeightedMSE(FunctionalLoss):
         return torch.square(predicted - values) * mask
 
 
+@dataclass(frozen=True)
+class _Term:
+    """One (field, group) pair and the columns it is scored on.
+
+    ``targets`` is ``(value, count)`` for a scalar field and ``(u, v, count)`` for a vector
+    one; ``predicted`` lines up with it column for column.
+    """
+
+    field: str
+    predicted: list[str]
+    targets: list[str]
+    vector: bool
+
+
 class ObservationMaskedMSE(FunctionalLoss):
     """``CountMaskedAndWeightedMSE`` over every (variable, group) pair, resolved by name.
 
@@ -191,6 +215,8 @@ class ObservationMaskedMSE(FunctionalLoss):
             observed_as: sla_filtered
             groups: auto
             count: obs_count_sla_{group} # <- this resets the default obs_count_{group} spec
+          uvgxt:
+            components: [ugxt, vgxt]     # a vector field, scored cross-track
 
     ``groups: auto`` recovers the set from the variables the model was given. For example,
     a dataset with ``sla_filtered_topex_poseidon``, ``sla_filtered_jason_2`` will recognize
@@ -202,26 +228,58 @@ class ObservationMaskedMSE(FunctionalLoss):
     of the field's groups. This is the ``pooled`` score in ``nese-verify``'s metrics, and
     groups that observed nothing in a sample drop out without diluting it. Fields are then
     weighted equally, averaging over those observed in the sample.
+
+    A vector field is observed only across the satellite track, so the full predicted
+    vector is scored by its component along the observed one, ``((p - o) . n)**2`` with
+    ``n = o / |o|``. The sign of ``n`` cancels. The direction has to come from the raw
+    observation, so the loss re-derives the pooled statistics from ``dataset`` exactly as
+    the normaliser does (:func:`nese_training.observations.pool_statistics`). The shared
+    stdev keeps the projection valid in normalised space, and the shared mean cancels in
+    ``p - o``. Only cells where the diagnosed velocity is defined are scored
+    (:func:`nese_training.physics.geostrophy_defined`: off the equator, where the
+    observation is NaN and was imputed, with ``min_neighbours`` for the gradient, and with
+    a finite MDT; keep both settings at the physics block's values), and only where the observed speed exceeds
+    ``min_speed``, since a still observation has no direction.
     """
 
     name: str = "observation_masked_mse"
     factory_context_keys = frozenset({LossFactoryContextKey.DATA_INDICES})
+    needs_graph_data: bool = True
 
     def __init__(
         self,
         observations: dict[str, Any],
         *args,
         data_indices: Any = None,  # noqa: ANN401
+        dataset: str | dict | None = None,
+        graph_data: Any = None,  # noqa: ANN401
+        data_node_name: str | None = None,
+        equatorial_band: float = EQUATORIAL_BAND,
+        min_neighbours: int = MIN_NEIGHBOURS,
+        min_speed: float = 1e-6,
         eps: float = 1e-6,
         **kwargs,
     ) -> None:
         super().__init__(*args, **kwargs)
-        self.eps = eps
+        self.eps, self.min_speed = eps, min_speed
         self.observations = {name: self._normalise_spec(spec) for name, spec in observations.items()}
+        self.vector_fields = {name: spec for name, spec in self.observations.items() if is_vector(spec)}
         self.predicted_variables: list[str] = []
         self.target_variables: list[str] = []
         self.predicted_indices_by_layout: dict[IndexSpace, list[int]] = {}
         self.target_indices_by_layout: dict[IndexSpace, list[int]] = {}
+        if self.vector_fields:
+            if dataset is None or graph_data is None or data_node_name is None:
+                msg = f"{type(self).__name__}: vector fields need `dataset` and the graph for their statistics and latitudes."
+                raise ValueError(msg)
+            self.dataset = dataset
+            lat, lon = np.degrees(np.asarray(graph_data[data_node_name]["x"].cpu(), dtype=np.float64)).T
+            static = read_static(dataset, GeostrophicVelocity.static)
+            defined = geostrophy_defined(
+                lat, lon, min_neighbours=min_neighbours, equatorial_band=equatorial_band, static=static
+            )
+            self.register_buffer("defined", torch.from_numpy(defined).unsqueeze(-1), persistent=False)
+            self.supports_sharding = False
         if data_indices is not None:
             self.set_data_indices(data_indices)
 
@@ -231,56 +289,99 @@ class ObservationMaskedMSE(FunctionalLoss):
         return resolve_groups(spec, available, type(self).__name__)
 
     def set_data_indices(self, data_indices: Any) -> "ObservationMaskedMSE":  # noqa: ANN401
-        """Resolve every (variable, group) pair into paired column indices."""
+        """Lay out the columns the loss gathers from ``pred`` and ``target``.
+
+        Every (field, group) pair is one :class:`_Term`. Scalar terms come first, then
+        vector terms, so ``calculate_difference`` can split the gathered columns at
+        ``n_scalar_columns`` and read them in chunks of 2 and 3.
+        """
         data_full = data_indices.data_full_name_to_position
         data_output = data_indices.data.output.name_to_position
         model_output = data_indices.model.output.name_to_position
 
-        predicted, targets = [], []
-        for predicted_name, spec in self.observations.items():
-            if predicted_name not in model_output:
-                msg = f"Predicted variable '{predicted_name}' is not a model output. Available: {list(model_output)}"
-                raise ValueError(msg)
+        terms = [
+            term
+            for field, spec in self.observations.items()
+            for term in self._field_terms(field, spec, data_full, model_output)
+        ]
+        scalar = [term for term in terms if not term.vector]
+        vector = [term for term in terms if term.vector]
+        ordered = scalar + vector
 
-            groups = self._resolve_groups(spec, data_full)
-            for group in groups:
-                value_name = f"{spec['observed_as']}_{group}"
-                count_name = spec["count"].format(group=group)
-                missing = [name for name in (value_name, count_name) if name not in data_full]
-                if missing:
-                    msg = (
-                        f"Cannot score '{predicted_name}' against group '{group}': {missing} not in the dataset. "
-                        f"Every observation column needs its paired count column."
-                    )
-                    raise ValueError(msg)
-                predicted += [predicted_name, predicted_name]
-                targets += [value_name, count_name]
+        self.n_scalar_columns = sum(len(term.targets) for term in scalar)
+        self.predicted_variables = [name for term in ordered for name in term.predicted]
+        self.target_variables = [name for term in ordered for name in term.targets]
 
-            LOGGER.info(
-                "%s: '%s' scored against %d group(s): %s",
-                type(self).__name__,
-                predicted_name,
-                len(groups),
-                ", ".join(groups),
-            )
-
-        self.predicted_variables, self.target_variables = predicted, targets
-        fields = list(self.observations)
-        field_of_column = torch.tensor([fields.index(name) for name in predicted[0::2]])
+        field_names = list(self.observations)
+        field_of_term = torch.tensor([field_names.index(term.field) for term in ordered])
         self.register_buffer(
             "field_membership",
-            torch.nn.functional.one_hot(field_of_column, len(fields)).float(),
+            torch.nn.functional.one_hot(field_of_term, len(field_names)).float(),
             persistent=False,
         )
+        if vector:
+            self._register_vector_statistics([(term.targets[0], term.targets[1]) for term in vector])
+
         self.predicted_indices_by_layout = _indices_by_layout(
-            predicted,
+            self.predicted_variables,
             {IndexSpace.MODEL_OUTPUT: model_output, IndexSpace.DATA_OUTPUT: data_output, IndexSpace.DATA_FULL: data_full},
         )
         self.target_indices_by_layout = _indices_by_layout(
-            targets,
+            self.target_variables,
             {IndexSpace.DATA_OUTPUT: data_output, IndexSpace.DATA_FULL: data_full},
         )
         return self
+
+    def _field_terms(
+        self, field: str, spec: dict, data_full: dict[str, int], model_output: dict[str, int]
+    ) -> list["_Term"]:
+        """One term per group observing ``field``, checked against the dataset.
+
+        "term" is basically the loss-side terminology for groups, since we could have a common
+        group for different fields, so "term" is associated with each field and group.
+        """
+        members = field_members(field, spec)
+        outputs = [output for output, _ in members]
+        unknown = [output for output in outputs if output not in model_output]
+        if unknown:
+            msg = f"Predicted variables {unknown} are not model outputs. Available: {list(model_output)}"
+            raise ValueError(msg)
+
+        groups = self._resolve_groups(spec, data_full)
+        terms = []
+        for group in groups:
+            targets = [f"{observed_as}_{group}" for _, observed_as in members] + [spec["count"].format(group=group)]
+            missing = [name for name in targets if name not in data_full]
+            if missing:
+                msg = (
+                    f"Cannot score '{field}' against group '{group}': {missing} not in the dataset. "
+                    f"Every observation column needs its paired count column."
+                )
+                raise ValueError(msg)
+            # The count column has no prediction; pad so pred and target gather the same width.
+            terms.append(_Term(field, [*outputs, outputs[0]], targets, is_vector(spec)))
+
+        LOGGER.info(
+            "%s: '%s' scored against %d group(s): %s",
+            type(self).__name__,
+            field,
+            len(groups),
+            ", ".join(groups),
+        )
+        return terms
+
+    def _register_vector_statistics(self, observed: list[tuple[str, str]]) -> None:
+        """The pooled (mean_u, mean_v) and shared stdev behind each vector term's (u, v) columns."""
+        store = open_dataset(self.dataset)
+        name_to_index = store.name_to_index
+        stats = pool_statistics(self.vector_fields, name_to_index, store.statistics, type(self).__name__)
+        mean = [[stats["mean"][name_to_index[u]], stats["mean"][name_to_index[v]]] for u, v in observed]
+
+        # At this point, pool_statistics has already computed a common stdev for both components
+        # σ = √((σ_u² + σ_v²)/2)
+        stdev = [stats["stdev"][name_to_index[u]] for u, _ in observed]
+        self.register_buffer("vector_mean", torch.tensor(mean, dtype=torch.float32).T, persistent=False)
+        self.register_buffer("vector_stdev", torch.tensor(stdev, dtype=torch.float32), persistent=False)
 
     def forward(
         self,
@@ -302,11 +403,29 @@ class ObservationMaskedMSE(FunctionalLoss):
         )
         return super().forward(pred, target, squash, **kwargs)
 
-    def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def _scalar_terms(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         values, counts = target[..., 0::2], target[..., 1::2]
-        predicted = pred[..., 0::2]
+        return torch.square(pred[..., 0::2] - values), (counts > 0).to(pred.dtype)
 
-        mask = (counts > 0).to(pred.dtype)
+    def _vector_terms(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        observed_u, observed_v, counts = target[..., 0::3], target[..., 1::3], target[..., 2::3]
+        raw_u = observed_u * self.vector_stdev + self.vector_mean[0]
+        raw_v = observed_v * self.vector_stdev + self.vector_mean[1]
+        speed = torch.hypot(raw_u, raw_v)
+        normal_u, normal_v = raw_u / speed.clamp_min(self.eps), raw_v / speed.clamp_min(self.eps)
+
+        error = (pred[..., 0::3] - observed_u) * normal_u + (pred[..., 1::3] - observed_v) * normal_v
+        mask = (counts > 0) & (speed > self.min_speed) & self.defined
+        return torch.square(error), mask.to(pred.dtype)
+
+    def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        split = self.n_scalar_columns
+        terms = [self._scalar_terms(pred[..., :split], target[..., :split])]
+        if self.vector_fields:
+            terms.append(self._vector_terms(pred[..., split:], target[..., split:]))
+        squared_error = torch.cat([error for error, _ in terms], dim=-1)
+        mask = torch.cat([mask for _, mask in terms], dim=-1)
+
         membership = self.field_membership.to(dtype=mask.dtype)
         field_coverage = _coverage_divisor(self, mask, 0.0) @ membership
         live_fields = (field_coverage > 0).sum(dim=-1, keepdim=True).clamp_min(1)
@@ -316,7 +435,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         column_coverage = (field_coverage @ membership.T).clamp_min(self.eps)
         mask = mask / column_coverage * mask.shape[-1] / live_fields
 
-        return torch.square(predicted - values) * mask
+        return squared_error * mask
 
 
 class MaternPenalty(BaseLoss):

@@ -20,8 +20,10 @@ from anemoi.models.layers.utils import load_layer_kernels
 from anemoi.models.models import AnemoiModelEncProcDec
 from torch import nn
 
+from nese_training.observations import is_vector
 from nese_training.observations import normalise_spec
 from nese_training.observations import resolve_groups
+from nese_training.physics import PhysicsDiagnosticsMixin
 
 
 @dataclass
@@ -36,6 +38,9 @@ def resolve_field_columns(fields: dict, name_to_index: dict[str, int]) -> FieldC
     encoded, consumed = {}, set()
     for field, raw in fields.items():
         spec = normalise_spec(raw)
+        if is_vector(spec):
+            msg = f"Cannot encode vector field {field!r}; list only scalar input fields in `fields`."
+            raise ValueError(msg)
         groups = resolve_groups(spec, name_to_index, FieldEncoder.__name__)
         values = [f"{spec['observed_as']}_{group}" for group in groups]
         counts = [spec["count"].format(group=group) for group in groups]
@@ -76,7 +81,7 @@ class FieldEncoder(nn.Module):
         )
 
 
-class FieldEncoderEncProcDec(AnemoiModelEncProcDec):
+class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
     """``AnemoiModelEncProcDec`` whose input is ``[field latents || other inputs || node attributes]``.
 
     Configured under ``model.model``::

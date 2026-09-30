@@ -120,3 +120,39 @@ def test_explicit_group_list_is_honoured():
     assert out["mean"][n2i["sla"]] == pytest.approx(0.05)
     # a group left out of the spec keeps its own statistics
     assert out["mean"][n2i["sla_filtered_topex_poseidon"]] == pytest.approx(0.20)
+
+
+VECTOR_SPEC = {"uvgxt": {"components": ["ugxt", "vgxt"]}}
+
+
+def make_vector_stats(u_means, v_means, u_stdevs, v_stdevs):
+    names = ["ugxt", "vgxt"] + [f"{c}_{g}" for c in ("ugxt", "vgxt") for g in GROUPS] + [f"obs_count_{g}" for g in GROUPS]
+    n2i = {n: i for i, n in enumerate(names)}
+    stats = {k: np.zeros(len(names)) for k in ("mean", "stdev", "minimum", "maximum")}
+    for g, um, vm, us, vs in zip(GROUPS, u_means, v_means, u_stdevs, v_stdevs):
+        for c, m, s in (("ugxt", um, us), ("vgxt", vm, vs)):
+            i = n2i[f"{c}_{g}"]
+            stats["mean"][i], stats["stdev"][i] = m, s
+            stats["minimum"][i], stats["maximum"][i] = m - 1, m + 1
+        stats["mean"][n2i[f"obs_count_{g}"]] = 1.0
+    return stats, n2i
+
+
+def test_vector_components_share_one_stdev_but_keep_their_means():
+    stats, n2i = make_vector_stats([0.1] * 4, [-0.2] * 4, [0.3] * 4, [0.4] * 4)
+    out = pool_statistics(VECTOR_SPEC, n2i, stats)
+
+    u_members = ["ugxt"] + [f"ugxt_{g}" for g in GROUPS]
+    v_members = ["vgxt"] + [f"vgxt_{g}" for g in GROUPS]
+    assert [out["mean"][n2i[m]] for m in u_members] == pytest.approx([0.1] * len(u_members))
+    assert [out["mean"][n2i[m]] for m in v_members] == pytest.approx([-0.2] * len(v_members))
+    stdevs = {out["stdev"][n2i[m]] for m in u_members + v_members}
+    assert len(stdevs) == 1
+    assert stdevs.pop() == pytest.approx(np.sqrt((0.3**2 + 0.4**2) / 2))
+
+
+def test_vector_components_must_share_groups():
+    stats, n2i = make_vector_stats([0.1] * 4, [-0.2] * 4, [0.3] * 4, [0.4] * 4)
+    del n2i["vgxt_ers_2"]
+    with pytest.raises(ValueError, match="different groups"):
+        pool_statistics(VECTOR_SPEC, n2i, stats)
