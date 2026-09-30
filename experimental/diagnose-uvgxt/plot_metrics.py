@@ -1,7 +1,8 @@
 """A/B comparison of verification metrics between a baseline and this experiment.
 
 Run immediately after nese-verify. Each x category shows split (half) violins for the
-two versions, drawn on top of a wide gray persistence violin for reference.
+two versions, drawn on top of a wide gray persistence violin for reference. With
+BASELINE_DIR = None, the experiment gets one full violin, in the color it has beside a baseline.
 """
 
 from pathlib import Path
@@ -11,14 +12,21 @@ import seaborn as sns
 import xarray as xr
 
 # --- things to update -------------------------------------------------------
-BASELINE_DIR = "../field-encoder/runs/v2/inference-validation"
+
+VARIABLE = "uvgxt"
+
+BASELINE_DIRS = {
+    "sla": "../field-encoder/runs/v2/inference-validation",
+    "uvgxt": None,
+}
+BASELINE_DIR = BASELINE_DIRS[VARIABLE]
 BASELINE_LABEL = "field-encoder-v2"
+
 EXPERIMENT_DIR = "runs/v0/inference-validation"
 EXPERIMENT_LABEL = "diagnose-uvgxt"
-PERSISTENCE_DIR = "../olivia-sla-baseline/runs/v0.10k/inference-validation"
+PERSISTENCE_DIR = EXPERIMENT_DIR
 PERSISTENCE_LABEL = "persistence"
 
-VARIABLE = "sla"
 METRICS = ["rmse", "mae", "bias"]
 STYLE = "../experiments.mplstyle"
 SEEN_AT_LABELS = {24: "Unseen"}  # hours outside the input window get a name, not "+24h"
@@ -62,6 +70,11 @@ def tidy(ds, x_dim):
     return df
 
 
+def version_colors():
+    """Baseline then experiment, in the style's color cycle, whether or not the baseline is drawn."""
+    return dict(zip([prettify(BASELINE_LABEL), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
+
+
 def draw_panel(ax, model, persistence, metric, x_dim):
     sns.violinplot(
         tidy(persistence[[metric]], x_dim),
@@ -74,13 +87,15 @@ def draw_panel(ax, model, persistence, metric, x_dim):
         zorder=0,
         ax=ax,
     )
+    versions = [prettify(v) for v in model["version"].values]
     sns.violinplot(
         tidy(model[[metric]], x_dim),
         x=x_dim,
         y=metric,
         hue="version",
-        hue_order=[prettify(v) for v in model["version"].values],
-        split=True,
+        hue_order=versions,
+        palette={version: version_colors()[version] for version in versions},
+        split=len(versions) > 1,
         inner="quart",
         legend=True,
         ax=ax,
@@ -136,18 +151,18 @@ def main():
     plt.style.use(here / STYLE)
     (here / FIG_DIR).mkdir(exist_ok=True)
 
-    versions = [BASELINE_LABEL, EXPERIMENT_LABEL]
-    by_group = xr.concat(
-        [read_metrics(BASELINE_DIR).expand_dims({"version": [BASELINE_LABEL]}),
-         read_metrics(EXPERIMENT_DIR).expand_dims({"version": [EXPERIMENT_LABEL]})],
-        dim="version",
-    ).sel(version=versions)
+    runs = {BASELINE_LABEL: BASELINE_DIR, EXPERIMENT_LABEL: EXPERIMENT_DIR}
+    runs = {label: run_dir for label, run_dir in runs.items() if run_dir is not None}
 
-    seen_at = xr.concat(
-        [read_metrics(BASELINE_DIR, ".seen_at_hour").expand_dims({"version": [BASELINE_LABEL]}),
-         read_metrics(EXPERIMENT_DIR, ".seen_at_hour").expand_dims({"version": [EXPERIMENT_LABEL]})],
-        dim="version",
-    ).sel(version=versions, group="pooled", drop=True)
+    def by_version(suffix=""):
+        return xr.concat(
+            [read_metrics(run_dir, suffix).expand_dims({"version": [label]})
+             for label, run_dir in runs.items()],
+            dim="version",
+        )
+
+    by_group = by_version()
+    seen_at = by_version(".seen_at_hour").sel(group="pooled", drop=True)
     seen_at = seen_at.assign_coords(
         seen_at_hour=[SEEN_AT_LABELS.get(hour, f"{hour:+d}h")
                       for hour in seen_at["seen_at_hour"].values]
@@ -158,10 +173,11 @@ def main():
         {"seen_at_hour": seen_at["seen_at_hour"].values}
     )
 
-    print_differences(seen_at)
+    if BASELINE_DIR is not None:
+        print_differences(seen_at)
 
-    make_figure(by_group, persistence, "group", "metrics.by_group", rotate_xticks=True)
-    make_figure(seen_at, pooled_persistence, "seen_at_hour", "metrics.seen_at", rotate_xticks=False)
+    make_figure(by_group, persistence, "group", f"metrics.{VARIABLE}.by_group", rotate_xticks=True)
+    make_figure(seen_at, pooled_persistence, "seen_at_hour", f"metrics.{VARIABLE}.seen_at", rotate_xticks=False)
 
 
 if __name__ == "__main__":

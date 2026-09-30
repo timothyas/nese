@@ -81,6 +81,9 @@ the normaliser and imputer statistics and composes the plotted truth.
 
 Wall-clock time = 28 minutes for 12 epochs (6912 iterations). Same as
 `field-encoder`.
+
+### SLA Results
+
 Error is significantly worse than field-encoder in the relative sense,
 (although still just 1mm difference).
 Is this overfitting sooner, and more dramatically?
@@ -96,3 +99,14 @@ Unseen    0.06183 ->  0.06264 (  +1.3%)    0.03717 ->  0.03773 (  +1.5%)    0.00
 -24h      0.04329 ->  0.04421 (  +2.1%)    0.02695 ->  0.02770 (  +2.8%)    0.00056 ->  0.00060 (  +6.0%)
 -48h      0.04339 ->  0.04449 (  +2.5%)    0.02711 ->  0.02799 (  +3.2%)    0.00062 ->  0.00060 (  -2.3%)
 ```
+
+### Velocity results
+
+Look reasonable in movies.
+No baseline model to compare to, but it's beating persistence by a bit, so
+that's a positive start.
+Unseen RMSE even beats persistence, although MAE does not (all observed inputs
+beat persistence).
+Bias is worse than persistence, and persistence has a negative bias.
+With a smooth result (classic MSE training and esp. at 100km), comparing speed
+(which is >=0) will be negative.
