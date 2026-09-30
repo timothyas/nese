@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=verify-v0
+#SBATCH --job-name=verify-v1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=small
 #SBATCH --qos=devel
