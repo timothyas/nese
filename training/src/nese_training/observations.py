@@ -40,7 +40,7 @@ def is_vector(spec: dict) -> bool:
     return "components" in spec
 
 
-def field_members(field: str, spec: dict) -> list[tuple[str, str]]:
+def field_pairs(field: str, spec: dict) -> list[tuple[str, str]]:
     """``(model output, observed_as)`` for each component, or for the field itself."""
     if is_vector(spec):
         return list(zip(spec["components"], spec["observed_as"], strict=True))
@@ -62,7 +62,7 @@ def resolve_groups(spec: dict, available: dict[str, int], owner: str = "") -> li
     """
     if spec["groups"] != "auto":
         return list(spec["groups"])
-    first, *others = [observed_as for _, observed_as in field_members("", spec)]
+    first, *others = [observed_as for _, observed_as in field_pairs("", spec)]
     groups = _groups_with_prefix(f"{first}_", available, owner)
     for observed_as in others:
         other = _groups_with_prefix(f"{observed_as}_", available, owner)
@@ -108,8 +108,8 @@ def pool_statistics(
         spec = normalise_spec(raw)
         groups = resolve_groups(spec, name_to_index, owner)
         counts = [spec["count"].format(group=group) for group in groups]
-        members = field_members(field, spec)
-        observed = {output: [f"{observed_as}_{group}" for group in groups] for output, observed_as in members}
+        pairs = field_pairs(field, spec)
+        observed = {output: [f"{observed_as}_{group}" for group in groups] for output, observed_as in pairs}
 
         missing = [name for name in sum(observed.values(), []) + counts if name not in name_to_index]
         if missing:

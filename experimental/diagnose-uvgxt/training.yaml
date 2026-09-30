@@ -775,7 +775,9 @@ diagnostics:
           _partial_: true
           # Optional overrides (shown with defaults):
           # log_scale: false
-  callbacks: []
+  callbacks:
+    # Logs each field's loss (sla, uvgxt) beside the total; plot_loss.py plots them.
+    - _target_: nese_training.diagnostics.FieldLossLogger
   debug:
     anomaly_detection: false
   log:
@@ -792,7 +794,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v0
+      experiment_name: v1
       project_name: diagnose-uvgxt
       terminal: false
       system: false

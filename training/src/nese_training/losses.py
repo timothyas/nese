@@ -15,7 +15,7 @@ from anemoi.training.utils.index_space import IndexSpace
 
 from nese_training.matern import HEALPixMaternOperator
 from nese_training.matern import delta_hat
-from nese_training.observations import field_members
+from nese_training.observations import field_pairs
 from nese_training.observations import is_vector
 from nese_training.observations import normalise_spec
 from nese_training.observations import pool_statistics
@@ -268,6 +268,9 @@ class ObservationMaskedMSE(FunctionalLoss):
         self.target_variables: list[str] = []
         self.predicted_indices_by_layout: dict[IndexSpace, list[int]] = {}
         self.target_indices_by_layout: dict[IndexSpace, list[int]] = {}
+        # Each field's own pooled loss from the latest call, for logging; see forward.
+        self.field_losses: dict[str, torch.Tensor] = {}
+        self._only_field: int | None = None
         if self.vector_fields:
             if dataset is None or graph_data is None or data_node_name is None:
                 msg = f"{type(self).__name__}: vector fields need `dataset` and the graph for their statistics and latitudes."
@@ -340,8 +343,8 @@ class ObservationMaskedMSE(FunctionalLoss):
         "term" is basically the loss-side terminology for groups, since we could have a common
         group for different fields, so "term" is associated with each field and group.
         """
-        members = field_members(field, spec)
-        outputs = [output for output, _ in members]
+        pairs = field_pairs(field, spec)
+        outputs = [output for output, _ in pairs]
         unknown = [output for output in outputs if output not in model_output]
         if unknown:
             msg = f"Predicted variables {unknown} are not model outputs. Available: {list(model_output)}"
@@ -350,7 +353,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         groups = self._resolve_groups(spec, data_full)
         terms = []
         for group in groups:
-            targets = [f"{observed_as}_{group}" for _, observed_as in members] + [spec["count"].format(group=group)]
+            targets = [f"{observed_as}_{group}" for _, observed_as in pairs] + [spec["count"].format(group=group)]
             missing = [name for name in targets if name not in data_full]
             if missing:
                 msg = (
@@ -401,7 +404,26 @@ class ObservationMaskedMSE(FunctionalLoss):
         target = _select(
             target, target_layout, self.target_indices_by_layout, "target", type(self).__name__
         )
-        return super().forward(pred, target, squash, **kwargs)
+        loss = super().forward(pred, target, squash, **kwargs)
+        if squash and len(self.observations) > 1:
+            self._record_field_losses(pred, target, **kwargs)
+        return loss
+
+    @torch.no_grad()
+    def _record_field_losses(self, pred: torch.Tensor, target: torch.Tensor, **kwargs) -> None:
+        """Each field's pooled loss on its own, for :class:`nese_training.diagnostics.FieldLossLogger`.
+
+        The same reduction as the total, with every other field's columns masked out, so a
+        field's value is exactly what it contributes before the average over live fields. A
+        field nobody observed in the batch comes out zero. Recomputed without gradients, so
+        training is unaffected.
+        """
+        try:
+            for index, field in enumerate(self.observations):
+                self._only_field = index
+                self.field_losses[field] = super().forward(pred, target, True, **kwargs).detach()
+        finally:
+            self._only_field = None
 
     def _scalar_terms(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         values, counts = target[..., 0::2], target[..., 1::2]
@@ -427,6 +449,8 @@ class ObservationMaskedMSE(FunctionalLoss):
         mask = torch.cat([mask for _, mask in terms], dim=-1)
 
         membership = self.field_membership.to(dtype=mask.dtype)
+        if self._only_field is not None:
+            mask = mask * membership[:, self._only_field]
         field_coverage = _coverage_divisor(self, mask, 0.0) @ membership
         live_fields = (field_coverage > 0).sum(dim=-1, keepdim=True).clamp_min(1)
 

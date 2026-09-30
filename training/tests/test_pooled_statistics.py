@@ -44,9 +44,9 @@ def test_field_and_every_group_share_one_mean_and_stdev():
     stats, n2i = make_stats(means)
     out = pool_statistics(SPEC, n2i, stats)
 
-    members = ["sla"] + [f"sla_filtered_{g}" for g in GROUPS]
-    assert len({out["mean"][n2i[m]] for m in members}) == 1
-    assert len({out["stdev"][n2i[m]] for m in members}) == 1
+    columns = ["sla"] + [f"sla_filtered_{g}" for g in GROUPS]
+    assert len({out["mean"][n2i[m]] for m in columns}) == 1
+    assert len({out["stdev"][n2i[m]] for m in columns}) == 1
     # the pooled centre is inside the range it was pooled from
     assert min(means) < out["mean"][n2i["sla"]] < max(means)
 
@@ -142,11 +142,11 @@ def test_vector_components_share_one_stdev_but_keep_their_means():
     stats, n2i = make_vector_stats([0.1] * 4, [-0.2] * 4, [0.3] * 4, [0.4] * 4)
     out = pool_statistics(VECTOR_SPEC, n2i, stats)
 
-    u_members = ["ugxt"] + [f"ugxt_{g}" for g in GROUPS]
-    v_members = ["vgxt"] + [f"vgxt_{g}" for g in GROUPS]
-    assert [out["mean"][n2i[m]] for m in u_members] == pytest.approx([0.1] * len(u_members))
-    assert [out["mean"][n2i[m]] for m in v_members] == pytest.approx([-0.2] * len(v_members))
-    stdevs = {out["stdev"][n2i[m]] for m in u_members + v_members}
+    u_columns = ["ugxt"] + [f"ugxt_{g}" for g in GROUPS]
+    v_columns = ["vgxt"] + [f"vgxt_{g}" for g in GROUPS]
+    assert [out["mean"][n2i[m]] for m in u_columns] == pytest.approx([0.1] * len(u_columns))
+    assert [out["mean"][n2i[m]] for m in v_columns] == pytest.approx([-0.2] * len(v_columns))
+    stdevs = {out["stdev"][n2i[m]] for m in u_columns + v_columns}
     assert len(stdevs) == 1
     assert stdevs.pop() == pytest.approx(np.sqrt((0.3**2 + 0.4**2) / 2))
 

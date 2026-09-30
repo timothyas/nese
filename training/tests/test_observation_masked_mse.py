@@ -427,6 +427,7 @@ def test_scalar_and_vector_fields_weigh_equally(monkeypatch):
     pred, target = cross_track_batch(indices, normal_error=0.05, along_track=0.0)
     pred[..., 0] = 0.5  # sla error 0.5 against a target of 0
     assert torch.allclose(call(loss, pred, target), torch.tensor((0.25 + 0.25) / 2), atol=1e-5)
+    assert torch.allclose(loss.field_losses["uvgxt"], torch.tensor(0.25), atol=1e-5)
 
 
 def test_vector_fields_need_the_store():
@@ -466,3 +467,35 @@ def test_cells_without_an_mdt_are_not_scored(monkeypatch):
         before = call(loss, pred, target)
         pred[..., cell, 1] += 100.0
         assert torch.allclose(before, call(loss, pred, target), atol=1e-5) != scored
+
+
+def test_each_field_records_its_own_pooled_loss() -> None:
+    """The per-field values are what the total averages: sla 0.25 and swh 4.0 give 2.125."""
+    loss, pred, target = make_two_field_batch(swh_target=0.0)
+    total = call(loss, pred, target)
+    assert set(loss.field_losses) == {"sla", "swh"}
+    assert torch.allclose(loss.field_losses["sla"], torch.tensor(0.25), atol=1e-5)
+    assert torch.allclose(loss.field_losses["swh"], torch.tensor(4.0), atol=1e-5)
+    assert torch.allclose(total, (loss.field_losses["sla"] + loss.field_losses["swh"]) / 2)
+
+
+def test_recording_the_fields_does_not_touch_the_gradient() -> None:
+    loss, pred, target = make_two_field_batch(swh_target=0.0)
+    pred.requires_grad_(True)
+    call(loss, pred, target).backward()
+    assert not any(value.requires_grad for value in loss.field_losses.values())
+    expected = pred.detach().clone().requires_grad_(True)
+    fresh = ObservationMaskedMSE(
+        observations=loss.observations,
+        data_indices=FakeIndices(GROUPS, fields={"sla": "sla_filtered", "swh": "swh_denoised"}),
+    )
+    call(fresh, expected, target).backward()
+    torch.testing.assert_close(pred.grad, expected.grad)
+
+
+def test_a_single_field_records_nothing() -> None:
+    indices = FakeIndices(GROUPS)
+    pred, target = make_batch(indices, all_observed(GROUPS))
+    loss = make_loss()
+    call(loss, pred, target)
+    assert loss.field_losses == {}

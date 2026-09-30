@@ -1,6 +1,12 @@
-"""Plot training/validation loss curves for a run's offline mlflow log."""
+"""Plot training/validation loss curves for a run's offline mlflow log.
+
+Always writes loss_curves.pdf for the total loss. When the run logged per-field losses
+(nese_training.diagnostics.FieldLossLogger, for a loss scoring more than one field), also
+writes loss_curves.<field>.pdf for each field.
+"""
 
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -11,6 +17,9 @@ os.environ["MLFLOW_ALLOW_FILE_STORE"] = "true"
 from mlflow.tracking import MlflowClient
 
 plt.style.use("../../nice.mplstyle")
+
+# FieldLossLogger's names, with the _step/_epoch suffix Lightning appends.
+FIELD_LOSS = re.compile(r"^(?P<stage>train|val)_field_loss/(?P<dataset>[^/]+)/(?P<field>.+)_(?P<when>step|epoch)$")
 
 
 def open_run(tracking_dir, experiment_name=None, run_id=None):
@@ -65,6 +74,36 @@ def read_val_step_loss(client, run, key, step_key):
     return pd.Series(values.values, index=global_step, name=key).sort_index()
 
 
+def field_losses(metric_names):
+    """``{(dataset, field): {"train_step": key, ...}}`` for every per-field loss logged."""
+    found = {}
+    for name in metric_names:
+        match = FIELD_LOSS.match(name)
+        if match:
+            keys = found.setdefault((match["dataset"], match["field"]), {})
+            keys[f"{match['stage']}_{match['when']}"] = name
+    return found
+
+
+def plot_curves(client, run, metrics, keys, path, title=None):
+    """Iteration and epoch curves for one loss, training and validation, on a log axis."""
+    val_step = read_val_step_loss(client, run, keys["val_step"], keys["train_step"])
+
+    fig, ax = plt.subplots(figsize=(7, 4))
+    metrics[keys["train_step"]].dropna().plot(ax=ax, lw=0.8, alpha=0.8, label="Training (iteration)")
+    val_step.dropna().plot(ax=ax, lw=0.8, alpha=0.8, label="Validation (iteration)")
+    metrics[keys["train_epoch"]].dropna().plot(ax=ax, label="Training (epoch)")
+    metrics[keys["val_epoch"]].dropna().plot(ax=ax, label="Validation (epoch)")
+
+    ax.set(xlabel="Training Iteration", ylabel="Loss", yscale="log", title=title)
+    ax.legend()
+    ax.grid(True, which="both", alpha=0.3)
+
+    fig.savefig(path, bbox_inches="tight")
+    plt.close(fig)
+    print(f"Saved {path}")
+
+
 if __name__ == "__main__":
     logname = "v0"
     experiment = "v0"
@@ -76,24 +115,16 @@ if __name__ == "__main__":
     print(sorted(run.data.metrics))
 
     metrics = read_metrics(client, run)
-    val_step_loss = read_val_step_loss(
-        client, run, "val_multi_dataset_loss_step", "train_multi_dataset_loss_step"
-    )
+    total = {
+        "train_step": "train_multi_dataset_loss_step",
+        "val_step": "val_multi_dataset_loss_step",
+        "train_epoch": "train_multi_dataset_loss_epoch",
+        "val_epoch": "val_multi_dataset_loss_epoch",
+    }
+    plot_curves(client, run, metrics, total, f"{run_dir}/loss_curves.pdf")
 
-    fig, ax = plt.subplots(figsize=(7, 4))
-
-    metrics["train_multi_dataset_loss_step"].dropna().plot(ax=ax, lw=0.8, alpha=0.8, label="Training (iteration)")
-    val_step_loss.dropna().plot(ax=ax, lw=0.8, alpha=0.8, label="Validation (iteration)")
-    metrics["train_multi_dataset_loss_epoch"].dropna().plot(ax=ax, label="Training (epoch)")
-    metrics["val_multi_dataset_loss_epoch"].dropna().plot(ax=ax, label="Validation (epoch)")
-
-    ax.set(
-        xlabel="Training Iteration",
-        ylabel="Loss",
-        yscale="log",
-    )
-    ax.legend()
-    ax.grid(True, which="both", alpha=0.3)
-
-    fig.savefig(f"{run_dir}/loss_curves.pdf", bbox_inches="tight")
-    print(f"Saved {run_dir}/loss_curves.pdf")
+    fields = field_losses(run.data.metrics)
+    datasets = {dataset for dataset, _ in fields}
+    for (dataset, field), keys in fields.items():
+        name = field if len(datasets) == 1 else f"{dataset}.{field}"
+        plot_curves(client, run, metrics, keys, f"{run_dir}/loss_curves.{name}.pdf", title=field)

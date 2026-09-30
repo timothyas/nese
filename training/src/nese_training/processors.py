@@ -9,7 +9,7 @@ from nese_training.masks import variable_below
 from nese_training.physics import EQUATORIAL_BAND
 from nese_training.physics import MIN_NEIGHBOURS
 from nese_training.physics import store_geostrophy_defined
-from nese_training.observations import field_members
+from nese_training.observations import field_pairs
 from nese_training.observations import normalise_spec
 from nese_training.observations import pool_statistics
 from nese_training.observations import resolve_groups
@@ -101,7 +101,7 @@ class ObsCountNaNRestorer(nn.Module):
         for field, raw in self.composed.items():
             spec = normalise_spec(raw)
             groups = resolve_groups(spec, name_to_index, type(self).__name__)
-            for output, observed_as in field_members(field, spec):
+            for output, observed_as in field_pairs(field, spec):
                 field_col = column.get(name_to_index.get(output))
                 if field_col is None:
                     continue
