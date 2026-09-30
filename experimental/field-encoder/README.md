@@ -123,7 +123,7 @@ Unseen    0.06200 ->  0.06183 (  -0.3%)    0.03732 ->  0.03717 (  -0.4%)    0.00
 -48h      0.04351 ->  0.04339 (  -0.3%)    0.02722 ->  0.02711 (  -0.4%)    0.00059 ->  0.00062 (  +3.8%)
 ```
 
-## Model size
+### V0-V2 Model size
 
 From `runs/v1` `inference-last.ckpt`: **~57.4 M trainable parameters, 230 MB of
 weights (fp32)**.
@@ -140,3 +140,8 @@ That is 23,456 fewer parameters than `../radius-processor` v1: the encoder's
 `emb_nodes_src` and the decoder's `emb_nodes_dst` both take 127 input channels
 instead of 151, since the per-group SLA channels are replaced by the `sla`
 latent channels.
+
+### Version 3
+
+Try a smaller latent size, 8 channels, since 32 won't scale to a bigger state
+space.

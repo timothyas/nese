@@ -361,7 +361,7 @@ model:
     latent_skip: true
     # One shared MLP per field over its groups; see README.md
     fields: ${training.training_loss.datasets.ocean.observations}
-    field_channels: 32
+    field_channels: 8
   layer_kernels:
     LayerNorm:
       _target_: torch.nn.LayerNorm
@@ -619,7 +619,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v2
+      experiment_name: v3
       project_name: field-encoder
       terminal: false
       system: false
