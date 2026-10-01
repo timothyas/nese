@@ -13,10 +13,10 @@ import xarray as xr
 # --- things to update -------------------------------------------------------
 #BASELINE_DIR = "../radius-processor/runs/v1/inference-validation"
 #BASELINE_LABEL = "radius-processor-v1"
-BASELINE_DIR = "runs/v1/inference-validation"
-BASELINE_LABEL = "field-encoder-v1"
-EXPERIMENT_DIR = "runs/v2/inference-validation"
-EXPERIMENT_LABEL = "field-encoder-v2"
+BASELINE_DIR = "runs/v2/inference-validation"
+BASELINE_LABEL = "field_channels = 32"
+EXPERIMENT_DIR = "runs/v3/inference-validation"
+EXPERIMENT_LABEL = "field_channels = 8"
 PERSISTENCE_DIR = "../olivia-sla-baseline/runs/v0.10k/inference-validation"
 PERSISTENCE_LABEL = "persistence"
 

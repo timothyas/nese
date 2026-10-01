@@ -145,3 +145,20 @@ latent channels.
 
 Try a smaller latent size, 8 channels, since 32 won't scale to a bigger state
 space.
+
+In terms of RMSE, there is very little change.
+
+```
+Field Channels = 8 relative to Field Channels = 32, pooled over groups
+----------------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06183 ->  0.06239 (  +0.9%)    0.03717 ->  0.03758 (  +1.1%)    0.00173 ->  0.00181 (  +4.7%)
++0h       0.04220 ->  0.04230 (  +0.2%)    0.02629 ->  0.02635 (  +0.3%)    0.00051 ->  0.00052 (  +2.4%)
+-24h      0.04329 ->  0.04342 (  +0.3%)    0.02695 ->  0.02703 (  +0.3%)    0.00056 ->  0.00055 (  -1.5%)
+-48h      0.04339 ->  0.04351 (  +0.3%)    0.02711 ->  0.02718 (  +0.3%)    0.00062 ->  0.00060 (  -3.1%)
+```
+
+Could the per-field latent weights relate to the graph-specific weights?
+Or maybe at least the bias weights within the MLPs?
