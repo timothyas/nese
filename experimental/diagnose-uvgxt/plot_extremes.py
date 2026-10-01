@@ -15,6 +15,7 @@ fhr=0, the only lead time forecast.zarr stores them at.
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -61,6 +62,14 @@ def prettify(name):
         word if keep(word) else word.upper() if word.lower() in ACRONYMS else word.capitalize()
         for word in words
     )
+
+
+def place_legend(ax, reference_label):
+    """The versions' legend, outside the axes, with the gray reference violin added."""
+    legend = ax.get_legend()
+    handles = [*legend.legend_handles, Patch(facecolor="lightgray", edgecolor="0.4")]
+    labels = [*(text.get_text() for text in legend.get_texts()), prettify(reference_label)]
+    ax.legend(handles, labels, loc="center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
 
 
 def version_colors():
@@ -160,7 +169,7 @@ def make_figure(field):
     for extreme, ax in zip(("max", "min"), axs):
         draw_panel(ax, df, extreme, field)
     axs[0].get_legend().remove()
-    sns.move_legend(axs[1], "center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
+    place_legend(axs[1], OBSERVATIONS_LABEL)
 
     path = here / FIG_DIR / f"extremes.{field}.jpeg"
     fig.savefig(path, dpi=300, bbox_inches="tight")

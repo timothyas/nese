@@ -8,6 +8,7 @@ BASELINE_DIR = None, the experiment gets one full violin, in the color it has be
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 import seaborn as sns
 import xarray as xr
 
@@ -77,6 +78,14 @@ def tidy(ds, x_dim):
     return df
 
 
+def place_legend(ax, reference_label):
+    """The versions' legend, outside the axes, with the gray reference violin added."""
+    legend = ax.get_legend()
+    handles = [*legend.legend_handles, Patch(facecolor="lightgray", edgecolor="0.4")]
+    labels = [*(text.get_text() for text in legend.get_texts()), prettify(reference_label)]
+    ax.legend(handles, labels, loc="center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
+
+
 def version_colors():
     """Baseline then experiment, in the style's color cycle, whether or not the baseline is drawn."""
     return dict(zip([prettify(BASELINE_LABEL), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
@@ -141,7 +150,7 @@ def make_figure(model, persistence, x_dim, name, rotate_xticks):
         draw_panel(ax, model, persistence, metric, x_dim)
         if ax is not axs[0]:
             ax.get_legend().remove()
-    sns.move_legend(axs[0], "center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
+    place_legend(axs[0], PERSISTENCE_LABEL)
     if rotate_xticks:
         axs[-1].set_xticks(axs[-1].get_xticks())
         axs[-1].set_xticklabels(
