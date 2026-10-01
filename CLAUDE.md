@@ -52,6 +52,8 @@ When running on MacOS (environment variable $nickname="bucharest"):
   (e.g. `conda run -n nese python ...`).
 
 When running on Olivia HPC machine (environment variable $nickname="olivia"):
+- You absolutely must follow Sigma2's official AI use policy given
+  [here](https://www.sigma2.no/policy-agentic-ai-tools-hpc-systems)
 - Do not run heavy commands on the login nodes
 - There is no `conda run`/`conda activate`: the env is a Tykky
   container

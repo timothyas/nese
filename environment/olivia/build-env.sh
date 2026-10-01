@@ -4,6 +4,7 @@
 # Lmod modulefile for it. Repeatable: safe to re-run.
 #
 #   bash environment/olivia/build-env.sh
+#   bash environment/olivia/build-env.sh --modulefile-only   # just re-render the modulefile
 #
 # Native conda/pip installs are forbidden on Olivia, so the environment is wrapped
 # with hpc-container-wrapper (Tykky). After this runs:
@@ -19,9 +20,10 @@ LOGISTICS_DIR="${NESE_LOGISTICS_DIR:-/cluster/projects/nn2993k/timith/nese-logis
 DATAPREP_DIR="${NESE_DATAPREP_DIR:-/cluster/projects/nn2993k/timith/nese-dataprep}"
 VERIFY_DIR="${NESE_VERIFY_DIR:-/cluster/projects/nn2993k/timith/nese-verify}"
 MODULES_ROOT="${NESE_MODULES_ROOT:-/cluster/projects/nn2993k/timith/sw/modules}"
-# GCC-14.3.0 toolchain, not the newer GCC-15.2.0 one: the latter's zlib is built for
-# Zen5 and SIGILLs git/mksquashfs on the Zen4 login nodes. Same MPI ABI (libmpi.so.40).
-OPENMPI_MOD="${NESE_OPENMPI_MOD:-OpenMPI/5.0.9-GCC-14.3.0}"
+# A version present in both the Zen4 (NRIS/Login) and Zen5 (NRIS/CPU) trees, so the one
+# modulefile works on login and compute nodes. Not GCC-15.2.0: its zlib SIGILLs
+# git/mksquashfs on the Zen4 login nodes. Same MPI ABI (libmpi.so.40) across 5.0.x.
+OPENMPI_MOD="${NESE_OPENMPI_MOD:-OpenMPI/5.0.8-GCC-14.3.0}"
 HCW_MOD="${NESE_HCW_MOD:-hpc-container-wrapper/0.5.1-CPU}"
 HTTP_PROXY_URL="${NESE_HTTP_PROXY:-http://10.63.2.48:3128/}"
 # Dedicated apptainer cache: isolated from ~/.apptainer so a bad layer from an
@@ -39,6 +41,22 @@ echo ">> nese-dataprep : $DATAPREP_DIR"
 echo ">> nese-verify   : $VERIFY_DIR"
 echo ">> modules root  : $MODULES_ROOT"
 echo ">> openmpi        : $OPENMPI_MOD"
+
+write_modulefile() {
+    local modfile="$MODULES_ROOT/nese/olivia.lua"
+    mkdir -p "$MODULES_ROOT/nese"
+    sed -e "s#@PREFIX@#${PREFIX}#g" \
+        -e "s#@OPENMPI_MOD@#${OPENMPI_MOD}#g" \
+        -e "s#@VERSION@#$(date +%Y%m%d)#g" \
+        -e "s#@ENV_YAML@#${ENV_YAML}#g" \
+        "$SCRIPT_DIR/modulefile.lua.in" > "$modfile"
+    echo ">> wrote modulefile $modfile"
+}
+
+if [ "${1:-}" = "--modulefile-only" ]; then
+    write_modulefile
+    exit 0
+fi
 
 [ -f "$ENV_YAML" ] || { echo "!! missing $ENV_YAML" >&2; exit 1; }
 [ -d "$LOGISTICS_DIR" ] || { echo "!! missing $LOGISTICS_DIR" >&2; exit 1; }
@@ -61,7 +79,9 @@ if compgen -G "$_tmpbase/cw-*" > /dev/null 2>&1; then
 fi
 
 # --- 3. modules -----------------------------------------------------------
-# Just the container wrapper. The build compiles nothing against MPI (conda-forge's
+# Just the container wrapper. hpc-container-wrapper is only in the Zen5 tree, so this
+# loads NRIS/CPU even on a login node; NRIS's "load NRIS/Login instead" warning is
+# expected here. The build compiles nothing against MPI (conda-forge's
 # mpi4py links the external OpenMPI shim), so OpenMPI is a runtime-only dep.
 module load NRIS/CPU
 module load "$HCW_MOD"
@@ -91,16 +111,7 @@ sed -e "s#@LOGISTICS_DIR@#${LOGISTICS_DIR}#g" \
 chmod +x "$GEN_DIR/post-install.sh"
 conda-containerize update "$PREFIX" --post-install "$GEN_DIR/post-install.sh"
 
-# --- 6. modulefile --------------------------------------------------------
-VERSION="$(date +%Y%m%d)"
-mkdir -p "$MODULES_ROOT/nese"
-MODFILE="$MODULES_ROOT/nese/olivia.lua"
-sed -e "s#@PREFIX@#${PREFIX}#g" \
-    -e "s#@OPENMPI_MOD@#${OPENMPI_MOD}#g" \
-    -e "s#@VERSION@#${VERSION}#g" \
-    -e "s#@ENV_YAML@#${ENV_YAML}#g" \
-    "$SCRIPT_DIR/modulefile.lua.in" > "$MODFILE"
-echo ">> wrote modulefile $MODFILE"
+write_modulefile
 
 cat <<EOF
 

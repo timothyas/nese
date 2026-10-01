@@ -6,28 +6,35 @@ help([[
 The `nese` environment, wrapped with hpc-container-wrapper (Tykky).
 
 Puts @PREFIX@/bin on PATH (python, pytest, nese-dataprep, nese-verify, jupyter, ...)
-and loads @OPENMPI_MOD@ so mpi4py finds the system libmpi at runtime. That OpenMPI
-is on the GCC-14.3.0 toolchain (Zen4-safe) rather than the newer GCC-15.2.0 one,
-whose zlib SIGILLs git on the Zen4 login nodes.
+and loads @OPENMPI_MOD@ so mpi4py finds the system libmpi at runtime.
+
+Works on login and CPU compute nodes alike: on a login node (uan*) it loads the
+Zen4 NRIS/Login stack, elsewhere the Zen5 NRIS/CPU stack. @OPENMPI_MOD@ exists
+in both, so the same module serves either.
 
 Sets the Olivia HTTP proxy (http_proxy/https_proxy = 10.63.2.48:3128) -- login and
 compute nodes reach the internet only through it; copernicusmarine / pip / conda
 need it. Reverted on `module unload`.
 
-Also sets the SINGLE-NODE OpenMPI transport vars (OMPI_MCA_pml=ob1,
-OMPI_MCA_btl=sm,self) -- enough for serial work and single-node jobs. MULTI-NODE job
-scripts MUST override them (see environment/olivia/README.md):
-  export OMPI_MCA_pml=cm OMPI_MCA_mtl=ofi OMPI_MCA_mtl_ofi_av=table \
-         PRTE_MCA_ras_base_launch_orted_on_hn=1 \
-         FI_PROVIDER=cxi FI_CXI_RX_MATCH_MODE=hybrid
+OpenMPI transport vars: in a job, NRIS/CPU sets single- or multi-node ones from
+SLURM_NNODES. On a login node this module overrides the Zen4 OpenMPI module's cxi
+settings with OMPI_MCA_pml=ob1, OMPI_MCA_btl=sm,self for serial / singleton use.
 ]])
 
 whatis("Name        : nese")
 whatis("Description : Containerised conda env for NESE (data prep, eval, plotting)")
 whatis("Environment : @PREFIX@")
 
-depends_on("NRIS/CPU")
+local on_login_node = capture("hostname -s"):match("^uan") ~= nil
+
+depends_on(on_login_node and "NRIS/Login" or "NRIS/CPU")
 depends_on("@OPENMPI_MOD@")
+
+-- The Zen4 OpenMPI module hard-sets the cxi fabric, which login nodes lack.
+if on_login_node then
+    setenv("OMPI_MCA_pml", "ob1")
+    setenv("OMPI_MCA_btl", "sm,self")
+end
 
 prepend_path("PATH", "@PREFIX@/bin")
 setenv("NESE_ENV_PREFIX", "@PREFIX@")
@@ -41,7 +48,3 @@ setenv("HTTPS_PROXY", "http://10.63.2.48:3128/")
 setenv("no_proxy", "localhost,127.0.0.1,::1")
 setenv("NO_PROXY", "localhost,127.0.0.1,::1")
 
--- Single-node OpenMPI transport (skip libfabric, use shared memory). Enough for
--- serial work + single-node jobs; multi-node jobs MUST override (see help / README).
-setenv("OMPI_MCA_pml", "ob1")
-setenv("OMPI_MCA_btl", "sm,self")

@@ -18,13 +18,6 @@ export MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
 export DASK_NUM_WORKERS=1
 
-# --- multi-node OpenMPI ---
-export OMPI_MCA_pml=cm
-export OMPI_MCA_mtl=ofi
-export OMPI_MCA_mtl_ofi_av=table
-export PRTE_MCA_ras_base_launch_orted_on_hn=1
-export FI_PROVIDER=cxi
-export FI_CXI_RX_MATCH_MODE=hybrid
-
+# NRIS/CPU (loaded by nese) sets the multi-node OpenMPI/libfabric vars from SLURM_NNODES
 module load nese
 srun nese-dataprep create data.yaml

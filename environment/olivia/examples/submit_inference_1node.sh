@@ -53,8 +53,8 @@ module load nese-anemoi          # sets NESE_ANEMOI_SIF + proxy
 #   plm=isolated  -- OpenMPI 4.1 sees SLURM_* in the env and would otherwise try to
 #                    launch its `orted` helper via `srun`, which does not exist
 #                    inside the container. 'isolated' keeps the launch local.
-#   btl=self,vader -- 4.1 spells shared memory 'vader'; the 'sm' the CPU `nese`
-#                    module sets is the OpenMPI 5 name. No fabric is involved here:
+#   btl=self,vader -- 4.1 spells shared memory 'vader'; the 'sm' that NRIS/CPU
+#                    sets for the host is the OpenMPI 5 name. No fabric is involved here:
 #                    the ranks only ever barrier.
 #
 # --oversubscribe is not really oversubscribing: OpenMPI asks Slurm how many slots
