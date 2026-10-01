@@ -96,6 +96,71 @@ model:
     field_channels: 32
 ```
 
+A vector field (`components: [ugxt, vgxt]`) passes each group's components through its
+MLP together (`n_components -> field_channels`), so each observed vector maps to a single latent.
+A diagnosed field's observations can be inputs like any other field, while the diagnosed field itself
+stays a `diagnostic` output. `defined_by: <physics diagnostic>` also masks the field to the cells
+where that diagnostic is defined, because elsewhere its observations are NaN and have been imputed:
+
+```yaml
+uvgxt:
+  components: [ugxt, vgxt]
+  defined_by: uvgxt   # ignored by the loss and processors
+```
+
+A bin can still be imputed with `count > 0` outside that set, when none of a mission's observations
+in the bin have a velocity (e.g. single-observation passes in `nese-dataprep`).
+
+## Physics diagnostics
+
+`model.physics_diagnostics` lists model outputs computed from other model outputs rather
+than by the network (`nese_training.physics`). Currently available options are:
+
+```yaml
+model:
+  physics_diagnostics: [uvgxt]   # or [{uvgxt: {min_neighbours: 3}}]
+```
+
+### Surface Geostrophic Velocity
+
+`uvgxt` diagnoses the full-field surface geostrophic velocity from the predicted `sla`,
+`ugxt = mdt_u - (g/f) d(sla)/dy` and `vgxt = mdt_v + (g/f) d(sla)/dx`. Constants, names and
+the 5 degree equatorial band follow `nese-dataprep`'s `cmems_l3_sla`. The derivatives are
+a least-squares fit to each HEALPix cell's retained neighbours. The velocity is undefined
+within the equatorial band and at cells keeping fewer than `min_neighbours` (default 3), as
+on some coasts. `physics.geostrophy_defined` is the place where this set is
+defined. There, the
+block outputs only the mean flow (or zero, with no MDT), the loss doesn't score the cell, and
+`processors.GeostrophyMaskPostprocessor` sets it to NaN on the way out, in both the
+prediction and the composed truth. Give the loss and the postprocessor the same
+`min_neighbours` by interpolation, as `experimental/diagnose-uvgxt/training.yaml` does.
+
+* `ugxt` and `vgxt` must be `diagnostic` model outputs, never inputs. This is checked at
+  build time, along with `sla` being an output and `mdt_u`/`mdt_v` being in
+  `system.input.dataset`.
+* The decoder emits only the network's outputs, so the network never predicts a diagnosed
+  field itself.
+* `mdt_u`/`mdt_v` are read in raw units from the store and saved in the checkpoint.
+  Listing them as forcing is optional.
+* The block uses the scales of the dataset's own normalizer, built from the same config.
+* The grid can't be sharded, since the gradient needs every cell's neighbours.
+
+The observations are cross-track only, so the loss scores the vector field by its
+component across the observed track:
+
+```yaml
+observations:
+  uvgxt:
+    components: [ugxt, vgxt]   # observed as {component}_{group}
+```
+
+The track normal is the observed vector's direction in raw units, so the loss needs
+`dataset: ${system.input.dataset}` to pool the statistics the same way the normaliser does.
+A vector field's components share one pooled stdev, which keeps directions intact in
+normalised space, and each keeps its own pooled mean. The loss skips cells where the
+velocity is undefined and cells with zero observed speed. A bin crossed by tracks of
+different orientation only approximates a projection; see `nese-dataprep`'s `docs/data_sources.md`.
+
 ## Why the loss is custom
 
 `CountMaskedMSE` needs a per-mission coverage mask at the target time. The existing

@@ -4,6 +4,10 @@ Observations of a field are ``{observed_as}_{group}`` and their per-bin counts a
 ``count`` with ``{group}`` substituted. The loss and the preprocessors both have to
 recover the same mission list from those names, so the spec lives here rather than in
 either of them, and one config block can feed both.
+
+A vector field names its ``components``, each a model output observed as
+``{component}_{group}`` (``observed_as`` defaults to the components). Its components share
+one stdev, so a direction survives normalisation; see :func:`pool_statistics`.
 """
 
 from typing import Any
@@ -18,6 +22,12 @@ def normalise_spec(spec: str | dict) -> dict:
     if isinstance(spec, str):
         spec = {"observed_as": spec}
     spec = dict(spec)
+    if "components" in spec:
+        spec["components"] = list(spec["components"])
+        spec["observed_as"] = list(spec.get("observed_as", spec["components"]))
+        if len(spec["observed_as"]) != len(spec["components"]):
+            msg = f"Observation spec {spec!r} needs one 'observed_as' per component."
+            raise ValueError(msg)
     if "observed_as" not in spec:
         msg = f"Observation spec {spec!r} is missing 'observed_as'."
         raise ValueError(msg)
@@ -26,16 +36,40 @@ def normalise_spec(spec: str | dict) -> dict:
     return spec
 
 
+def is_vector(spec: dict) -> bool:
+    return "components" in spec
+
+
+def field_pairs(field: str, spec: dict) -> list[tuple[str, str]]:
+    """``(model output, observed_as)`` for each component, or for the field itself."""
+    if is_vector(spec):
+        return list(zip(spec["components"], spec["observed_as"], strict=True))
+    return [(field, spec["observed_as"])]
+
+
+def _groups_with_prefix(prefix: str, available: dict[str, int], owner: str) -> list[str]:
+    found = [(pos, name[len(prefix) :]) for name, pos in available.items() if name.startswith(prefix)]
+    if not found:
+        msg = f"No variables matching '{prefix}*' are available to {owner or 'the caller'}."
+        raise ValueError(msg)
+    return [group for _, group in sorted(found)]
+
+
 def resolve_groups(spec: dict, available: dict[str, int], owner: str = "") -> list[str]:
-    """The observing groups of a field, ordered by where their columns sit."""
-    prefix = f"{spec['observed_as']}_"
-    if spec["groups"] == "auto":
-        found = [(pos, name[len(prefix) :]) for name, pos in available.items() if name.startswith(prefix)]
-        if not found:
-            msg = f"No variables matching '{prefix}*' are available to {owner or 'the caller'}."
+    """The observing groups of a field, ordered by where their columns sit.
+
+    Every component of a vector field must be observed by the same groups.
+    """
+    if spec["groups"] != "auto":
+        return list(spec["groups"])
+    first, *others = [observed_as for _, observed_as in field_pairs("", spec)]
+    groups = _groups_with_prefix(f"{first}_", available, owner)
+    for observed_as in others:
+        other = _groups_with_prefix(f"{observed_as}_", available, owner)
+        if sorted(other) != sorted(groups):
+            msg = f"'{observed_as}_*' and '{first}_*' are observed by different groups: {other} vs {groups}."
             raise ValueError(msg)
-        return [group for _, group in sorted(found)]
-    return list(spec["groups"])
+    return groups
 
 
 def pool_statistics(
@@ -55,6 +89,11 @@ def pool_statistics(
     satisfy. One affine map for the field and all its observations fixes both: the
     inter-mission offsets cancel and the trend survives as signal.
 
+    A vector field pools each component's mean separately but gives all components one
+    stdev, the root of their mean pooled variance. A per-component stdev would stretch
+    the vector anisotropically, and the loss could no longer recover the direction it
+    projects onto.
+
     Groups are weighted by their obs-count mean, which is proportional to the number of
     observations each contributed. anemoi hands a processor only mean/stdev/minimum/
     maximum, never the counts behind them, and this reproduces true count-weighted
@@ -68,32 +107,42 @@ def pool_statistics(
     for field, raw in pool.items():
         spec = normalise_spec(raw)
         groups = resolve_groups(spec, name_to_index, owner)
-        observed = [f"{spec['observed_as']}_{group}" for group in groups]
         counts = [spec["count"].format(group=group) for group in groups]
+        pairs = field_pairs(field, spec)
+        observed = {output: [f"{observed_as}_{group}" for group in groups] for output, observed_as in pairs}
 
-        missing = [name for name in observed + counts if name not in name_to_index]
+        missing = [name for name in sum(observed.values(), []) + counts if name not in name_to_index]
         if missing:
             msg = f"Cannot pool statistics for {field!r}: {missing} not in the dataset."
             raise ValueError(msg)
 
-        obs_idx = [name_to_index[name] for name in observed]
         weights = np.array([stats["mean"][name_to_index[name]] for name in counts], dtype="float64")
         if weights.sum() <= 0:
             msg = f"Cannot pool statistics for {field!r}: every observing group has a zero obs count."
             raise ValueError(msg)
         weights = weights / weights.sum()
 
-        mean, stdev = stats["mean"][obs_idx], stats["stdev"][obs_idx]
-        pooled_mean = float((weights * mean).sum())
-        # Pool the second moment about zero, then shift: E[x^2] = var + mean^2.
-        pooled_var = float((weights * (stdev**2 + mean**2)).sum() - pooled_mean**2)
+        moments = {
+            output: _pooled_moments(stats, [name_to_index[name] for name in names], weights)
+            for output, names in observed.items()
+        }
+        pooled_stdev = np.sqrt(max(np.mean([var for _, var in moments.values()]), 0.0))
 
-        # The field itself (the diagnostic the model emits) shares the map when present,
-        # so its prediction and its targets land in the same space.
-        members = obs_idx + ([name_to_index[field]] if field in name_to_index else [])
-        stats["mean"][members] = pooled_mean
-        stats["stdev"][members] = np.sqrt(max(pooled_var, 0.0))
-        stats["minimum"][members] = stats["minimum"][obs_idx].min()
-        stats["maximum"][members] = stats["maximum"][obs_idx].max()
+        for output, names in observed.items():
+            obs_idx = [name_to_index[name] for name in names]
+            # The output itself (the diagnostic the model emits) shares the map when present,
+            # so its prediction and its targets land in the same space.
+            columns = obs_idx + ([name_to_index[output]] if output in name_to_index else [])
+            stats["mean"][columns] = moments[output][0]
+            stats["stdev"][columns] = pooled_stdev
+            stats["minimum"][columns] = stats["minimum"][obs_idx].min()
+            stats["maximum"][columns] = stats["maximum"][obs_idx].max()
 
     return stats
+
+
+def _pooled_moments(stats: dict[str, np.ndarray], obs_idx: list[int], weights: np.ndarray) -> tuple[float, float]:
+    """Count-weighted mean and variance, pooling the second moment about zero then shifting."""
+    mean, stdev = stats["mean"][obs_idx], stats["stdev"][obs_idx]
+    pooled_mean = float((weights * mean).sum())
+    return pooled_mean, float((weights * (stdev**2 + mean**2)).sum() - pooled_mean**2)

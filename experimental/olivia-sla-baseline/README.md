@@ -46,10 +46,10 @@ Model size: **~57.4 M trainable parameters, 230 MB of weights (fp32)**.
 
 | Stage | Trainable params | MB |
 |---|---:|---:|
-| Encoder (`GraphTransformerForwardMapper`, 1 block) | **3,499,520** | 14.0 |
+| Encoder (`GraphTransformerForwardMapper`, 1 block) | **3,498,496** | 14.0 |
 | Processor (16-layer `TransformerProcessor`, 3,150,848 / layer) | **50,413,568** | 201.7 |
-| Decoder (`GraphTransformerBackwardMapper`, 1 block) | **3,498,497** | 14.0 |
-| **Total** | **57,411,585** | **229.6** |
+| Decoder (`GraphTransformerBackwardMapper`, 1 block) | **3,497,473** | 14.0 |
+| **Total** | **57,409,537** | **229.6** |
 
 The processor is 88% of the weights. Each processor layer is a plain
 pre-norm transformer block: bias-free QKV + output projection (4 x 512x512), two

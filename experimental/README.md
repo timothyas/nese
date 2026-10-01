@@ -21,6 +21,17 @@ Lineage
     * v0: obs-count loss for 10k steps
     * v1: reduced to 6912 steps
     * compare to `radius-processor`
+    * v2: for future comparison, also bring in `ers_1` and `ers_1_geodetic`
+    * v3: try `field_channels = 8` not 32, no big difference. Useful for bigger
+      models
+7. `diagnose-uvgxt`: add a `physics-diagnostics` module and compute surface
+   geostrophic velocities from SLA
+    * note the model computes velocity pointed in east/north directions, `xt`
+      is still used in nomenclature to indicate where the fields come from
+    * v0: no uvgxt as inputs, just computed and data used as targets
+    * v1: add per-variable loss logging
+    * v2: add uvgxt data inputs, one field encoder per vector pair, so now two
+      MLPs, one for `sla` and one for `uvgxt`
 
 
 ## Overfitting
@@ -43,6 +54,13 @@ and the loss formulation changes as noted above.
 | dropout-sla v0 | ~7,500 | 0.2718 | 0.2715 @ 9,215 / 0.2719 |
 | field-encoder v0 | ~5,800–6,900 | 0.2762 → 0.2748 | 0.2748 @ 6,911 / 0.2799 |
 | field-encoder v1 * | ~5,800–6,300 | 0.2760 → 0.2759 | 0.2759 @ 6,335 / 0.2764 |
+| field-encoder v2 * | ~4,600–5,800 | 0.2738 → 0.2735 | 0.2735 @ 5,759 / 0.2747 |
+| field-encoder v3 * | ~5,200–5,800 | 0.2772 → 0.2761 | 0.2761 @ 5,759 / 0.2772 |
+| diagnose-uvgxt v0 * † | ~4,000–5,200 | 0.7495 → 0.7476 | 0.7476 @ 5,183 / 0.7511 |
+| diagnose-uvgxt v1 * † | ~4,600–5,200 | 0.7488 → 0.7483 | 0.7483 @ 5,183 / 0.7516 |
+| diagnose-uvgxt v2 * † | ~4,000–5,200 | 0.7445 → 0.7440 | 0.7440 @ 5,183 / 0.7469 |
 
-`*` = Shortened to `max_steps: 6912` (12 epochs) rather than 10k, for
-`field-encoder-v1` and `radius-processor-v1`.
+`*` = Shortened to `max_steps: 6912` (12 epochs) rather than 10k.
+
+`†` = Aggregate of the `sla` and `uvgxt` field losses (fields weighted equally), so not
+comparable to the SLA-only rows above.

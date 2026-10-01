@@ -98,7 +98,32 @@ Unseen    0.06310 ->  0.06200 (  -1.7%)    0.03794 ->  0.03732 (  -1.6%)    0.00
 
 ![](runs/v1/inference-validation/figures/metrics.seen_at.jpeg)
 
-## Model size
+### Version 2
+
+The original baseline model had left out `ers_1` and `ers_1_geodetic`.
+It's a bit of a nit, but I keep copying things over, so this is the point where
+I bring in those missions.
+Doubtful it will make a huge difference, but this will remove any doubt about
+skill attribution for future modifications.
+
+Marginal gains from including these two missions.
+The differences between the error plots is hilariously small.
+However, the validation loss seems to level out even earlier now, no idea why
+that is...
+
+```
+field-encoder-v2 relative to field-encoder-v1, pooled over groups
+-----------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06200 ->  0.06183 (  -0.3%)    0.03732 ->  0.03717 (  -0.4%)    0.00174 ->  0.00173 (  -0.7%)
++0h       0.04225 ->  0.04220 (  -0.1%)    0.02636 ->  0.02629 (  -0.3%)    0.00052 ->  0.00051 (  -2.5%)
+-24h      0.04339 ->  0.04329 (  -0.2%)    0.02704 ->  0.02695 (  -0.4%)    0.00056 ->  0.00056 (  -0.3%)
+-48h      0.04351 ->  0.04339 (  -0.3%)    0.02722 ->  0.02711 (  -0.4%)    0.00059 ->  0.00062 (  +3.8%)
+```
+
+### V0-V2 Model size
 
 From `runs/v1` `inference-last.ckpt`: **~57.4 M trainable parameters, 230 MB of
 weights (fp32)**.
@@ -115,3 +140,25 @@ That is 23,456 fewer parameters than `../radius-processor` v1: the encoder's
 `emb_nodes_src` and the decoder's `emb_nodes_dst` both take 127 input channels
 instead of 151, since the per-group SLA channels are replaced by the `sla`
 latent channels.
+
+### Version 3
+
+Try a smaller latent size, 8 channels, since 32 won't scale to a bigger state
+space.
+
+In terms of RMSE, there is very little change.
+
+```
+Field Channels = 8 relative to Field Channels = 32, pooled over groups
+----------------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06183 ->  0.06239 (  +0.9%)    0.03717 ->  0.03758 (  +1.1%)    0.00173 ->  0.00181 (  +4.7%)
++0h       0.04220 ->  0.04230 (  +0.2%)    0.02629 ->  0.02635 (  +0.3%)    0.00051 ->  0.00052 (  +2.4%)
+-24h      0.04329 ->  0.04342 (  +0.3%)    0.02695 ->  0.02703 (  +0.3%)    0.00056 ->  0.00055 (  -1.5%)
+-48h      0.04339 ->  0.04351 (  +0.3%)    0.02711 ->  0.02718 (  +0.3%)    0.00062 ->  0.00060 (  -3.1%)
+```
+
+Could the per-field latent weights relate to the graph-specific weights?
+Or maybe at least the bias weights within the MLPs?

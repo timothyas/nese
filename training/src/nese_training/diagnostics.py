@@ -1,6 +1,11 @@
-"""Plot callbacks for observation-supervised state estimation."""
+"""Callbacks for observation-supervised state estimation."""
+
+from typing import Any
 
 from anemoi.training.diagnostics.callbacks.plot import BatchOutputPlot
+from pytorch_lightning import Callback
+
+from nese_training.losses import ObservationMaskedMSE
 
 
 class ObservationBatchOutputPlot(BatchOutputPlot):
@@ -35,3 +40,45 @@ class ObservationBatchOutputPlot(BatchOutputPlot):
         data, output_tensor = super().process(pl_module, dataset_name, *args, **kwargs)
         positions = pl_module.data_indices[dataset_name].model_output_positions_in_data_output
         return data[..., positions], output_tensor
+
+
+class FieldLossLogger(Callback):
+    """Log each field's loss beside the total, for training and validation.
+
+    ``ObservationMaskedMSE`` averages its fields into one number before anemoi sees it. It
+    also records each field's own pooled loss (``field_losses``), and this logs those as
+    ``{stage}_field_loss/{dataset}/{field}``, per step and per epoch like anemoi's total.
+    Nothing is logged for a loss with a single field, whose value is the total.
+
+    Configured under ``diagnostics.callbacks``::
+
+        callbacks:
+          - _target_: nese_training.diagnostics.FieldLossLogger
+    """
+
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx) -> None:  # noqa: ANN001, ARG002
+        self._log(pl_module, "train", batch)
+
+    def on_validation_batch_end(
+        self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0  # noqa: ANN001, ARG002
+    ) -> None:
+        self._log(pl_module, "val", batch)
+
+    @staticmethod
+    def _log(pl_module: Any, stage: str, batch: dict) -> None:  # noqa: ANN401
+        batch_size = next(iter(batch.values())).shape[0]
+        for dataset_name, loss in pl_module.loss.items():
+            for leaf in loss.modules():
+                if not isinstance(leaf, ObservationMaskedMSE):
+                    continue
+                for field, value in leaf.field_losses.items():
+                    pl_module.log(
+                        f"{stage}_field_loss/{dataset_name}/{field}",
+                        value,
+                        on_step=True,
+                        on_epoch=True,
+                        prog_bar=False,
+                        logger=pl_module.logger_enabled,
+                        batch_size=batch_size,
+                        sync_dist=True,
+                    )

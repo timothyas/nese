@@ -6,6 +6,11 @@ from anemoi.models.preprocessing.normalizer import InputNormalizer
 from torch import nn
 
 from nese_training.masks import variable_below
+from nese_training.physics import EQUATORIAL_BAND
+from nese_training.physics import MIN_NEIGHBOURS
+from nese_training.physics import store_geostrophy_defined
+from nese_training.observations import field_pairs
+from nese_training.observations import normalise_spec
 from nese_training.observations import pool_statistics
 from nese_training.observations import resolve_groups
 
@@ -93,34 +98,42 @@ class ObsCountNaNRestorer(nn.Module):
         record's extreme eras). Cells nobody saw stay NaN, so the truth keeps its gaps
         and only the prediction is dense.
         """
-        for field, spec in self.composed.items():
-            field_col = column.get(name_to_index.get(field))
-            if field_col is None:
-                continue
-
-            weighted = torch.zeros_like(x[..., field_col])
-            weights = torch.zeros_like(weighted)
-            for group in resolve_groups(spec, name_to_index, type(self).__name__):
-                value_col = column.get(name_to_index.get(f"{spec['observed_as']}_{group}"))
-                count_col = column.get(name_to_index.get(spec["count"].format(group=group)))
-                if value_col is None or count_col is None:
+        for field, raw in self.composed.items():
+            spec = normalise_spec(raw)
+            groups = resolve_groups(spec, name_to_index, type(self).__name__)
+            for output, observed_as in field_pairs(field, spec):
+                field_col = column.get(name_to_index.get(output))
+                if field_col is None:
                     continue
-                count = x[..., count_col].clamp_min(0)
-                observed = count > 0
-                # The gaps are NaN by now, and NaN*0 is NaN rather than 0, so they have to
-                # be cleared before they enter the sum rather than masked after.
-                value = torch.nan_to_num(x[..., value_col], nan=0.0)
-                weighted = weighted + torch.where(observed, value * count, torch.zeros_like(count))
-                weights = weights + torch.where(observed, count, torch.zeros_like(count))
-
-            seen = weights > 0
-            x[..., field_col] = torch.where(
-                seen,
-                weighted / torch.where(seen, weights, torch.ones_like(weights)),
-                torch.full_like(weighted, torch.nan),
-            )
+                observations = [(f"{observed_as}_{group}", spec["count"].format(group=group)) for group in groups]
+                x[..., field_col] = self._count_weighted_mean(x, column, name_to_index, observations)
 
         return x
+
+    @staticmethod
+    def _count_weighted_mean(x: torch.Tensor, column: dict, name_to_index: dict, observations: list) -> torch.Tensor:
+        """Count-weighted mean of the ``(value, count)`` columns, NaN where nobody observed."""
+        weighted = torch.zeros_like(x[..., 0])
+        weights = torch.zeros_like(weighted)
+        for value_name, count_name in observations:
+            value_col = column.get(name_to_index.get(value_name))
+            count_col = column.get(name_to_index.get(count_name))
+            if value_col is None or count_col is None:
+                continue
+            count = x[..., count_col].clamp_min(0)
+            observed = count > 0
+            # The gaps are NaN by now, and NaN*0 is NaN rather than 0, so they have to
+            # be cleared before they enter the sum rather than masked after.
+            value = torch.nan_to_num(x[..., value_col], nan=0.0)
+            weighted = weighted + torch.where(observed, value * count, torch.zeros_like(count))
+            weights = weights + torch.where(observed, count, torch.zeros_like(count))
+
+        seen = weights > 0
+        return torch.where(
+            seen,
+            weighted / torch.where(seen, weights, torch.ones_like(weights)),
+            torch.full_like(weighted, torch.nan),
+        )
 
 
 class SeaMaskPostprocessor(nn.Module):
@@ -178,6 +191,63 @@ class SeaMaskPostprocessor(nn.Module):
         return torch.where(self.sea.unsqueeze(-1), x, torch.nan)
 
 
+class GeostrophyMaskPostprocessor(nn.Module):
+    """NaN the diagnosed geostrophic velocity wherever it is undefined, on the way out.
+
+    ``GeostrophicVelocity`` must emit a finite number everywhere, and the loss already
+    ignores the cells where that number means nothing: the equatorial band, cells with too
+    few neighbours for a gradient, and cells with no MDT. This marks the same cells --
+    through the same :func:`nese_training.physics.geostrophy_defined` -- in the prediction
+    and in the truth's composed columns, so plots and inference show a gap there rather
+    than a mean flow, a zero, or an imputed fill.
+
+    Inverse pass only, like :class:`SeaMaskPostprocessor`. List it before
+    ``ObsCountNaNRestorer`` so that, with the inverse chain reversed, it runs after the
+    truth has been composed. Keep ``min_neighbours`` and ``equatorial_band`` at the
+    physics block's values.
+    """
+
+    def __init__(
+        self,
+        dataset: str | dict,
+        variables: tuple[str, ...] = ("ugxt", "vgxt"),
+        min_neighbours: int = MIN_NEIGHBOURS,
+        equatorial_band: float = EQUATORIAL_BAND,
+        data_indices=None,  # noqa: ANN001
+        statistics: dict | None = None,
+    ) -> None:
+        super().__init__()
+        defined = store_geostrophy_defined(dataset, min_neighbours=min_neighbours, equatorial_band=equatorial_band)
+        self.register_buffer("defined", torch.from_numpy(defined))
+        self.variables = list(variables)
+        self.data_indices = data_indices
+
+    def forward(self, x: torch.Tensor, in_place: bool = True, inverse: bool = False, **_kwargs) -> torch.Tensor:
+        if not inverse:
+            return x if in_place else x.clone()
+        return self.inverse_transform(x, in_place=in_place)
+
+    def _columns(self, width: int) -> list[int]:
+        """The masked variables' columns in a model-output or data-output tensor."""
+        model_output = self.data_indices.model.output
+        if width == len(model_output.full):
+            return [model_output.name_to_index[name] for name in self.variables if name in model_output.name_to_index]
+        output_full = self.data_indices.data.output.full.tolist()
+        if width == len(output_full):
+            column = {data_index: col for col, data_index in enumerate(output_full)}
+            name_to_index = self.data_indices.data.output.name_to_index
+            return [column[name_to_index[name]] for name in self.variables if name_to_index.get(name) in column]
+        return []
+
+    def inverse_transform(self, x: torch.Tensor, in_place: bool = True, **_kwargs) -> torch.Tensor:
+        columns = self._columns(x.shape[-1]) if x.shape[-2] == self.defined.numel() else []
+        if not in_place:
+            x = x.clone()
+        if columns:
+            x[..., columns] = x[..., columns].masked_fill(~self.defined.unsqueeze(-1), torch.nan)
+        return x
+
+
 class _PooledStatistics:
     """Constructor mixin for processors that share one map across a field's groups.
 
@@ -229,11 +299,15 @@ class PooledObservationImputer(_PooledStatistics, InputImputer):
         the restorer masks on counts (intact) while the values behind them had already
         been destroyed.
 
-        Skipping it loses nothing. ``obs_count > 0`` is exactly equivalent to "value is not
-        NaN" in this dataset, so the restorer reproduces every gap from the counts, per bin
-        and without reference to any other one -- the de-imputation is redundant here as
-        well as destructive. With it skipped the composed truth matches a count-weighted
-        mean taken straight from the store in every cell.
+        Skipping it loses nothing. For ``sla_filtered_*``, ``obs_count > 0`` is exactly
+        equivalent to "value is not NaN" in this dataset, so the restorer reproduces every
+        gap from the counts, per bin and without reference to any other one -- the
+        de-imputation is redundant here as well as destructive. With it skipped the composed
+        truth matches a count-weighted mean taken straight from the store in every cell.
+        ``ugxt_*``/``vgxt_*`` are NaN in a further ~0.05% of the cells that are both observed
+        and geostrophy-defined: bins where no obs had a velocity, mostly single-obs passes.
+        There the composed truth shows the imputer's fill (see
+        ``experimental/diagnose-uvgxt/README.md``, "Mask check").
 
         Only the wide tensor is skipped. Model-output-shaped tensors are the imputer's own
         business and go to the base class untouched.

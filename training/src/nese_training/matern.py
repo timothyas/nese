@@ -70,6 +70,21 @@ def infer_nside(lat: np.ndarray, lon: np.ndarray, rtol: float = 0.01) -> int:
     raise ValueError(msg)
 
 
+def healpix_neighbours(lat: np.ndarray, lon: np.ndarray, nside: int) -> tuple[np.ndarray, np.ndarray]:
+    """Each retained cell's 8 HEALPix neighbours as positions among the retained cells.
+
+    Returns ``(local, vec)``: ``local`` is ``(n_cells, 8)`` with ``-1`` where the neighbour
+    does not exist or was not retained (land), and ``vec`` the cells' unit vectors.
+    """
+    cell_index = hp.ang2pix(nside, lon, lat, nest=True, lonlat=True)
+    neighbours = hp.get_all_neighbours(nside, cell_index, nest=True).T
+    lookup = np.full(hp.nside2npix(nside), -1, np.int64)
+    lookup[cell_index] = np.arange(lat.size)
+    local = np.where(neighbours < 0, -1, lookup[np.clip(neighbours, 0, None)])
+    vec = np.stack(hp.pix2vec(nside, cell_index, nest=True), 1)
+    return local, vec
+
+
 class HEALPixMaternOperator(nn.Module):
     """A_hat on the retained cells of a HEALPix mesh.
 
@@ -94,14 +109,10 @@ class HEALPixMaternOperator(nn.Module):
         self.grid_scale = float(np.sqrt(4.0 * np.pi / self.n_pix))
 
         cell_index = hp.ang2pix(self.nside, lon, lat, nest=True, lonlat=True)
-        neighbours = hp.get_all_neighbours(self.nside, cell_index, nest=True).T
-        lookup = np.full(self.n_pix, -1, np.int64)
-        lookup[cell_index] = np.arange(self.n_cells)
-        local = np.where(neighbours < 0, -1, lookup[np.clip(neighbours, 0, None)])
+        local, vec = healpix_neighbours(lat, lon, self.nside)
         valid = local >= 0
         n_valid = valid.sum(1)
 
-        vec = np.stack(hp.pix2vec(self.nside, cell_index, nest=True), 1)
         offset = (vec[np.where(valid, local, 0)] - vec[:, None, :]) / self.grid_scale
         distance = np.linalg.norm(offset, axis=-1)
 
