@@ -4,6 +4,9 @@ Olivia forbids native `conda`/`pip` installs.
 This README documents how to make CPU and GPU environments that are accessed by
 loading a modulefile, i.e., by running `module load <environment>`.
 
+Agents must follow Sigma2's AI use policy shown
+[here](https://www.sigma2.no/policy-agentic-ai-tools-hpc-systems).
+
 ## CPU Environment: `nese`
 
 ```bash
@@ -22,33 +25,28 @@ There is no `conda activate` / `conda run -n nese` here.
 Instead, we load a
 modulefile that puts the container's `bin/` on `PATH`.
 
+### Login vs compute nodes
+
+The same `module load nese` works on login and CPU compute nodes. The modulefile
+checks the hostname: on a login node (`uan*`, Zen4) it loads `NRIS/Login`, elsewhere
+`NRIS/CPU` (Zen5). `OpenMPI/5.0.8-GCC-14.3.0` is in both stacks; the container itself
+is generic x86_64 and runs on either. Keep login-node use light (see the policy above).
+
 ### Running MPI jobs
 
-The `nese` module loads `OpenMPI/5.0.9-GCC-14.3.0` (so `mpi4py` finds the system
-`libmpi`) and sets the transport vars for single-node jobs:
+The `nese` module loads `OpenMPI/5.0.8-GCC-14.3.0` (so `mpi4py` finds the system
+`libmpi`). Inside a job, `NRIS/CPU` sets the OpenMPI/libfabric transport vars from
+`SLURM_NNODES` (`ob1`/`sm,self` for one node, `cm`/`ofi`/`cxi` for several), so job
+scripts set none of them. On a login node the module sets `OMPI_MCA_pml=ob1`,
+`OMPI_MCA_btl=sm,self` for serial use.
+
+Start job scripts with `module purge`, so a login-node module state is not carried
+into the job, and launch with `srun`:
 
 ```bash
-OMPI_MCA_pml=ob1
-OMPI_MCA_btl=sm,self
-```
-
-So we don't need to set these in SLURM scripts.
-Launch with `srun`, since single-node `cxi` can break under `mpirun`.
-
-```bash
-srun -n "$SLURM_NTASKS" nese-dataprep create recipe.yaml
-# GPU node only: export OMPI_MCA_btl=sm,smcuda,self
-```
-
-For multi-node jobs: **override** the module's single-node vars in the job script.
-
-```bash
-export OMPI_MCA_pml=cm
-export OMPI_MCA_mtl=ofi
-export OMPI_MCA_mtl_ofi_av=table
-export PRTE_MCA_ras_base_launch_orted_on_hn=1
-export FI_PROVIDER=cxi
-export FI_CXI_RX_MATCH_MODE=hybrid
+module purge
+module use /cluster/projects/nn2993k/timith/sw/modules
+module load nese
 srun -n "$SLURM_NTASKS" nese-dataprep create recipe.yaml
 ```
 
@@ -62,13 +60,22 @@ bash environment/olivia/build-env.sh
 
 This:
 1. sets the login-node proxy and loads `NRIS/CPU` + `hpc-container-wrapper` (OpenMPI
-   is a runtime-only dep, pulled in by the modulefile, not needed for the build);
+   is a runtime-only dep, pulled in by the modulefile, not needed for the build).
+   `hpc-container-wrapper` is only in the Zen5 stack, so NRIS's
+   "load NRIS/Login instead" warning is expected during a login-node build;
 2. `conda-containerize new` from `environment/olivia/environment.yaml` (skipped if the
    prefix already exists);
 3. `conda-containerize update` to install `nese-logistics`, `nese-dataprep`, and
    `nese-verify` editable (`pip install -e`); both provide subpackages of the shared
    `nese` namespace;
 4. writes the modulefile to `$NESE_MODULES_ROOT/nese/olivia.lua`.
+
+After editing only `modulefile.lua.in` (or `NESE_OPENMPI_MOD`), re-render the
+modulefile without rebuilding the container:
+
+```bash
+bash environment/olivia/build-env.sh --modulefile-only
+```
 
 Defaults (override by exporting before running):
 
@@ -79,7 +86,7 @@ Defaults (override by exporting before running):
 | `NESE_DATAPREP_DIR` | `/cluster/projects/nn2993k/timith/nese-dataprep` |
 | `NESE_VERIFY_DIR` | `/cluster/projects/nn2993k/timith/nese-verify` |
 | `NESE_MODULES_ROOT` | `/cluster/projects/nn2993k/timith/sw/modules` |
-| `NESE_OPENMPI_MOD` | `OpenMPI/5.0.9-GCC-14.3.0` |
+| `NESE_OPENMPI_MOD` | `OpenMPI/5.0.8-GCC-14.3.0` |
 | `NESE_HTTP_PROXY` | `http://10.63.2.48:3128` |
 
 The build needs internet (proxy) and can be slow, so run it in `tmux`/`screen` or a
@@ -109,7 +116,12 @@ nese-dataprep inspect cmems_l3_sla  # sanity-check, accesses CMEMS
 ### Build Troubleshooting
 
 - **Used GCC-14.3.0 toolchain** rather than the newer GCC-15.2.0 one because the
-  latter's zlib SIGILLs `git` on the Zen4 login nodes.
+  latter's zlib SIGILLs `git` on the Zen4 login nodes. The OpenMPI version must also
+  exist in both the Zen4 (`/cluster/software/NRIS/zen4`) and Zen5 trees, so the
+  modulefile can pick `NRIS/Login` or `NRIS/CPU` per host.
+- **`Lmod Warning: You are loading 'NRIS/CPU' on a login node`**: NRIS added this
+  check on 2026-09-30. From `module load nese` it means the modulefile predates the
+  host-dependent stack; re-render it with `--modulefile-only`.
 - **`mksquashfs ... signal: illegal instruction (core dumped)`** during the base
   image fetch: something on `LD_LIBRARY_PATH` gave `mksquashfs` a library built for
   Zen5 while the login node is Zen4 -- usually a `GCC-15.2.0`-toolchain module (e.g.
@@ -190,7 +202,7 @@ store and needs no other communication (see nese-inference `docs/parallel.md`).
 The two `OMPI_MCA` overrides are load-bearing. `plm=isolated` stops OpenMPI, which
 sees `SLURM_*` in the environment, from trying to launch its `orted` helper through
 an `srun` that does not exist inside the container. `btl=self,vader` is the 4.1
-spelling of shared memory; `sm`, which the CPU `nese` module sets, is the OpenMPI 5
+spelling of shared memory; `sm`, which `NRIS/CPU` sets for host jobs, is the OpenMPI 5
 name.
 
 Multi-node inference is **untested**. It would mean giving up the in-container
