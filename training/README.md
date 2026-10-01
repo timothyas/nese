@@ -96,6 +96,21 @@ model:
     field_channels: 32
 ```
 
+A vector field (`components: [ugxt, vgxt]`) passes each group's components through its
+MLP together (`n_components -> field_channels`), so each observed vector maps to a single latent.
+A diagnosed field's observations can be inputs like any other field, while the diagnosed field itself
+stays a `diagnostic` output. `defined_by: <physics diagnostic>` also masks the field to the cells
+where that diagnostic is defined, because elsewhere its observations are NaN and have been imputed:
+
+```yaml
+uvgxt:
+  components: [ugxt, vgxt]
+  defined_by: uvgxt   # ignored by the loss and processors
+```
+
+A bin can still be imputed with `count > 0` outside that set, when none of a mission's observations
+in the bin have a velocity (e.g. single-observation passes in `nese-dataprep`).
+
 ## Physics diagnostics
 
 `model.physics_diagnostics` lists model outputs computed from other model outputs rather

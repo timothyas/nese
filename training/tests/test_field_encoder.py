@@ -21,38 +21,61 @@ SPEC = {"sla": {"observed_as": "sla_filtered", "groups": "auto", "count": "obs_c
 @pytest.fixture
 def encoder() -> FieldEncoder:
     torch.manual_seed(0)
-    return FieldEncoder(["sla"], CHANNELS)
+    return FieldEncoder({"sla": 1, "uvgxt": 2}, CHANNELS)
 
 
-def observations(n_groups: int, observed: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-    values = torch.randn(2, 5, n_groups)
+def observations(
+    n_groups: int, observed: torch.Tensor | None = None, components: int = 1
+) -> tuple[torch.Tensor, torch.Tensor]:
+    values = torch.randn(2, 5, n_groups, components)
     counts = observed if observed is not None else torch.randint(0, 3, (2, 5, n_groups)).float()
     return values, counts
 
 
-def test_permuting_groups_leaves_latent_unchanged(encoder):
-    values, counts = observations(4, torch.ones(2, 5, 4))
+FIELDS = pytest.mark.parametrize(("field", "components"), [("sla", 1), ("uvgxt", 2)])
+
+
+@FIELDS
+def test_permuting_groups_leaves_latent_unchanged(encoder, field, components):
+    values, counts = observations(4, torch.ones(2, 5, 4), components)
     order = torch.tensor([2, 0, 3, 1])
-    torch.testing.assert_close(encoder.encode("sla", values, counts), encoder.encode("sla", values[..., order], counts[..., order]))
+    torch.testing.assert_close(
+        encoder.encode(field, values, counts), encoder.encode(field, values[..., order, :], counts[..., order])
+    )
 
 
-def test_unobserved_group_has_no_effect(encoder):
-    values, counts = observations(3, torch.tensor([1.0, 2.0, 0.0]).expand(2, 5, 3))
+@FIELDS
+def test_unobserved_group_has_no_effect(encoder, field, components):
+    values, counts = observations(3, torch.tensor([1.0, 2.0, 0.0]).expand(2, 5, 3), components)
     changed = values.clone()
-    changed[..., 2] = 100.0
-    torch.testing.assert_close(encoder.encode("sla", values, counts), encoder.encode("sla", changed, counts))
+    changed[..., 2, :] = 100.0
+    torch.testing.assert_close(encoder.encode(field, values, counts), encoder.encode(field, changed, counts))
 
 
-def test_adding_an_unobserved_group_leaves_latent_unchanged(encoder):
-    values, counts = observations(2, torch.ones(2, 5, 2))
-    extra_values = torch.cat((values, torch.randn(2, 5, 1)), dim=-1)
+@FIELDS
+def test_adding_an_unobserved_group_leaves_latent_unchanged(encoder, field, components):
+    values, counts = observations(2, torch.ones(2, 5, 2), components)
+    extra_values = torch.cat((values, torch.randn(2, 5, 1, components)), dim=-2)
     extra_counts = torch.cat((counts, torch.zeros(2, 5, 1)), dim=-1)
-    torch.testing.assert_close(encoder.encode("sla", values, counts), encoder.encode("sla", extra_values, extra_counts))
+    torch.testing.assert_close(encoder.encode(field, values, counts), encoder.encode(field, extra_values, extra_counts))
 
 
 def test_latent_is_zero_where_nothing_observed(encoder):
     values, _ = observations(3)
-    assert torch.all(encoder.encode("sla", values, torch.zeros_like(values)) == 0)
+    assert torch.all(encoder.encode("sla", values, torch.zeros(values.shape[:-1])) == 0)
+
+
+def test_vector_latent_depends_on_both_components(encoder):
+    values, counts = observations(2, torch.ones(2, 5, 2), components=2)
+    assert not torch.allclose(encoder.encode("uvgxt", values, counts), encoder.encode("uvgxt", values.flip(-1), counts))
+
+
+def test_latent_is_zero_where_undefined_despite_counts(encoder):
+    values, counts = observations(3, torch.ones(2, 5, 3), components=2)
+    defined = torch.tensor([True, False, True, False, True])
+    latent = encoder.encode("uvgxt", values, counts, defined)
+    assert torch.all(latent[:, ~defined] == 0)
+    torch.testing.assert_close(latent[:, defined], encoder.encode("uvgxt", values, counts)[:, defined])
 
 
 def test_latent_is_observed_mean_not_count_weighted(encoder):
@@ -75,9 +98,19 @@ def test_resolve_field_columns_separates_counts_from_passthrough():
     name_to_index = {name: i for i, name in enumerate(names()[:-1])}
     columns = resolve_field_columns(SPEC, name_to_index)
     values, counts = columns.fields["sla"]
-    assert values == [0, 1, 2]
+    assert values == [[0], [1], [2]]
     assert counts == [3, 4, 5]
     assert columns.passthrough == [6, 7]
+
+
+def test_resolve_field_columns_groups_vector_components():
+    variables = [f"{component}_{group}" for component in ("ugxt", "vgxt") for group in GROUPS] + names()[:-1]
+    name_to_index = {name: i for i, name in enumerate(variables)}
+    columns = resolve_field_columns(SPEC | {"uvgxt": {"components": ["ugxt", "vgxt"]}}, name_to_index)
+    values, counts = columns.fields["uvgxt"]
+    assert values == [[0, 3], [1, 4], [2, 5]]
+    assert counts == columns.fields["sla"][1]
+    assert columns.passthrough == [12, 13]
 
 
 def test_resolve_field_columns_requires_counts():

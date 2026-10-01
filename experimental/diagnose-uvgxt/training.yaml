@@ -48,6 +48,50 @@ data:
       - obs_count_sentinel_3b
       - obs_count_topex_poseidon
       - obs_count_topex_poseidon_interleaved
+      - ugxt_cryosat_2
+      - ugxt_envisat
+      - ugxt_envisat_new_orbit
+      - ugxt_ers_1
+      - ugxt_ers_1_geodetic
+      - ugxt_ers_2
+      - ugxt_gfo
+      - ugxt_haiyang_2a
+      - ugxt_haiyang_2a_geodetic
+      - ugxt_jason_1
+      - ugxt_jason_1_geodetic
+      - ugxt_jason_1_interleaved
+      - ugxt_jason_2
+      - ugxt_jason_2_geodetic
+      - ugxt_jason_2_interleaved
+      - ugxt_jason_3
+      - ugxt_saral
+      - ugxt_saral_geodetic
+      - ugxt_sentinel_3a
+      - ugxt_sentinel_3b
+      - ugxt_topex_poseidon
+      - ugxt_topex_poseidon_interleaved
+      - vgxt_cryosat_2
+      - vgxt_envisat
+      - vgxt_envisat_new_orbit
+      - vgxt_ers_1
+      - vgxt_ers_1_geodetic
+      - vgxt_ers_2
+      - vgxt_gfo
+      - vgxt_haiyang_2a
+      - vgxt_haiyang_2a_geodetic
+      - vgxt_jason_1
+      - vgxt_jason_1_geodetic
+      - vgxt_jason_1_interleaved
+      - vgxt_jason_2
+      - vgxt_jason_2_geodetic
+      - vgxt_jason_2_interleaved
+      - vgxt_jason_3
+      - vgxt_saral
+      - vgxt_saral_geodetic
+      - vgxt_sentinel_3a
+      - vgxt_sentinel_3b
+      - vgxt_topex_poseidon
+      - vgxt_topex_poseidon_interleaved
       - elevation
       - land_fraction
       - cos_latitude
@@ -62,7 +106,8 @@ data:
       - mdt_v
 
       # sla is the one channel the network emits; ugxt and vgxt are diagnosed from it by
-      # model.physics_diagnostics, so they must never be model inputs.
+      # model.physics_diagnostics, so they must never be model inputs. Their per-mission
+      # observations (ugxt_*, vgxt_*) are forcing and target, like sla_filtered_*.
       diagnostic:
       - sla
       - ugxt
@@ -519,10 +564,8 @@ model:
     _target_: nese_training.field_encoder.FieldEncoderEncProcDec
     hidden_nodes_name: hidden
     latent_skip: true
-    # One shared MLP per field over its groups; see README.md. Only sla is an input field.
-    fields:
-      sla:
-        observed_as: sla_filtered
+    # One shared MLP per field over its groups; see training/README.md.
+    fields: ${training.training_loss.datasets.ocean.observations}
     field_channels: 32
   layer_kernels:
     LayerNorm:
@@ -692,6 +735,8 @@ training:
             components: [ugxt, vgxt]
             groups: auto
             count: "obs_count_{group}"
+            # Field encoder only: mask the inputs to where the physics block is defined
+            defined_by: uvgxt
 
   validation_metrics:
     datasets:
@@ -794,7 +839,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v1
+      experiment_name: v2
       project_name: diagnose-uvgxt
       terminal: false
       system: false

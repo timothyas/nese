@@ -2,10 +2,8 @@
 
 ## TODO:
 
-* Isolate loss per variable
-* Visualize velocity fields
-* Retest with u/v as inputs
-* review latent sizes
+* figure out if we miss any points with current masking (leak...?)
+* Evaluate max/min of the various models
 * after this is working, make another version with no additional forcing inputs to see what the
   velocity diagnostics provide on their own
 * evaluate the error using the gridded `mdt_u/v` versus the along track product
@@ -110,3 +108,31 @@ beat persistence).
 Bias is worse than persistence, and persistence has a negative bias.
 With a smooth result (classic MSE training and esp. at 100km), comparing speed
 (which is >=0) will be negative.
+
+## Version 1
+
+Rerun just to make sure per-variable loss is logged and plotted.
+Looks good.
+Also, differences are at most 0.1% from v0 to v1 for RMSE and MAE, bias is up to
+5% or so, just for run-to-run variance.
+
+## Version 2
+
+Incorporate `(ugxt, vgxt)` observations as inputs via anemoi `forcings`,
+which recall are not seen at prediction time since they are already `targets`.
+Using anemoi terminology, they are not `prognostic` or `diagnostic`, they are still
+computed from the `physics_diagnostics` block implemented in this experiment.
+
+* Implementation Detail 1: the field encoder maps the `(ugxt, vgxt)` pair to a single latent state,
+  via the `components` key added in earlier stages of this experiment.
+  We'll see if we continue to incorporate vector quantities in this way or not.
+
+* Implementation Detail 2: Velocity inputs are masked to where the physics block is
+  defined (`defined_by: uvgxt`), i.e. off the equatorial band, with an MDT and enough neighbours. A bin whose
+  mission observations all lack a velocity (single-obs passes) is still read as observed, as in the loss
+
+Compared to v0:
+* loss curve is a bit smoother, and bottoms out about 1k iterations earlier
+* slight improvement in SLA RMSE, MAE, and Bias, largely in the Unseen category
+  (~1.5% at most though), despite what looks like more overfitting
+* uvgxt shows no differences large than 0.5%

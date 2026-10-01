@@ -1,5 +1,5 @@
 forecast:
-  store_dir: runs/v1/inference-2015
+  store_dir: runs/v2/inference-2015
 verification:
   dataset: anemoi-hpx6-24h/dataset.zarr
   observations:

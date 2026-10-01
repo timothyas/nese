@@ -13,18 +13,25 @@ import xarray as xr
 
 # --- things to update -------------------------------------------------------
 
-VARIABLE = "uvgxt"
+VARIABLE = "sla"
 
+## Compare to field encoder
+#BASELINE_DIRS = {
+#    "sla": "../field-encoder/runs/v2/inference-validation",
+#    "uvgxt": None,
+#}
+
+## Compare within diagnose-uvgxt versions
 BASELINE_DIRS = {
-    "sla": "../field-encoder/runs/v2/inference-validation",
-    "uvgxt": None,
+    "sla": "runs/v0/inference-validation",
+    "uvgxt": "runs/v0/inference-validation",
 }
 BASELINE_DIR = BASELINE_DIRS[VARIABLE]
-BASELINE_LABEL = "field-encoder-v2"
+BASELINE_LABEL = "diagnose-uvgxt-v0"
 
-EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "diagnose-uvgxt"
-PERSISTENCE_DIR = EXPERIMENT_DIR
+EXPERIMENT_DIR = "runs/v2/inference-validation"
+EXPERIMENT_LABEL = "diagnose-uvgxt-v2"
+PERSISTENCE_DIR = "runs/v0/inference-validation"
 PERSISTENCE_LABEL = "persistence"
 
 METRICS = ["rmse", "mae", "bias"]

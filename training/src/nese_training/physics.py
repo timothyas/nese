@@ -142,6 +142,7 @@ class GeostrophicVelocity(nn.Module):
         with np.errstate(divide="ignore"):
             g_over_f = np.where(defined, GRAVITY / (2 * OMEGA * np.sin(np.deg2rad(lat))), 0.0)
 
+        self.register_buffer("defined", torch.from_numpy(defined), persistent=False)
         self.register_buffer("g_over_f", torch.from_numpy(g_over_f).float())
         for name in self.static:
             values = np.nan_to_num(static[name], nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
