@@ -70,6 +70,27 @@ See "Physics diagnostics" in `nese/training/README.md`.
 The loss's `observations` gains `uvgxt: {components: [ugxt, vgxt]}`. The same spec pools
 the normaliser and imputer statistics and composes the plotted truth.
 
+## Mask check
+
+The encoder and loss count a velocity observation where `obs_count_{group} > 0` and the
+cell is geostrophy-defined. dataprep, though, counts every obs in a bin, and the velocity
+is NaN for an obs within 5° of the equator (by obs latitude) or on a single-obs pass.
+`check_masks.py` (output in `runs/mask-check/`) compares the
+two, with `defined` taken from the v2 inference output:
+
+| | Training | Validation |
+|---|---|---|
+| Leak: observed, defined, velocity NaN (the fill is encoded and scored) | 26k (0.03%) | 7k (0.05%) |
+| Lost: velocity finite, not defined (discarded) | 875k (0.9%) | 124k (0.9%) |
+
+* The leak is diffuse: 95% of it is `count == 1` bins, half is poleward of 60°,
+  and the top 10 of 12k cells hold only 2%
+* About 73% of the lost cells are the HEALPix ring centred near ±4.8°. There, 60% of obs have a velocity
+  (from obs above 5°) and 40% don't. The rest is coastal cells with fewer than 3 sea neighbours
+* Moving the model's band to cover that ring would turn its 484k NaN obs into leaks
+  (about 0.5%), so the 5° band on cell centres stays. An exact fix needs per-variable
+  counts from `nese-dataprep`, which isn't worth doing at these rates
+
 ## Version 0
 
 * `mdt`, `mdt_u`, and `mdt_v` are provided as static forcing inputs
@@ -132,7 +153,9 @@ computed from the `physics_diagnostics` block implemented in this experiment.
   mission observations all lack a velocity (single-obs passes) is still read as observed, as in the loss
 
 Compared to v0:
-* loss curve is a bit smoother, and bottoms out about 1k iterations earlier
+* loss curve is a bit smoother, and bottoms out about 1 epoch to 1k iterations earlier
 * slight improvement in SLA RMSE, MAE, and Bias, largely in the Unseen category
   (~1.5% at most though), despite what looks like more overfitting
 * uvgxt shows no differences large than 0.5%
+
+

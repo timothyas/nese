@@ -299,11 +299,15 @@ class PooledObservationImputer(_PooledStatistics, InputImputer):
         the restorer masks on counts (intact) while the values behind them had already
         been destroyed.
 
-        Skipping it loses nothing. ``obs_count > 0`` is exactly equivalent to "value is not
-        NaN" in this dataset, so the restorer reproduces every gap from the counts, per bin
-        and without reference to any other one -- the de-imputation is redundant here as
-        well as destructive. With it skipped the composed truth matches a count-weighted
-        mean taken straight from the store in every cell.
+        Skipping it loses nothing. For ``sla_filtered_*``, ``obs_count > 0`` is exactly
+        equivalent to "value is not NaN" in this dataset, so the restorer reproduces every
+        gap from the counts, per bin and without reference to any other one -- the
+        de-imputation is redundant here as well as destructive. With it skipped the composed
+        truth matches a count-weighted mean taken straight from the store in every cell.
+        ``ugxt_*``/``vgxt_*`` are NaN in a further ~0.05% of the cells that are both observed
+        and geostrophy-defined: bins where no obs had a velocity, mostly single-obs passes.
+        There the composed truth shows the imputer's fill (see
+        ``experimental/diagnose-uvgxt/README.md``, "Mask check").
 
         Only the wide tensor is skipped. Model-output-shaped tensors are the imputer's own
         business and go to the base class untouched.
