@@ -158,4 +158,10 @@ Compared to v0:
   (~1.5% at most though), despite what looks like more overfitting
 * uvgxt shows no differences large than 0.5%
 
+## Comparing extremes
 
+The extreme (max/min) SLA values do seem to be better resolved with the
+inclusion of diagnosed velocity.
+Comparing to the previous baseline, `field-encoder` shows it
+
+![](runs/v2/inference-validation/figures/extremes.sla.jpeg)

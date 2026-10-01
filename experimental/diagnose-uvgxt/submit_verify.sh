@@ -24,4 +24,6 @@ module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese
 srun nese-verify metrics verify.validation.yaml
 srun nese-verify metrics verify.2015.yaml
+python plot_metrics.py
+python plot_extremes.py
 nese-verify movie verify.2015.yaml
