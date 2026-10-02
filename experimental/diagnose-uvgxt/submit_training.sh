@@ -33,5 +33,3 @@ apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" \
 srun --overlap --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env MPLCONFIGDIR="$MPLCONFIGDIR" "$NESE_ANEMOI_SIF" \
     anemoi-training train --config-name=training
-
-apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" python plot_loss.py

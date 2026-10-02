@@ -20,8 +20,6 @@ module purge
 module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese-anemoi
 
-apptainer exec --nv --bind /cluster "$NESE_ANEMOI_SIF" python plot_loss.py
-
 # mpirun here only ever launches ranks on this node (plm=isolated), but by default it also
 # reads the Slurm allocation and then has to match Slurm's node name to its own. When that
 # match fails, it aborts with "No nodes are available for this job". This happened on

@@ -22,6 +22,7 @@ export DASK_NUM_WORKERS=1
 module purge
 module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese
+nese-verify plot-loss training.yaml
 srun nese-verify metrics verify.validation.yaml
 srun nese-verify metrics verify.2015.yaml
 python plot_metrics.py
