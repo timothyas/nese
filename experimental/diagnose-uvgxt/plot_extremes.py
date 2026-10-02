@@ -7,16 +7,19 @@ is the extreme over every cell, and a dense field reaches further than one missi
 for that reason alone. Under "Observed cells" each sample is the extreme over one mission's
 observed cells that day, the same sampling as the observations.
 
-uvgxt is shown as speed. The observed one is the cross-track speed, at most the full speed,
-and the min panel for speed sits near zero by construction. Observations are read at
-fhr=0, the only lead time forecast.zarr stores them at.
+uvgxt is shown as speed. Under "Observed cells" both the observations and the predictions are
+the cross-track speed; under "All cells" the prediction is the full speed, at least the
+cross-track one. The min panel for speed sits near zero by construction.
+
+The extremes are read from each run's `nese-verify metrics` output, <run>/metrics/<field>.nc,
+so every run drawn (the baseline included) must have been through it with aggregate_t0: false.
+The observations are the experiment's.
 """
 
 from pathlib import Path
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
-import numpy as np
 import pandas as pd
 import seaborn as sns
 import xarray as xr
@@ -48,7 +51,6 @@ STYLE = "../experiments.mplstyle"
 FIG_DIR = f"{EXPERIMENT_DIR}/figures"
 # ----------------------------------------------------------------------------
 
-OBSERVED_AS = {"sla": ["sla_filtered"], "uvgxt": ["ugxt", "vgxt"]}
 UNITS = {"sla": "m", "uvgxt": "m/s"}
 ACRONYMS = {"rmse", "mae", "sla", "rmsd", "mse", "std"}
 here = Path(__file__).parent
@@ -77,31 +79,16 @@ def version_colors():
     return dict(zip([prettify(BASELINE_LABEL), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
 
 
-def magnitude(components):
-    return components[0] if len(components) == 1 else np.hypot(*components)
+def read_extremes(run_dir, field):
+    """One sample per (t0, group): pooled is left out, since each sample is one mission's."""
+    path = here / run_dir / "metrics" / f"{field}.nc"
+    return xr.open_dataset(path).sel(fhr=FHR).drop_sel(group="pooled").load()
 
 
-def predicted(run_dir, field):
-    """The prediction indexed by the time it is valid at, so it lines up with the observations."""
-    forecast = xr.open_zarr(here / run_dir / "forecast.zarr").sel(fhr=24)
-    names = [field] if field == "sla" else ["ugxt", "vgxt"]
-    values = magnitude([forecast[name] for name in names])
-    return values.swap_dims(t0="valid_time").drop_vars("t0").rename(valid_time="time")
-
-
-def observed(field):
-    forecast = xr.open_zarr(here / EXPERIMENT_DIR / "forecast.zarr").sel(fhr=0)
-    prefix = f"{OBSERVED_AS[field][0]}_"
-    groups = [name.removeprefix(prefix) for name in forecast.data_vars if name.startswith(prefix)]
-    group = pd.Index(groups, name="group")
-    values = magnitude(
-        [xr.concat([forecast[f"{name}_{g}"] for g in groups], dim=group) for name in OBSERVED_AS[field]]
-    )
-    return values.rename(t0="time")
-
-
-def extremes(values):
-    return xr.Dataset({"max": values.max("cell"), "min": values.min("cell")})
+def pick(ds, pattern):
+    """The variables ``pattern`` names for max and min, renamed to just that."""
+    names = {pattern.format(extreme): extreme for extreme in ("max", "min")}
+    return ds[list(names)].rename(names)
 
 
 def tidy(ds, cells, version):
@@ -111,15 +98,15 @@ def tidy(ds, cells, version):
 
 def samples(field):
     """One row per sample: the observations at both cell choices, and each run's prediction."""
-    observations = observed(field)
-    frames = [tidy(extremes(observations), cells, OBSERVATIONS_LABEL) for cells in CELLS]
+    observations = pick(read_extremes(EXPERIMENT_DIR, field), "observation_{}")
+    frames = [tidy(observations, cells, OBSERVATIONS_LABEL) for cells in CELLS]
     runs = {BASELINE_LABEL: BASELINE_DIRS[field], EXPERIMENT_LABEL: EXPERIMENT_DIR}
     for label, run_dir in runs.items():
         if run_dir is None:
             continue
-        prediction, at_observations = xr.align(predicted(run_dir, field), observations, join="inner")
-        frames.append(tidy(extremes(prediction), CELLS[0], label))
-        frames.append(tidy(extremes(prediction.where(at_observations.notnull())), CELLS[1], label))
+        extremes = read_extremes(run_dir, field)
+        frames.append(tidy(pick(extremes, "prediction_{}_all_cells"), CELLS[0], label))
+        frames.append(tidy(pick(extremes, "prediction_{}"), CELLS[1], label))
     return pd.concat(frames, ignore_index=True)
 
 
