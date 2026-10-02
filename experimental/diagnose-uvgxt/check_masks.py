@@ -116,6 +116,9 @@ def summarise(totals: xr.Dataset, causes: dict, latitude: xr.DataArray) -> str:
 
 def plot_map(values: xr.DataArray, static: xr.Dataset, title: str, path: Path) -> None:
     hit = values > 0
+    if not hit.any():
+        print(f"{path.name}: nothing to plot")
+        return
     fig, ax = plt.subplots(figsize=(12, 5.5), layout="constrained")
     ax.scatter(static["longitude"], static["latitude"], s=0.3, c="0.85")
     points = ax.scatter(
