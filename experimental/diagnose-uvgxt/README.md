@@ -91,6 +91,24 @@ two, with `defined` taken from the v2 inference output:
   (about 0.5%), so the 5° band on cell centres stays. An exact fix needs per-variable
   counts from `nese-dataprep`, which isn't worth doing at these rates
 
+### With the v3 store
+
+We did it anyway (see Version 3): `nese-dataprep` now applies the band by cell centre and
+writes `uvgxt_count_{group}`, and `check_masks.py` classifies by that count instead
+(output in `runs/mask-check-v3/`, `defined` still from the v2 inference output):
+
+| | Training | Validation |
+|---|---|---|
+| Observed and used (A) | 94.1M | 12.9M |
+| Leak (B) | 0 | 0 |
+| Lost (D) | 240k (0.25%) | 34k (0.26%) |
+
+* No leaks, no finite velocity without a count, none in a cell centred inside the band,
+  and `ugxt`/`vgxt` are always NaN together
+* Every lost cell is coastal, with fewer than 3 sea neighbours. These are encoded as inputs
+  but not scored, since the model can't diagnose a gradient there
+* Nothing is lost near the equator any more: the cells centred at 5–6° are fully used
+
 ## Version 0
 
 * `mdt`, `mdt_u`, and `mdt_v` are provided as static forcing inputs
