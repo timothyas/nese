@@ -32,6 +32,8 @@ Lineage
     * v1: add per-variable loss logging
     * v2: add uvgxt data inputs, one field encoder per vector pair, so now two
       MLPs, one for `sla` and one for `uvgxt`
+    * v3: consistent velocity masking by providing a new obs count on the
+      dataprep side, done per binned cell center, not obs location
 
 
 ## Overfitting
