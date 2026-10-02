@@ -70,14 +70,6 @@ def test_vector_latent_depends_on_both_components(encoder):
     assert not torch.allclose(encoder.encode("uvgxt", values, counts), encoder.encode("uvgxt", values.flip(-1), counts))
 
 
-def test_latent_is_zero_where_undefined_despite_counts(encoder):
-    values, counts = observations(3, torch.ones(2, 5, 3), components=2)
-    defined = torch.tensor([True, False, True, False, True])
-    latent = encoder.encode("uvgxt", values, counts, defined)
-    assert torch.all(latent[:, ~defined] == 0)
-    torch.testing.assert_close(latent[:, defined], encoder.encode("uvgxt", values, counts)[:, defined])
-
-
 def test_latent_is_observed_mean_not_count_weighted(encoder):
     values, _ = observations(2)
     single = encoder.encode("sla", values, torch.tensor([1.0, 0.0]).expand(2, 5, 2))

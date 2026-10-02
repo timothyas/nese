@@ -188,7 +188,7 @@ def test_parse_physics_config():
 FORCING = ("sla_filtered_jason_2", "obs_count_jason_2", "elevation", "cos_latitude")
 VARIABLES = [*FORCING, "sla", "ugxt", "vgxt"]
 VELOCITY_FORCING = (*FORCING, "ugxt_jason_2", "vgxt_jason_2")
-VELOCITY_FIELDS = {"sla": "sla_filtered", "uvgxt": {"components": ["ugxt", "vgxt"], "defined_by": "uvgxt"}}
+VELOCITY_FIELDS = {"sla": "sla_filtered", "uvgxt": {"components": ["ugxt", "vgxt"]}}
 
 
 def toy_model(
@@ -330,15 +330,13 @@ def test_diagnosed_field_as_input_is_rejected_early():
         toy_model(diagnostic=("sla",))
 
 
-def velocity_inputs(model, indices, defined_value: float, undefined_value: float) -> torch.Tensor:
-    grid = model._graph_data["data"].x.shape[0]
+def velocity_inputs(model, indices, counted: torch.Tensor, counted_value: float, uncounted_value: float) -> torch.Tensor:
     torch.manual_seed(0)
-    x = torch.randn(1, 2, 1, grid, len(indices.model.input))
-    x[..., indices.model.input.name_to_index["obs_count_jason_2"]] = 1.0
-    defined = model.physics["data"]["uvgxt"].defined
+    x = torch.randn(1, 2, 1, counted.numel(), len(indices.model.input))
+    x[..., indices.model.input.name_to_index["obs_count_jason_2"]] = counted.float()
     for name in ("ugxt_jason_2", "vgxt_jason_2"):
         column = indices.model.input.name_to_index[name]
-        x[..., column] = torch.where(defined, defined_value, undefined_value)
+        x[..., column] = torch.where(counted, counted_value, uncounted_value)
     return x
 
 
@@ -350,18 +348,17 @@ def test_velocity_observations_are_encoded_as_one_vector_field():
     assert model.field_encoder.mlps["uvgxt"][0].in_features == 2
 
 
-def test_velocity_observations_are_ignored_where_geostrophy_is_undefined():
+def test_velocity_observations_are_read_where_counted_and_only_there():
+    """Observed means count > 0, even where the diagnosed velocity is undefined: a valid
+    input observation is useful whether or not the model can diagnose a gradient there."""
     model, indices, _ = toy_model(forcing=VELOCITY_FORCING, fields=VELOCITY_FIELDS)
-    assert not model.physics["data"]["uvgxt"].defined.all()
+    counted = ~model.physics["data"]["uvgxt"].g_over_f.eq(0)  # counted where defined...
+    counted[: counted.numel() // 2] = True  # ...and on undefined cells too
+    assert counted.any() and not counted.all()
     model.eval()
     with torch.no_grad():
-        y = model({"data": velocity_inputs(model, indices, 0.5, 0.0)})["data"]
-        undefined_changed = model({"data": velocity_inputs(model, indices, 0.5, 100.0)})["data"]
-        defined_changed = model({"data": velocity_inputs(model, indices, -0.5, 0.0)})["data"]
-    torch.testing.assert_close(undefined_changed, y)
-    assert not torch.allclose(defined_changed, y)
-
-
-def test_defined_by_must_name_a_physics_diagnostic():
-    with pytest.raises(ValueError, match="defined_by"):
-        toy_model(physics_diagnostics=(), forcing=VELOCITY_FORCING, fields=VELOCITY_FIELDS)
+        y = model({"data": velocity_inputs(model, indices, counted, 0.5, 0.0)})["data"]
+        uncounted_changed = model({"data": velocity_inputs(model, indices, counted, 0.5, 100.0)})["data"]
+        counted_changed = model({"data": velocity_inputs(model, indices, counted, -0.5, 0.0)})["data"]
+    torch.testing.assert_close(uncounted_changed, y)
+    assert not torch.allclose(counted_changed, y)

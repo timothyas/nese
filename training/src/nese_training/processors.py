@@ -30,9 +30,9 @@ class ObsCountNaNRestorer(nn.Module):
     ``nan_locations[:, 0]``, the oldest *input* bin, whereas the tensors being plotted
     span the target bin, and satellite tracks move between bins. The obs counts are
     per-bin and travel inside the tensor itself, so they mask each timestep correctly.
-    ``obs_count > 0`` is exactly equivalent to "value is not NaN" in this dataset
-    (verified: 0 disagreements in 491520 cells), which makes the count an exact stand-in
-    for the missing NaN mask.
+    A value's count above zero is exactly equivalent to "value is not NaN" (verified for
+    ``sla_filtered``: 0 disagreements in 491520 cells; the velocity has a count of its own
+    for the same reason), which makes the count an exact stand-in for the missing NaN mask.
 
     Only tensors shaped like ``data.output.full`` are touched, because only those carry
     the count columns. Model-output tensors pass through untouched, so predictions stay
@@ -299,15 +299,12 @@ class PooledObservationImputer(_PooledStatistics, InputImputer):
         the restorer masks on counts (intact) while the values behind them had already
         been destroyed.
 
-        Skipping it loses nothing. For ``sla_filtered_*``, ``obs_count > 0`` is exactly
-        equivalent to "value is not NaN" in this dataset, so the restorer reproduces every
+        Skipping it loses nothing. Each value is masked by its own count (``sla_count_*`` for
+        ``sla_filtered_*``, ``uvgxt_count_*`` for ``ugxt_*``/``vgxt_*``), and a count above
+        zero is exactly equivalent to "value is not NaN", so the restorer reproduces every
         gap from the counts, per bin and without reference to any other one -- the
         de-imputation is redundant here as well as destructive. With it skipped the composed
         truth matches a count-weighted mean taken straight from the store in every cell.
-        ``ugxt_*``/``vgxt_*`` are NaN in a further ~0.05% of the cells that are both observed
-        and geostrophy-defined: bins where no obs had a velocity, mostly single-obs passes.
-        There the composed truth shows the imputer's fill (see
-        ``experimental/diagnose-uvgxt/README.md``, "Mask check").
 
         Only the wide tensor is skipped. Model-output-shaped tensors are the imputer's own
         business and go to the base class untouched.

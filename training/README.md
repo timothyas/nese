@@ -99,17 +99,20 @@ model:
 A vector field (`components: [ugxt, vgxt]`) passes each group's components through its
 MLP together (`n_components -> field_channels`), so each observed vector maps to a single latent.
 A diagnosed field's observations can be inputs like any other field, while the diagnosed field itself
-stays a `diagnostic` output. `defined_by: <physics diagnostic>` also masks the field to the cells
-where that diagnostic is defined, because elsewhere its observations are NaN and have been imputed:
+stays a `diagnostic` output. A cell is observed wherever the field's count is above zero, so give
+the velocity its own count, which `nese-dataprep` writes as `uvgxt_count_{group}`. That count is
+zero exactly where the velocity is NaN (in the equatorial band, or where no obs had a velocity),
+so imputed values never reach the encoder:
 
 ```yaml
 uvgxt:
   components: [ugxt, vgxt]
-  defined_by: uvgxt   # ignored by the loss and processors
+  count: "uvgxt_count_{group}"
 ```
 
-A bin can still be imputed with `count > 0` outside that set, when none of a mission's observations
-in the bin have a velocity (e.g. single-observation passes in `nese-dataprep`).
+An observed velocity is still encoded where the model cannot diagnose one (e.g. a coastal cell
+with too few neighbours). It only informs the latent state, and the loss scores only cells where
+the diagnosed velocity is defined.
 
 ## Physics diagnostics
 
