@@ -30,8 +30,8 @@ BASELINE_DIRS = {
 BASELINE_DIR = BASELINE_DIRS[VARIABLE]
 BASELINE_LABEL = "diagnose-uvgxt-v0"
 
-EXPERIMENT_DIR = "runs/v2/inference-validation"
-EXPERIMENT_LABEL = "diagnose-uvgxt-v2"
+EXPERIMENT_DIR = "runs/v3/inference-validation"
+EXPERIMENT_LABEL = "diagnose-uvgxt-v3"
 PERSISTENCE_DIR = "runs/v0/inference-validation"
 PERSISTENCE_LABEL = "persistence"
 

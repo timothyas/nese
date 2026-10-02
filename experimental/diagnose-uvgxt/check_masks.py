@@ -1,12 +1,13 @@
 """Where the velocity masks of the training stack disagree with the store's own NaNs.
 
-Every (time, cell, mission) with obs_count > 0 is one of
+Every (time, cell, mission) with uvgxt_count > 0 is one of
     A  finite velocity, defined    -- encoded and scored, correctly
     B  NaN velocity, defined       -- leak: encoder and loss read the imputer's fill
     C  NaN velocity, undefined     -- correctly excluded
     D  finite velocity, undefined  -- real observation thrown away
 `defined` is taken from the v2 inference output (finite diagnosed ugxt), so it is the
-model's own mask. Usage: python check_masks.py [n_days]  (all days by default)
+model's own mask; v3 does not change it. With the v3 store, B, finite_without_count and
+finite_in_band should all be 0, and D only the coast and missing-MDT cells. Usage: python check_masks.py [n_days]  (all days by default)
 """
 
 import sys
@@ -20,9 +21,9 @@ import numpy as np
 import xarray as xr
 import zarr
 
-STORE = "anemoi-hpx6-24h/dataset.zarr"
+STORE = "anemoi-hpx6-24h-v3/dataset.zarr"
 FORECAST = "runs/v2/inference-validation/forecast.zarr"
-OUT = Path("runs/mask-check")
+OUT = Path("runs/mask-check-v3")
 PERIODS = {"training": slice("1993-11-01", "2018-12-31"), "validation": slice("2019-01-01", "2020-12-31")}
 MIN_NEIGHBOURS = 3
 BAND = 5.0
@@ -61,12 +62,12 @@ def model_defined(static: xr.Dataset) -> xr.DataArray:
     return defined.drop_vars([name for name in defined.coords if name != "cell"])
 
 
-def classify(data: xr.DataArray, groups: list[str], defined: xr.DataArray) -> xr.Dataset:
+def classify(data: xr.DataArray, groups: list[str], defined: xr.DataArray, in_band: xr.DataArray) -> xr.Dataset:
     def pick(prefix: str) -> xr.DataArray:
         names = [f"{prefix}_{group}" for group in groups]
         return data.sel(variable=names).assign_coords(variable=groups).rename(variable="group")
 
-    count, u, v = pick("obs_count"), pick("ugxt"), pick("vgxt")
+    count, u, v = pick("uvgxt_count"), pick("ugxt"), pick("vgxt")
     observed, finite = count > 0, u.notnull()
     classes = {
         "A": observed & finite & defined,
@@ -76,6 +77,7 @@ def classify(data: xr.DataArray, groups: list[str], defined: xr.DataArray) -> xr
         "B_single_obs": observed & ~finite & defined & (count == 1),
         "u_v_nan_mismatch": u.isnull() != v.isnull(),
         "finite_without_count": ~observed & finite,
+        "finite_in_band": finite & in_band,
     }
     return xr.Dataset(
         {
@@ -131,10 +133,10 @@ def main() -> None:
     groups = sorted(name.removeprefix("ugxt_") for name in data["variable"].values if name.startswith("ugxt_"))
     defined = model_defined(static)
 
-    with dask.config.set(scheduler="threads"):
-        totals = classify(data, groups, defined).compute()
-
     latitude = np.abs(static["latitude"])
+    with dask.config.set(scheduler="threads"):
+        totals = classify(data, groups, defined, latitude < BAND).compute()
+
     causes = {
         "band (|lat|<5)": latitude < BAND,
         "band edge (5<=|lat|<6)": (latitude >= BAND) & (latitude < BAND + 1),

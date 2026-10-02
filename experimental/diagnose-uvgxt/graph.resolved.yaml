@@ -3,7 +3,7 @@ nodes:
   ocean:
     node_builder:
       _target_: anemoi.graphs.nodes.AnemoiDatasetNodes
-      dataset: /cluster/projects/nn2993k/timith/nese/experimental/diagnose-uvgxt/anemoi-hpx6-24h/dataset.zarr
+      dataset: /cluster/projects/nn2993k/timith/nese/experimental/diagnose-uvgxt/anemoi-hpx6-24h-v3/dataset.zarr
     attributes: []
   hidden:
     node_builder:

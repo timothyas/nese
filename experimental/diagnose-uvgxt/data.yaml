@@ -82,7 +82,7 @@ post_processing:
 
 target:
   name: anemoi
-  store_dir: ${oc.env:PWD}/anemoi-hpx6-24h
+  store_dir: ${oc.env:PWD}/anemoi-hpx6-24h-v3
   store_float64_as_float32: true
   compression: blosc_zstd
   statistics_period:

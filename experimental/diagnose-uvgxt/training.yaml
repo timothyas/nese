@@ -26,28 +26,50 @@ data:
       - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
-      - obs_count_cryosat_2
-      - obs_count_envisat
-      - obs_count_envisat_new_orbit
-      - obs_count_ers_1
-      - obs_count_ers_1_geodetic
-      - obs_count_ers_2
-      - obs_count_gfo
-      - obs_count_haiyang_2a
-      - obs_count_haiyang_2a_geodetic
-      - obs_count_jason_1
-      - obs_count_jason_1_geodetic
-      - obs_count_jason_1_interleaved
-      - obs_count_jason_2
-      - obs_count_jason_2_geodetic
-      - obs_count_jason_2_interleaved
-      - obs_count_jason_3
-      - obs_count_saral
-      - obs_count_saral_geodetic
-      - obs_count_sentinel_3a
-      - obs_count_sentinel_3b
-      - obs_count_topex_poseidon
-      - obs_count_topex_poseidon_interleaved
+      - sla_count_cryosat_2
+      - sla_count_envisat
+      - sla_count_envisat_new_orbit
+      - sla_count_ers_1
+      - sla_count_ers_1_geodetic
+      - sla_count_ers_2
+      - sla_count_gfo
+      - sla_count_haiyang_2a
+      - sla_count_haiyang_2a_geodetic
+      - sla_count_jason_1
+      - sla_count_jason_1_geodetic
+      - sla_count_jason_1_interleaved
+      - sla_count_jason_2
+      - sla_count_jason_2_geodetic
+      - sla_count_jason_2_interleaved
+      - sla_count_jason_3
+      - sla_count_saral
+      - sla_count_saral_geodetic
+      - sla_count_sentinel_3a
+      - sla_count_sentinel_3b
+      - sla_count_topex_poseidon
+      - sla_count_topex_poseidon_interleaved
+      - uvgxt_count_cryosat_2
+      - uvgxt_count_envisat
+      - uvgxt_count_envisat_new_orbit
+      - uvgxt_count_ers_1
+      - uvgxt_count_ers_1_geodetic
+      - uvgxt_count_ers_2
+      - uvgxt_count_gfo
+      - uvgxt_count_haiyang_2a
+      - uvgxt_count_haiyang_2a_geodetic
+      - uvgxt_count_jason_1
+      - uvgxt_count_jason_1_geodetic
+      - uvgxt_count_jason_1_interleaved
+      - uvgxt_count_jason_2
+      - uvgxt_count_jason_2_geodetic
+      - uvgxt_count_jason_2_interleaved
+      - uvgxt_count_jason_3
+      - uvgxt_count_saral
+      - uvgxt_count_saral_geodetic
+      - uvgxt_count_sentinel_3a
+      - uvgxt_count_sentinel_3b
+      - uvgxt_count_topex_poseidon
+      - uvgxt_count_topex_poseidon_interleaved
       - ugxt_cryosat_2
       - ugxt_envisat
       - ugxt_envisat_new_orbit
@@ -137,28 +159,50 @@ data:
       - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
-      - obs_count_cryosat_2
-      - obs_count_envisat
-      - obs_count_envisat_new_orbit
-      - obs_count_ers_1
-      - obs_count_ers_1_geodetic
-      - obs_count_ers_2
-      - obs_count_gfo
-      - obs_count_haiyang_2a
-      - obs_count_haiyang_2a_geodetic
-      - obs_count_jason_1
-      - obs_count_jason_1_geodetic
-      - obs_count_jason_1_interleaved
-      - obs_count_jason_2
-      - obs_count_jason_2_geodetic
-      - obs_count_jason_2_interleaved
-      - obs_count_jason_3
-      - obs_count_saral
-      - obs_count_saral_geodetic
-      - obs_count_sentinel_3a
-      - obs_count_sentinel_3b
-      - obs_count_topex_poseidon
-      - obs_count_topex_poseidon_interleaved
+      - sla_count_cryosat_2
+      - sla_count_envisat
+      - sla_count_envisat_new_orbit
+      - sla_count_ers_1
+      - sla_count_ers_1_geodetic
+      - sla_count_ers_2
+      - sla_count_gfo
+      - sla_count_haiyang_2a
+      - sla_count_haiyang_2a_geodetic
+      - sla_count_jason_1
+      - sla_count_jason_1_geodetic
+      - sla_count_jason_1_interleaved
+      - sla_count_jason_2
+      - sla_count_jason_2_geodetic
+      - sla_count_jason_2_interleaved
+      - sla_count_jason_3
+      - sla_count_saral
+      - sla_count_saral_geodetic
+      - sla_count_sentinel_3a
+      - sla_count_sentinel_3b
+      - sla_count_topex_poseidon
+      - sla_count_topex_poseidon_interleaved
+      - uvgxt_count_cryosat_2
+      - uvgxt_count_envisat
+      - uvgxt_count_envisat_new_orbit
+      - uvgxt_count_ers_1
+      - uvgxt_count_ers_1_geodetic
+      - uvgxt_count_ers_2
+      - uvgxt_count_gfo
+      - uvgxt_count_haiyang_2a
+      - uvgxt_count_haiyang_2a_geodetic
+      - uvgxt_count_jason_1
+      - uvgxt_count_jason_1_geodetic
+      - uvgxt_count_jason_1_interleaved
+      - uvgxt_count_jason_2
+      - uvgxt_count_jason_2_geodetic
+      - uvgxt_count_jason_2_interleaved
+      - uvgxt_count_jason_3
+      - uvgxt_count_saral
+      - uvgxt_count_saral_geodetic
+      - uvgxt_count_sentinel_3a
+      - uvgxt_count_sentinel_3b
+      - uvgxt_count_topex_poseidon
+      - uvgxt_count_topex_poseidon_interleaved
       - ugxt_cryosat_2
       - ugxt_envisat
       - ugxt_envisat_new_orbit
@@ -222,72 +266,72 @@ data:
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
-            sla_filtered_cryosat_2: obs_count_cryosat_2
-            sla_filtered_envisat: obs_count_envisat
-            sla_filtered_envisat_new_orbit: obs_count_envisat_new_orbit
-            sla_filtered_ers_1: obs_count_ers_1
-            sla_filtered_ers_1_geodetic: obs_count_ers_1_geodetic
-            sla_filtered_ers_2: obs_count_ers_2
-            sla_filtered_gfo: obs_count_gfo
-            sla_filtered_haiyang_2a: obs_count_haiyang_2a
-            sla_filtered_haiyang_2a_geodetic: obs_count_haiyang_2a_geodetic
-            sla_filtered_jason_1: obs_count_jason_1
-            sla_filtered_jason_1_geodetic: obs_count_jason_1_geodetic
-            sla_filtered_jason_1_interleaved: obs_count_jason_1_interleaved
-            sla_filtered_jason_2: obs_count_jason_2
-            sla_filtered_jason_2_geodetic: obs_count_jason_2_geodetic
-            sla_filtered_jason_2_interleaved: obs_count_jason_2_interleaved
-            sla_filtered_jason_3: obs_count_jason_3
-            sla_filtered_saral: obs_count_saral
-            sla_filtered_saral_geodetic: obs_count_saral_geodetic
-            sla_filtered_sentinel_3a: obs_count_sentinel_3a
-            sla_filtered_sentinel_3b: obs_count_sentinel_3b
-            sla_filtered_topex_poseidon: obs_count_topex_poseidon
-            sla_filtered_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
-            ugxt_cryosat_2: obs_count_cryosat_2
-            ugxt_envisat: obs_count_envisat
-            ugxt_envisat_new_orbit: obs_count_envisat_new_orbit
-            ugxt_ers_1: obs_count_ers_1
-            ugxt_ers_1_geodetic: obs_count_ers_1_geodetic
-            ugxt_ers_2: obs_count_ers_2
-            ugxt_gfo: obs_count_gfo
-            ugxt_haiyang_2a: obs_count_haiyang_2a
-            ugxt_haiyang_2a_geodetic: obs_count_haiyang_2a_geodetic
-            ugxt_jason_1: obs_count_jason_1
-            ugxt_jason_1_geodetic: obs_count_jason_1_geodetic
-            ugxt_jason_1_interleaved: obs_count_jason_1_interleaved
-            ugxt_jason_2: obs_count_jason_2
-            ugxt_jason_2_geodetic: obs_count_jason_2_geodetic
-            ugxt_jason_2_interleaved: obs_count_jason_2_interleaved
-            ugxt_jason_3: obs_count_jason_3
-            ugxt_saral: obs_count_saral
-            ugxt_saral_geodetic: obs_count_saral_geodetic
-            ugxt_sentinel_3a: obs_count_sentinel_3a
-            ugxt_sentinel_3b: obs_count_sentinel_3b
-            ugxt_topex_poseidon: obs_count_topex_poseidon
-            ugxt_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
-            vgxt_cryosat_2: obs_count_cryosat_2
-            vgxt_envisat: obs_count_envisat
-            vgxt_envisat_new_orbit: obs_count_envisat_new_orbit
-            vgxt_ers_1: obs_count_ers_1
-            vgxt_ers_1_geodetic: obs_count_ers_1_geodetic
-            vgxt_ers_2: obs_count_ers_2
-            vgxt_gfo: obs_count_gfo
-            vgxt_haiyang_2a: obs_count_haiyang_2a
-            vgxt_haiyang_2a_geodetic: obs_count_haiyang_2a_geodetic
-            vgxt_jason_1: obs_count_jason_1
-            vgxt_jason_1_geodetic: obs_count_jason_1_geodetic
-            vgxt_jason_1_interleaved: obs_count_jason_1_interleaved
-            vgxt_jason_2: obs_count_jason_2
-            vgxt_jason_2_geodetic: obs_count_jason_2_geodetic
-            vgxt_jason_2_interleaved: obs_count_jason_2_interleaved
-            vgxt_jason_3: obs_count_jason_3
-            vgxt_saral: obs_count_saral
-            vgxt_saral_geodetic: obs_count_saral_geodetic
-            vgxt_sentinel_3a: obs_count_sentinel_3a
-            vgxt_sentinel_3b: obs_count_sentinel_3b
-            vgxt_topex_poseidon: obs_count_topex_poseidon
-            vgxt_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
+            sla_filtered_cryosat_2: sla_count_cryosat_2
+            sla_filtered_envisat: sla_count_envisat
+            sla_filtered_envisat_new_orbit: sla_count_envisat_new_orbit
+            sla_filtered_ers_1: sla_count_ers_1
+            sla_filtered_ers_1_geodetic: sla_count_ers_1_geodetic
+            sla_filtered_ers_2: sla_count_ers_2
+            sla_filtered_gfo: sla_count_gfo
+            sla_filtered_haiyang_2a: sla_count_haiyang_2a
+            sla_filtered_haiyang_2a_geodetic: sla_count_haiyang_2a_geodetic
+            sla_filtered_jason_1: sla_count_jason_1
+            sla_filtered_jason_1_geodetic: sla_count_jason_1_geodetic
+            sla_filtered_jason_1_interleaved: sla_count_jason_1_interleaved
+            sla_filtered_jason_2: sla_count_jason_2
+            sla_filtered_jason_2_geodetic: sla_count_jason_2_geodetic
+            sla_filtered_jason_2_interleaved: sla_count_jason_2_interleaved
+            sla_filtered_jason_3: sla_count_jason_3
+            sla_filtered_saral: sla_count_saral
+            sla_filtered_saral_geodetic: sla_count_saral_geodetic
+            sla_filtered_sentinel_3a: sla_count_sentinel_3a
+            sla_filtered_sentinel_3b: sla_count_sentinel_3b
+            sla_filtered_topex_poseidon: sla_count_topex_poseidon
+            sla_filtered_topex_poseidon_interleaved: sla_count_topex_poseidon_interleaved
+            ugxt_cryosat_2: uvgxt_count_cryosat_2
+            ugxt_envisat: uvgxt_count_envisat
+            ugxt_envisat_new_orbit: uvgxt_count_envisat_new_orbit
+            ugxt_ers_1: uvgxt_count_ers_1
+            ugxt_ers_1_geodetic: uvgxt_count_ers_1_geodetic
+            ugxt_ers_2: uvgxt_count_ers_2
+            ugxt_gfo: uvgxt_count_gfo
+            ugxt_haiyang_2a: uvgxt_count_haiyang_2a
+            ugxt_haiyang_2a_geodetic: uvgxt_count_haiyang_2a_geodetic
+            ugxt_jason_1: uvgxt_count_jason_1
+            ugxt_jason_1_geodetic: uvgxt_count_jason_1_geodetic
+            ugxt_jason_1_interleaved: uvgxt_count_jason_1_interleaved
+            ugxt_jason_2: uvgxt_count_jason_2
+            ugxt_jason_2_geodetic: uvgxt_count_jason_2_geodetic
+            ugxt_jason_2_interleaved: uvgxt_count_jason_2_interleaved
+            ugxt_jason_3: uvgxt_count_jason_3
+            ugxt_saral: uvgxt_count_saral
+            ugxt_saral_geodetic: uvgxt_count_saral_geodetic
+            ugxt_sentinel_3a: uvgxt_count_sentinel_3a
+            ugxt_sentinel_3b: uvgxt_count_sentinel_3b
+            ugxt_topex_poseidon: uvgxt_count_topex_poseidon
+            ugxt_topex_poseidon_interleaved: uvgxt_count_topex_poseidon_interleaved
+            vgxt_cryosat_2: uvgxt_count_cryosat_2
+            vgxt_envisat: uvgxt_count_envisat
+            vgxt_envisat_new_orbit: uvgxt_count_envisat_new_orbit
+            vgxt_ers_1: uvgxt_count_ers_1
+            vgxt_ers_1_geodetic: uvgxt_count_ers_1_geodetic
+            vgxt_ers_2: uvgxt_count_ers_2
+            vgxt_gfo: uvgxt_count_gfo
+            vgxt_haiyang_2a: uvgxt_count_haiyang_2a
+            vgxt_haiyang_2a_geodetic: uvgxt_count_haiyang_2a_geodetic
+            vgxt_jason_1: uvgxt_count_jason_1
+            vgxt_jason_1_geodetic: uvgxt_count_jason_1_geodetic
+            vgxt_jason_1_interleaved: uvgxt_count_jason_1_interleaved
+            vgxt_jason_2: uvgxt_count_jason_2
+            vgxt_jason_2_geodetic: uvgxt_count_jason_2_geodetic
+            vgxt_jason_2_interleaved: uvgxt_count_jason_2_interleaved
+            vgxt_jason_3: uvgxt_count_jason_3
+            vgxt_saral: uvgxt_count_saral
+            vgxt_saral_geodetic: uvgxt_count_saral_geodetic
+            vgxt_sentinel_3a: uvgxt_count_sentinel_3a
+            vgxt_sentinel_3b: uvgxt_count_sentinel_3b
+            vgxt_topex_poseidon: uvgxt_count_topex_poseidon
+            vgxt_topex_poseidon_interleaved: uvgxt_count_topex_poseidon_interleaved
           # `sla` is not masked to one mission: its truth column is rebuilt from every
           # mission that observed the bin, count-weighted. The column on disk is a copy of
           # one mission only because anemoi needs a diagnostic to exist there -- merging
@@ -393,28 +437,50 @@ data:
           config:
             default: mean-std
             max:
-              - obs_count_cryosat_2
-              - obs_count_envisat
-              - obs_count_envisat_new_orbit
-              - obs_count_ers_1
-              - obs_count_ers_1_geodetic
-              - obs_count_ers_2
-              - obs_count_gfo
-              - obs_count_haiyang_2a
-              - obs_count_haiyang_2a_geodetic
-              - obs_count_jason_1
-              - obs_count_jason_1_geodetic
-              - obs_count_jason_1_interleaved
-              - obs_count_jason_2
-              - obs_count_jason_2_geodetic
-              - obs_count_jason_2_interleaved
-              - obs_count_jason_3
-              - obs_count_saral
-              - obs_count_saral_geodetic
-              - obs_count_sentinel_3a
-              - obs_count_sentinel_3b
-              - obs_count_topex_poseidon
-              - obs_count_topex_poseidon_interleaved
+              - sla_count_cryosat_2
+              - sla_count_envisat
+              - sla_count_envisat_new_orbit
+              - sla_count_ers_1
+              - sla_count_ers_1_geodetic
+              - sla_count_ers_2
+              - sla_count_gfo
+              - sla_count_haiyang_2a
+              - sla_count_haiyang_2a_geodetic
+              - sla_count_jason_1
+              - sla_count_jason_1_geodetic
+              - sla_count_jason_1_interleaved
+              - sla_count_jason_2
+              - sla_count_jason_2_geodetic
+              - sla_count_jason_2_interleaved
+              - sla_count_jason_3
+              - sla_count_saral
+              - sla_count_saral_geodetic
+              - sla_count_sentinel_3a
+              - sla_count_sentinel_3b
+              - sla_count_topex_poseidon
+              - sla_count_topex_poseidon_interleaved
+              - uvgxt_count_cryosat_2
+              - uvgxt_count_envisat
+              - uvgxt_count_envisat_new_orbit
+              - uvgxt_count_ers_1
+              - uvgxt_count_ers_1_geodetic
+              - uvgxt_count_ers_2
+              - uvgxt_count_gfo
+              - uvgxt_count_haiyang_2a
+              - uvgxt_count_haiyang_2a_geodetic
+              - uvgxt_count_jason_1
+              - uvgxt_count_jason_1_geodetic
+              - uvgxt_count_jason_1_interleaved
+              - uvgxt_count_jason_2
+              - uvgxt_count_jason_2_geodetic
+              - uvgxt_count_jason_2_interleaved
+              - uvgxt_count_jason_3
+              - uvgxt_count_saral
+              - uvgxt_count_saral_geodetic
+              - uvgxt_count_sentinel_3a
+              - uvgxt_count_sentinel_3b
+              - uvgxt_count_topex_poseidon
+              - uvgxt_count_topex_poseidon_interleaved
             min-max:
               - elevation
               - land_fraction
@@ -729,14 +795,12 @@ training:
           sla:
             observed_as: sla_filtered
             groups: auto
-            count: "obs_count_{group}"
+            count: "sla_count_{group}"
           # Full-field velocity, scored by its component across each observed track
           uvgxt:
             components: [ugxt, vgxt]
             groups: auto
-            count: "obs_count_{group}"
-            # Field encoder only: mask the inputs to where the physics block is defined
-            defined_by: uvgxt
+            count: "uvgxt_count_{group}"
 
   validation_metrics:
     datasets:
@@ -839,7 +903,7 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v2
+      experiment_name: v3
       project_name: diagnose-uvgxt
       terminal: false
       system: false
@@ -874,7 +938,7 @@ system:
     profiler: profiler
   input:
     root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
-    dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
+    dataset: ${system.input.root}/anemoi-hpx6-24h-v3/dataset.zarr
     graph: ${system.input.root}/graph.pt
     loss_matrices_path: null
     truncation: null

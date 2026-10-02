@@ -1,6 +1,6 @@
 debugging_info:
-  root_dir: runs/v2
-  run_id: ad32ea9a932149cbbdd70e9bea7ce06e
+  root_dir: runs/v3
+  run_id: null  # set to the v3 training run id
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
 # multistep_input: 3
@@ -19,8 +19,8 @@ initial_state_categories: [dynamic_forcings]
 input:
   dataset:
     join:
-      - dataset: anemoi-hpx6-24h/dataset.zarr
-      - dataset: anemoi-hpx6-24h/dataset.zarr
+      - dataset: anemoi-hpx6-24h-v3/dataset.zarr
+      - dataset: anemoi-hpx6-24h-v3/dataset.zarr
         select:
           - sla_filtered_jason_2
           - ugxt_jason_2

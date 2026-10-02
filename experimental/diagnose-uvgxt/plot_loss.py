@@ -105,8 +105,8 @@ def plot_curves(client, run, metrics, keys, path, title=None):
 
 
 if __name__ == "__main__":
-    logname = "v2"
-    experiment = "v2"
+    logname = "v3"
+    experiment = "v3"
     log_dir = f"runs/{logname}"
     run_dir = f"runs/{experiment}"
     client, run = open_run(f"{log_dir}/logs/mlflow", experiment_name=experiment)

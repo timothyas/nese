@@ -39,8 +39,8 @@ BASELINE_LABEL = "field-encoder"
 #}
 #BASELINE_LABEL = "diagnose-uvgxt-v0"
 
-EXPERIMENT_DIR = "runs/v2/inference-validation"
-EXPERIMENT_LABEL = "diagnose-uvgxt-v2"
+EXPERIMENT_DIR = "runs/v3/inference-validation"
+EXPERIMENT_LABEL = "diagnose-uvgxt-v3"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 

@@ -158,6 +158,28 @@ Compared to v0:
   (~1.5% at most though), despite what looks like more overfitting
 * uvgxt shows no differences large than 0.5%
 
+## Version 3
+
+Make every stage agree on where a velocity was observed (see "Mask check").
+
+On the data preparation side:
+* `nese-dataprep` now applies the 5° equatorial band to the
+  velocity by the *cell center*, rather than the raw observations as it was before.
+* Counts are written with a source specific `count_name`, so now we see:
+  `sla_count_{group}`, `uvgxt_count_{group}`
+* All things considered (observations, equator, etc), velocity
+  is finite wherever `uvgxt_count > 0`.
+    * This eliminates the "leak" from v0-v2 that was reaching the encoder/loss,
+      where the data side had defined
+      observations at the 4.8deg bins, due to the half of the cell that was
+      poleward of 5deg.
+
+This streamlines the model side implementation.
+* The field encoder, the loss, `ObsCountNaNRestorer` and verify use `uvgxt_count` for the
+  velocity, and `defined_by` is gone: observed means `count > 0`, even where the model
+  can't diagnose a velocity (coastal cells). The loss still scores only defined cells.
+
+
 ## Comparing extremes
 
 The extreme (max/min) SLA values do seem to be better resolved with the
