@@ -747,7 +747,9 @@ training:
     pl_lr_scheduler:
       interval: step
 
-  run_id: null
+  # Set by nese-submit (nese-logistics), so the jobs after training know the run_id; null, a
+  # fresh run, when submitted by hand. An id with a checkpoint resumes from it.
+  run_id: ${oc.env:NESE_RUN_ID,null}
   fork_run_id: null
   transfer_learning: false
   load_weights_only: false
@@ -903,6 +905,9 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
+      # Train into the run nese-submit made, not a child of it: one run_id for the
+      # checkpoints, metrics and plots, and a resubmitted job appends to the same run.
+      on_resume_create_child: false
       experiment_name: v3
       project_name: diagnose-uvgxt
       terminal: false

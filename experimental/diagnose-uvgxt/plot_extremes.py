@@ -16,6 +16,7 @@ so every run drawn (the baseline included) must have been through it with aggreg
 The observations are the experiment's.
 """
 
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -42,7 +43,7 @@ BASELINE_LABEL = "field-encoder"
 #}
 #BASELINE_LABEL = "diagnose-uvgxt-v0"
 
-EXPERIMENT_DIR = "runs/v3/inference-validation"
+EXPERIMENT_DIR = f"runs/v3/{os.environ['NESE_RUN_ID']}/inference-validation"
 EXPERIMENT_LABEL = "diagnose-uvgxt-v3"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]

@@ -5,6 +5,7 @@ two versions, drawn on top of a wide gray persistence violin for reference. With
 BASELINE_DIR = None, the experiment gets one full violin, in the color it has beside a baseline.
 """
 
+import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,7 +31,7 @@ BASELINE_DIRS = {
 BASELINE_DIR = BASELINE_DIRS[VARIABLE]
 BASELINE_LABEL = "diagnose-uvgxt-v0"
 
-EXPERIMENT_DIR = "runs/v3/inference-validation"
+EXPERIMENT_DIR = f"runs/v3/{os.environ['NESE_RUN_ID']}/inference-validation"
 EXPERIMENT_LABEL = "diagnose-uvgxt-v3"
 PERSISTENCE_DIR = "runs/v0/inference-validation"
 PERSISTENCE_LABEL = "persistence"

@@ -1,6 +1,6 @@
 debugging_info:
   root_dir: runs/v3
-  run_id: null  # set to the v3 training run id
+  run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
 # multistep_input: 3
@@ -11,7 +11,7 @@ date_range:
   freq: 24h
 
 output:
-  nese-zarr: ${debugging_info.root_dir}/inference-validation
+  nese-zarr: ${debugging_info.root_dir}/${debugging_info.run_id}/inference-validation
 lead_time: 24h
 allow_nans: true
 initial_state_categories: [dynamic_forcings]
