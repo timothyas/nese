@@ -26,28 +26,28 @@ data:
       - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
-      - obs_count_cryosat_2
-      - obs_count_envisat
-      - obs_count_envisat_new_orbit
-      - obs_count_ers_1
-      - obs_count_ers_1_geodetic
-      - obs_count_ers_2
-      - obs_count_gfo
-      - obs_count_haiyang_2a
-      - obs_count_haiyang_2a_geodetic
-      - obs_count_jason_1
-      - obs_count_jason_1_geodetic
-      - obs_count_jason_1_interleaved
-      - obs_count_jason_2
-      - obs_count_jason_2_geodetic
-      - obs_count_jason_2_interleaved
-      - obs_count_jason_3
-      - obs_count_saral
-      - obs_count_saral_geodetic
-      - obs_count_sentinel_3a
-      - obs_count_sentinel_3b
-      - obs_count_topex_poseidon
-      - obs_count_topex_poseidon_interleaved
+      - sla_filtered_count_cryosat_2
+      - sla_filtered_count_envisat
+      - sla_filtered_count_envisat_new_orbit
+      - sla_filtered_count_ers_1
+      - sla_filtered_count_ers_1_geodetic
+      - sla_filtered_count_ers_2
+      - sla_filtered_count_gfo
+      - sla_filtered_count_haiyang_2a
+      - sla_filtered_count_haiyang_2a_geodetic
+      - sla_filtered_count_jason_1
+      - sla_filtered_count_jason_1_geodetic
+      - sla_filtered_count_jason_1_interleaved
+      - sla_filtered_count_jason_2
+      - sla_filtered_count_jason_2_geodetic
+      - sla_filtered_count_jason_2_interleaved
+      - sla_filtered_count_jason_3
+      - sla_filtered_count_saral
+      - sla_filtered_count_saral_geodetic
+      - sla_filtered_count_sentinel_3a
+      - sla_filtered_count_sentinel_3b
+      - sla_filtered_count_topex_poseidon
+      - sla_filtered_count_topex_poseidon_interleaved
       - elevation
       - land_fraction
       - cos_latitude
@@ -57,6 +57,9 @@ data:
       - cos_julian_day
       - sin_julian_day
       - insolation
+      - mdt
+      - mdt_u
+      - mdt_v
 
       # The one channel the model emits.
       diagnostic:
@@ -86,28 +89,28 @@ data:
       - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
-      - obs_count_cryosat_2
-      - obs_count_envisat
-      - obs_count_envisat_new_orbit
-      - obs_count_ers_1
-      - obs_count_ers_1_geodetic
-      - obs_count_ers_2
-      - obs_count_gfo
-      - obs_count_haiyang_2a
-      - obs_count_haiyang_2a_geodetic
-      - obs_count_jason_1
-      - obs_count_jason_1_geodetic
-      - obs_count_jason_1_interleaved
-      - obs_count_jason_2
-      - obs_count_jason_2_geodetic
-      - obs_count_jason_2_interleaved
-      - obs_count_jason_3
-      - obs_count_saral
-      - obs_count_saral_geodetic
-      - obs_count_sentinel_3a
-      - obs_count_sentinel_3b
-      - obs_count_topex_poseidon
-      - obs_count_topex_poseidon_interleaved
+      - sla_filtered_count_cryosat_2
+      - sla_filtered_count_envisat
+      - sla_filtered_count_envisat_new_orbit
+      - sla_filtered_count_ers_1
+      - sla_filtered_count_ers_1_geodetic
+      - sla_filtered_count_ers_2
+      - sla_filtered_count_gfo
+      - sla_filtered_count_haiyang_2a
+      - sla_filtered_count_haiyang_2a_geodetic
+      - sla_filtered_count_jason_1
+      - sla_filtered_count_jason_1_geodetic
+      - sla_filtered_count_jason_1_interleaved
+      - sla_filtered_count_jason_2
+      - sla_filtered_count_jason_2_geodetic
+      - sla_filtered_count_jason_2_interleaved
+      - sla_filtered_count_jason_3
+      - sla_filtered_count_saral
+      - sla_filtered_count_saral_geodetic
+      - sla_filtered_count_sentinel_3a
+      - sla_filtered_count_sentinel_3b
+      - sla_filtered_count_topex_poseidon
+      - sla_filtered_count_topex_poseidon_interleaved
 
       # Order matters: impute then normalise on the forward pass, reversed on the
       # inverse. Imputation must come first because InputImputer fills with raw-space
@@ -120,28 +123,28 @@ data:
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
-            sla_filtered_cryosat_2: obs_count_cryosat_2
-            sla_filtered_envisat: obs_count_envisat
-            sla_filtered_envisat_new_orbit: obs_count_envisat_new_orbit
-            sla_filtered_ers_1: obs_count_ers_1
-            sla_filtered_ers_1_geodetic: obs_count_ers_1_geodetic
-            sla_filtered_ers_2: obs_count_ers_2
-            sla_filtered_gfo: obs_count_gfo
-            sla_filtered_haiyang_2a: obs_count_haiyang_2a
-            sla_filtered_haiyang_2a_geodetic: obs_count_haiyang_2a_geodetic
-            sla_filtered_jason_1: obs_count_jason_1
-            sla_filtered_jason_1_geodetic: obs_count_jason_1_geodetic
-            sla_filtered_jason_1_interleaved: obs_count_jason_1_interleaved
-            sla_filtered_jason_2: obs_count_jason_2
-            sla_filtered_jason_2_geodetic: obs_count_jason_2_geodetic
-            sla_filtered_jason_2_interleaved: obs_count_jason_2_interleaved
-            sla_filtered_jason_3: obs_count_jason_3
-            sla_filtered_saral: obs_count_saral
-            sla_filtered_saral_geodetic: obs_count_saral_geodetic
-            sla_filtered_sentinel_3a: obs_count_sentinel_3a
-            sla_filtered_sentinel_3b: obs_count_sentinel_3b
-            sla_filtered_topex_poseidon: obs_count_topex_poseidon
-            sla_filtered_topex_poseidon_interleaved: obs_count_topex_poseidon_interleaved
+            sla_filtered_cryosat_2: sla_filtered_count_cryosat_2
+            sla_filtered_envisat: sla_filtered_count_envisat
+            sla_filtered_envisat_new_orbit: sla_filtered_count_envisat_new_orbit
+            sla_filtered_ers_1: sla_filtered_count_ers_1
+            sla_filtered_ers_1_geodetic: sla_filtered_count_ers_1_geodetic
+            sla_filtered_ers_2: sla_filtered_count_ers_2
+            sla_filtered_gfo: sla_filtered_count_gfo
+            sla_filtered_haiyang_2a: sla_filtered_count_haiyang_2a
+            sla_filtered_haiyang_2a_geodetic: sla_filtered_count_haiyang_2a_geodetic
+            sla_filtered_jason_1: sla_filtered_count_jason_1
+            sla_filtered_jason_1_geodetic: sla_filtered_count_jason_1_geodetic
+            sla_filtered_jason_1_interleaved: sla_filtered_count_jason_1_interleaved
+            sla_filtered_jason_2: sla_filtered_count_jason_2
+            sla_filtered_jason_2_geodetic: sla_filtered_count_jason_2_geodetic
+            sla_filtered_jason_2_interleaved: sla_filtered_count_jason_2_interleaved
+            sla_filtered_jason_3: sla_filtered_count_jason_3
+            sla_filtered_saral: sla_filtered_count_saral
+            sla_filtered_saral_geodetic: sla_filtered_count_saral_geodetic
+            sla_filtered_sentinel_3a: sla_filtered_count_sentinel_3a
+            sla_filtered_sentinel_3b: sla_filtered_count_sentinel_3b
+            sla_filtered_topex_poseidon: sla_filtered_count_topex_poseidon
+            sla_filtered_topex_poseidon_interleaved: sla_filtered_count_topex_poseidon_interleaved
           # `sla` is not masked to one mission: its truth column is rebuilt from every
           # mission that observed the bin, count-weighted. The column on disk is a copy of
           # one mission only because anemoi needs a diagnostic to exist there -- merging
@@ -182,6 +185,9 @@ data:
             - sla_filtered_topex_poseidon
             - sla_filtered_topex_poseidon_interleaved
             - sla
+            - mdt
+            - mdt_u
+            - mdt_v
         normalizer:
           # One mean/stdev for `sla` and all 22 `sla_filtered_*`. Per-mission statistics
           # look neutral but are not: a mission's mean is the sea level of the years it
@@ -196,28 +202,28 @@ data:
           config:
             default: mean-std
             max:
-              - obs_count_cryosat_2
-              - obs_count_envisat
-              - obs_count_envisat_new_orbit
-              - obs_count_ers_1
-              - obs_count_ers_1_geodetic
-              - obs_count_ers_2
-              - obs_count_gfo
-              - obs_count_haiyang_2a
-              - obs_count_haiyang_2a_geodetic
-              - obs_count_jason_1
-              - obs_count_jason_1_geodetic
-              - obs_count_jason_1_interleaved
-              - obs_count_jason_2
-              - obs_count_jason_2_geodetic
-              - obs_count_jason_2_interleaved
-              - obs_count_jason_3
-              - obs_count_saral
-              - obs_count_saral_geodetic
-              - obs_count_sentinel_3a
-              - obs_count_sentinel_3b
-              - obs_count_topex_poseidon
-              - obs_count_topex_poseidon_interleaved
+              - sla_filtered_count_cryosat_2
+              - sla_filtered_count_envisat
+              - sla_filtered_count_envisat_new_orbit
+              - sla_filtered_count_ers_1
+              - sla_filtered_count_ers_1_geodetic
+              - sla_filtered_count_ers_2
+              - sla_filtered_count_gfo
+              - sla_filtered_count_haiyang_2a
+              - sla_filtered_count_haiyang_2a_geodetic
+              - sla_filtered_count_jason_1
+              - sla_filtered_count_jason_1_geodetic
+              - sla_filtered_count_jason_1_interleaved
+              - sla_filtered_count_jason_2
+              - sla_filtered_count_jason_2_geodetic
+              - sla_filtered_count_jason_2_interleaved
+              - sla_filtered_count_jason_3
+              - sla_filtered_count_saral
+              - sla_filtered_count_saral_geodetic
+              - sla_filtered_count_sentinel_3a
+              - sla_filtered_count_sentinel_3b
+              - sla_filtered_count_topex_poseidon
+              - sla_filtered_count_topex_poseidon_interleaved
             min-max:
               - elevation
               - land_fraction
@@ -470,13 +476,16 @@ training:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
       t_initial: ${training.max_steps}
-      warmup_t: 1000
+      warmup_t: 500
+      warmup_prefix: true
       t_in_epochs: false
     lr: 2.5e-04
     pl_lr_scheduler:
       interval: step
 
-  run_id: null
+  # Set by nese-submit (nese-logistics), so the jobs after training know the run_id; null, a
+  # fresh run, when submitted by hand. An id with a checkpoint resumes from it.
+  run_id: ${oc.env:NESE_RUN_ID,null}
   fork_run_id: null
   transfer_learning: false
   load_weights_only: false
@@ -520,7 +529,7 @@ training:
           sla:
             observed_as: sla_filtered
             groups: auto
-            count: "obs_count_{group}"
+            count: "sla_filtered_count_{group}"
 
   validation_metrics:
     datasets:
@@ -619,7 +628,8 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      experiment_name: v3
+      on_resume_create_child: false
+      experiment_name: v4
       project_name: field-encoder
       terminal: false
       system: false
@@ -654,7 +664,7 @@ system:
     profiler: profiler
   input:
     root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
-    dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
+    dataset: ${system.input.root}/anemoi-hpx6-24h-v4/dataset.zarr
     graph: ${system.input.root}/graph.pt
     loss_matrices_path: null
     truncation: null

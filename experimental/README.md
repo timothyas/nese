@@ -24,6 +24,8 @@ Lineage
     * v2: for future comparison, also bring in `ers_1` and `ers_1_geodetic`
     * v3: try `field_channels = 8` not 32, no big difference. Useful for bigger
       models
+    * v4: add `mdt`, `mdt_u`, `mdt_v` as static forcing and the matching cell selection, as a
+      baseline for `diagnose-uvgxt-v4`, plus small LR schedule updates
 7. `diagnose-uvgxt`: add a `physics-diagnostics` module and compute surface
    geostrophic velocities from SLA
     * note the model computes velocity pointed in east/north directions, `xt`
@@ -34,6 +36,8 @@ Lineage
       MLPs, one for `sla` and one for `uvgxt`
     * v3: consistent velocity masking by providing a new obs count on the
       dataprep side, done per binned cell center, not obs location
+    * v4: cell selection from all mdt fields and elevation, small LR schedule
+      updates, and field channels = 8
 
 
 ## Overfitting
