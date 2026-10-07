@@ -213,6 +213,11 @@ However, I don't think we need to represent the Caspian Sea, and I'm just going
 to remove any null MDT points from all the datasets (and also any invalid
 MDT-based absolute geostrophic velocity points too for extreme consistency).
 
+Also...
+* Update `model.model.field_channels = 8` from 32 before
+* Update `training.optimization.lr_scheduler` `warmup_t = 500` and
+  `warmup_prefix = true`, from 1000 and false before
+
 
 ## Comparing extremes
 

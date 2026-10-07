@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=training-v4
+#SBATCH --job-name=training-inference-v4
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel
@@ -41,7 +41,7 @@ srun --overlap --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" 
 # match fails, it aborts with "No nodes are available for this job". This happened on
 # ~1 in 4 runs. Disabling the slurm allocation component leaves it just the local host.
 
-srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
+srun --ntasks=1 apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env OMP_NUM_THREADS="$THREADS" \
     --env OMPI_MCA_plm=isolated \
     --env OMPI_MCA_ras=^slurm \
@@ -51,7 +51,7 @@ srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
     "$NESE_ANEMOI_SIF" \
     mpirun -n "$NRANKS" --oversubscribe --bind-to none nese-inference run inference.validation.yaml
 
-srun apptainer exec --nv --bind /cluster --pwd "$PWD" \
+srun --ntasks=1 apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env OMP_NUM_THREADS="$THREADS" \
     --env OMPI_MCA_plm=isolated \
     --env OMPI_MCA_ras=^slurm \

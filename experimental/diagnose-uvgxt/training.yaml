@@ -632,7 +632,7 @@ model:
     latent_skip: true
     # One shared MLP per field over its groups; see training/README.md.
     fields: ${training.training_loss.datasets.ocean.observations}
-    field_channels: 32
+    field_channels: 8
   layer_kernels:
     LayerNorm:
       _target_: torch.nn.LayerNorm
@@ -741,7 +741,8 @@ training:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
       t_initial: ${training.max_steps}
-      warmup_t: 1000
+      warmup_t: 500
+      warmup_prefix: true
       t_in_epochs: false
     lr: 2.5e-04
     pl_lr_scheduler:

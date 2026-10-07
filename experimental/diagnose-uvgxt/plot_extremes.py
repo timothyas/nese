@@ -16,7 +16,6 @@ so every run drawn (the baseline included) must have been through it with aggreg
 The observations are the experiment's.
 """
 
-import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -30,22 +29,22 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt"]
 FHR = 24
 
-# Compare to field encoder
-BASELINE_DIRS = {
-    "sla": "../field-encoder/runs/v2/inference-validation",
-    "uvgxt": None,
-}
-BASELINE_LABEL = "field-encoder"
-
-## Compare within diagnose-uvgxt versions
+## Compare to field encoder
 #BASELINE_DIRS = {
-#    "sla": "runs/v0/inference-validation",
-#    "uvgxt": "runs/v0/inference-validation",
+#    "sla": "../field-encoder/runs/v4/inference-validation",
+#    "uvgxt": None,
 #}
-#BASELINE_LABEL = "diagnose-uvgxt-v0"
+#BASELINE_LABEL = "field-encoder-v4"
 
-EXPERIMENT_DIR = f"runs/v3/{os.environ['NESE_RUN_ID']}/inference-validation"
-EXPERIMENT_LABEL = "diagnose-uvgxt-v3"
+# Compare within diagnose-uvgxt versions
+BASELINE_DIRS = {
+    "sla": "runs/v2/inference-validation",
+    "uvgxt": "runs/v2/inference-validation",
+}
+BASELINE_LABEL = "diagnose-uvgxt-v2"
+
+EXPERIMENT_DIR = "runs/v4/inference-validation"
+EXPERIMENT_LABEL = "diagnose-uvgxt-v4"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 
