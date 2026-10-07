@@ -28,6 +28,7 @@ import xarray as xr
 # --- things to update -------------------------------------------------------
 
 FIELDS = ["sla", "uvgxt"]
+FHR = 24
 
 # Compare to field encoder
 BASELINE_DIRS = {
