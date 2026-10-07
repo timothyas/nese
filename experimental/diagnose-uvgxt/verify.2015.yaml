@@ -1,12 +1,12 @@
 forecast:
-  store_dir: runs/v3/${oc.env:NESE_RUN_ID}/inference-2015
+  store_dir: runs/v4/inference-2015
 verification:
-  dataset: anemoi-hpx6-24h-v3/dataset.zarr
+  dataset: anemoi-hpx6-24h-v4/dataset.zarr
   observations:
     sla:
       observed_as: sla_filtered
       groups: auto
-      count: "sla_count_{group}"
+      count: "sla_filtered_count_{group}"
     uvgxt:
       components: ["ugxt", "vgxt"]
       groups: auto

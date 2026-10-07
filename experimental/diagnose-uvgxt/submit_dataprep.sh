@@ -7,7 +7,7 @@
 #SBATCH --ntasks=128
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=4G
-#SBATCH --time=01:00:00
+#SBATCH --time=00:30:00
 
 # Note, this took 15 minutes
 

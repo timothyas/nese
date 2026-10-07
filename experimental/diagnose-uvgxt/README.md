@@ -197,6 +197,22 @@ This streamlines the model side implementation.
   velocity, and `defined_by` is gone: observed means `count > 0`, even where the model
   can't diagnose a velocity (coastal cells). The loss still scores only defined cells.
 
+## Version 4
+
+Consistent, multi-criteria cell selection during data preparation.
+By comparing extreme values to previous experiments, I found out that this
+experiment no longer captured the Caspian Sea (and a couple other points, like a
+couple points at the poles).
+This boils down to the data preparation.
+Because we diagnose velocities, we also grab MDT with SLA. Previously this meant
+SLA was masked in the same way as MDT, so SLA over the Caspian Sea (et al) were
+being removed from this experiment but not all the previous ones.
+Version 3 addressed this with correct, variable-specific observation counts,
+rather than 1 per observing system.
+However, I don't think we need to represent the Caspian Sea, and I'm just going
+to remove any null MDT points from all the datasets (and also any invalid
+MDT-based absolute geostrophic velocity points too for extreme consistency).
+
 
 ## Comparing extremes
 

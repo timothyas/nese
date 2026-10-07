@@ -75,14 +75,23 @@ processing:
 
 post_processing:
   select_cells:
-    source: gebco
-    variable: land_fraction
-    keep: below
-    threshold: 0.1
+    - source: gebco
+      variable: land_fraction
+      keep: below
+      threshold: 0.1
+    - source: cmems_mdt
+      variable: mdt
+      keep: notnull
+    - source: cmems_mdt
+      variable: mdt_u
+      keep: notnull
+    - source: cmems_mdt
+      variable: mdt_v
+      keep: notnull
 
 target:
   name: anemoi
-  store_dir: ${oc.env:PWD}/anemoi-hpx6-24h-v3
+  store_dir: ${oc.env:PWD}/anemoi-hpx6-24h-v4
   store_float64_as_float32: true
   compression: blosc_zstd
   statistics_period:

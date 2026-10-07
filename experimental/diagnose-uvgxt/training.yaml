@@ -26,28 +26,28 @@ data:
       - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
-      - sla_count_cryosat_2
-      - sla_count_envisat
-      - sla_count_envisat_new_orbit
-      - sla_count_ers_1
-      - sla_count_ers_1_geodetic
-      - sla_count_ers_2
-      - sla_count_gfo
-      - sla_count_haiyang_2a
-      - sla_count_haiyang_2a_geodetic
-      - sla_count_jason_1
-      - sla_count_jason_1_geodetic
-      - sla_count_jason_1_interleaved
-      - sla_count_jason_2
-      - sla_count_jason_2_geodetic
-      - sla_count_jason_2_interleaved
-      - sla_count_jason_3
-      - sla_count_saral
-      - sla_count_saral_geodetic
-      - sla_count_sentinel_3a
-      - sla_count_sentinel_3b
-      - sla_count_topex_poseidon
-      - sla_count_topex_poseidon_interleaved
+      - sla_filtered_count_cryosat_2
+      - sla_filtered_count_envisat
+      - sla_filtered_count_envisat_new_orbit
+      - sla_filtered_count_ers_1
+      - sla_filtered_count_ers_1_geodetic
+      - sla_filtered_count_ers_2
+      - sla_filtered_count_gfo
+      - sla_filtered_count_haiyang_2a
+      - sla_filtered_count_haiyang_2a_geodetic
+      - sla_filtered_count_jason_1
+      - sla_filtered_count_jason_1_geodetic
+      - sla_filtered_count_jason_1_interleaved
+      - sla_filtered_count_jason_2
+      - sla_filtered_count_jason_2_geodetic
+      - sla_filtered_count_jason_2_interleaved
+      - sla_filtered_count_jason_3
+      - sla_filtered_count_saral
+      - sla_filtered_count_saral_geodetic
+      - sla_filtered_count_sentinel_3a
+      - sla_filtered_count_sentinel_3b
+      - sla_filtered_count_topex_poseidon
+      - sla_filtered_count_topex_poseidon_interleaved
       - uvgxt_count_cryosat_2
       - uvgxt_count_envisat
       - uvgxt_count_envisat_new_orbit
@@ -159,28 +159,28 @@ data:
       - sla_filtered_sentinel_3b
       - sla_filtered_topex_poseidon
       - sla_filtered_topex_poseidon_interleaved
-      - sla_count_cryosat_2
-      - sla_count_envisat
-      - sla_count_envisat_new_orbit
-      - sla_count_ers_1
-      - sla_count_ers_1_geodetic
-      - sla_count_ers_2
-      - sla_count_gfo
-      - sla_count_haiyang_2a
-      - sla_count_haiyang_2a_geodetic
-      - sla_count_jason_1
-      - sla_count_jason_1_geodetic
-      - sla_count_jason_1_interleaved
-      - sla_count_jason_2
-      - sla_count_jason_2_geodetic
-      - sla_count_jason_2_interleaved
-      - sla_count_jason_3
-      - sla_count_saral
-      - sla_count_saral_geodetic
-      - sla_count_sentinel_3a
-      - sla_count_sentinel_3b
-      - sla_count_topex_poseidon
-      - sla_count_topex_poseidon_interleaved
+      - sla_filtered_count_cryosat_2
+      - sla_filtered_count_envisat
+      - sla_filtered_count_envisat_new_orbit
+      - sla_filtered_count_ers_1
+      - sla_filtered_count_ers_1_geodetic
+      - sla_filtered_count_ers_2
+      - sla_filtered_count_gfo
+      - sla_filtered_count_haiyang_2a
+      - sla_filtered_count_haiyang_2a_geodetic
+      - sla_filtered_count_jason_1
+      - sla_filtered_count_jason_1_geodetic
+      - sla_filtered_count_jason_1_interleaved
+      - sla_filtered_count_jason_2
+      - sla_filtered_count_jason_2_geodetic
+      - sla_filtered_count_jason_2_interleaved
+      - sla_filtered_count_jason_3
+      - sla_filtered_count_saral
+      - sla_filtered_count_saral_geodetic
+      - sla_filtered_count_sentinel_3a
+      - sla_filtered_count_sentinel_3b
+      - sla_filtered_count_topex_poseidon
+      - sla_filtered_count_topex_poseidon_interleaved
       - uvgxt_count_cryosat_2
       - uvgxt_count_envisat
       - uvgxt_count_envisat_new_orbit
@@ -266,28 +266,28 @@ data:
         obs_nan_restorer:
           _target_: nese_training.processors.ObsCountNaNRestorer
           masked_by:
-            sla_filtered_cryosat_2: sla_count_cryosat_2
-            sla_filtered_envisat: sla_count_envisat
-            sla_filtered_envisat_new_orbit: sla_count_envisat_new_orbit
-            sla_filtered_ers_1: sla_count_ers_1
-            sla_filtered_ers_1_geodetic: sla_count_ers_1_geodetic
-            sla_filtered_ers_2: sla_count_ers_2
-            sla_filtered_gfo: sla_count_gfo
-            sla_filtered_haiyang_2a: sla_count_haiyang_2a
-            sla_filtered_haiyang_2a_geodetic: sla_count_haiyang_2a_geodetic
-            sla_filtered_jason_1: sla_count_jason_1
-            sla_filtered_jason_1_geodetic: sla_count_jason_1_geodetic
-            sla_filtered_jason_1_interleaved: sla_count_jason_1_interleaved
-            sla_filtered_jason_2: sla_count_jason_2
-            sla_filtered_jason_2_geodetic: sla_count_jason_2_geodetic
-            sla_filtered_jason_2_interleaved: sla_count_jason_2_interleaved
-            sla_filtered_jason_3: sla_count_jason_3
-            sla_filtered_saral: sla_count_saral
-            sla_filtered_saral_geodetic: sla_count_saral_geodetic
-            sla_filtered_sentinel_3a: sla_count_sentinel_3a
-            sla_filtered_sentinel_3b: sla_count_sentinel_3b
-            sla_filtered_topex_poseidon: sla_count_topex_poseidon
-            sla_filtered_topex_poseidon_interleaved: sla_count_topex_poseidon_interleaved
+            sla_filtered_cryosat_2: sla_filtered_count_cryosat_2
+            sla_filtered_envisat: sla_filtered_count_envisat
+            sla_filtered_envisat_new_orbit: sla_filtered_count_envisat_new_orbit
+            sla_filtered_ers_1: sla_filtered_count_ers_1
+            sla_filtered_ers_1_geodetic: sla_filtered_count_ers_1_geodetic
+            sla_filtered_ers_2: sla_filtered_count_ers_2
+            sla_filtered_gfo: sla_filtered_count_gfo
+            sla_filtered_haiyang_2a: sla_filtered_count_haiyang_2a
+            sla_filtered_haiyang_2a_geodetic: sla_filtered_count_haiyang_2a_geodetic
+            sla_filtered_jason_1: sla_filtered_count_jason_1
+            sla_filtered_jason_1_geodetic: sla_filtered_count_jason_1_geodetic
+            sla_filtered_jason_1_interleaved: sla_filtered_count_jason_1_interleaved
+            sla_filtered_jason_2: sla_filtered_count_jason_2
+            sla_filtered_jason_2_geodetic: sla_filtered_count_jason_2_geodetic
+            sla_filtered_jason_2_interleaved: sla_filtered_count_jason_2_interleaved
+            sla_filtered_jason_3: sla_filtered_count_jason_3
+            sla_filtered_saral: sla_filtered_count_saral
+            sla_filtered_saral_geodetic: sla_filtered_count_saral_geodetic
+            sla_filtered_sentinel_3a: sla_filtered_count_sentinel_3a
+            sla_filtered_sentinel_3b: sla_filtered_count_sentinel_3b
+            sla_filtered_topex_poseidon: sla_filtered_count_topex_poseidon
+            sla_filtered_topex_poseidon_interleaved: sla_filtered_count_topex_poseidon_interleaved
             ugxt_cryosat_2: uvgxt_count_cryosat_2
             ugxt_envisat: uvgxt_count_envisat
             ugxt_envisat_new_orbit: uvgxt_count_envisat_new_orbit
@@ -437,28 +437,28 @@ data:
           config:
             default: mean-std
             max:
-              - sla_count_cryosat_2
-              - sla_count_envisat
-              - sla_count_envisat_new_orbit
-              - sla_count_ers_1
-              - sla_count_ers_1_geodetic
-              - sla_count_ers_2
-              - sla_count_gfo
-              - sla_count_haiyang_2a
-              - sla_count_haiyang_2a_geodetic
-              - sla_count_jason_1
-              - sla_count_jason_1_geodetic
-              - sla_count_jason_1_interleaved
-              - sla_count_jason_2
-              - sla_count_jason_2_geodetic
-              - sla_count_jason_2_interleaved
-              - sla_count_jason_3
-              - sla_count_saral
-              - sla_count_saral_geodetic
-              - sla_count_sentinel_3a
-              - sla_count_sentinel_3b
-              - sla_count_topex_poseidon
-              - sla_count_topex_poseidon_interleaved
+              - sla_filtered_count_cryosat_2
+              - sla_filtered_count_envisat
+              - sla_filtered_count_envisat_new_orbit
+              - sla_filtered_count_ers_1
+              - sla_filtered_count_ers_1_geodetic
+              - sla_filtered_count_ers_2
+              - sla_filtered_count_gfo
+              - sla_filtered_count_haiyang_2a
+              - sla_filtered_count_haiyang_2a_geodetic
+              - sla_filtered_count_jason_1
+              - sla_filtered_count_jason_1_geodetic
+              - sla_filtered_count_jason_1_interleaved
+              - sla_filtered_count_jason_2
+              - sla_filtered_count_jason_2_geodetic
+              - sla_filtered_count_jason_2_interleaved
+              - sla_filtered_count_jason_3
+              - sla_filtered_count_saral
+              - sla_filtered_count_saral_geodetic
+              - sla_filtered_count_sentinel_3a
+              - sla_filtered_count_sentinel_3b
+              - sla_filtered_count_topex_poseidon
+              - sla_filtered_count_topex_poseidon_interleaved
               - uvgxt_count_cryosat_2
               - uvgxt_count_envisat
               - uvgxt_count_envisat_new_orbit
@@ -797,7 +797,7 @@ training:
           sla:
             observed_as: sla_filtered
             groups: auto
-            count: "sla_count_{group}"
+            count: "sla_filtered_count_{group}"
           # Full-field velocity, scored by its component across each observed track
           uvgxt:
             components: [ugxt, vgxt]
@@ -905,10 +905,8 @@ diagnostics:
       save_dir: ${system.output.logs.mlflow}
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
-      # Train into the run nese-submit made, not a child of it: one run_id for the
-      # checkpoints, metrics and plots, and a resubmitted job appends to the same run.
       on_resume_create_child: false
-      experiment_name: v3
+      experiment_name: v4
       project_name: diagnose-uvgxt
       terminal: false
       system: false
@@ -943,7 +941,7 @@ system:
     profiler: profiler
   input:
     root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
-    dataset: ${system.input.root}/anemoi-hpx6-24h-v3/dataset.zarr
+    dataset: ${system.input.root}/anemoi-hpx6-24h-v4/dataset.zarr
     graph: ${system.input.root}/graph.pt
     loss_matrices_path: null
     truncation: null
