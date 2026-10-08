@@ -1066,7 +1066,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v0
+      experiment_name: v1
       project_name: all-altimeter
       terminal: false
       system: false

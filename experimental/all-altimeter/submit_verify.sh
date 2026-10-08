@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=verify-v0
+#SBATCH --job-name=verify-v1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=small
 #SBATCH --qos=devel
@@ -31,4 +31,4 @@ srun nese-verify metrics verify.2015.yaml
 python plot_metrics.py
 python plot_extremes.py
 
-nese-verify movie verify.2015.yaml
+srun nese-verify movie verify.2015.yaml

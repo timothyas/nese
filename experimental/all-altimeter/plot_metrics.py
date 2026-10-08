@@ -2,7 +2,7 @@
 
 Run immediately after nese-verify. Each x category shows split (half) violins for the
 two versions, drawn on top of a wide gray persistence violin for reference. A field whose
-BASELINE_DIRS entry is None gets one full violin, in the color it has beside a baseline.
+BASELINES dir is None gets one full violin, in the color it has beside a baseline.
 """
 
 from pathlib import Path
@@ -17,18 +17,16 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt", "swh"]
 FHR = 24
 
-# Compare to field encoder
-BASELINE_DIRS = {
-    "sla": "../diagnose-uvgxt/runs/v4/inference-validation",
-    "uvgxt": "../diagnose-uvgxt/runs/v4/inference-validation",
-    "swh": None
+# (label, inference dir) per field; diagnose-uvgxt-v4 has no swh, so swh compares against v0
+BASELINES = {
+    "sla": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+    "uvgxt": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
 }
-BASELINE_LABEL = "diagnose-uvgxt-v4"
 
-EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "all-altimeter-v0"
+EXPERIMENT_DIR = "runs/v1/inference-validation"
+EXPERIMENT_LABEL = "all-altimeter-v1"
 
-# Written by `nese-verify persistence-metrics` in submit_verify.sh; model independent
 PERSISTENCE_DIR = EXPERIMENT_DIR
 PERSISTENCE_LABEL = "persistence"
 
@@ -39,7 +37,7 @@ FIG_DIR = f"{EXPERIMENT_DIR}/figures"
 # ----------------------------------------------------------------------------
 
 UNITS = {"sla": "m", "uvgxt": "m/s", "swh": "m"}
-ACRONYMS = {"rmse", "mae", "sla", "uvgxt", "rmsd", "mse", "std"}
+ACRONYMS = {"rmse", "mae", "sla", "uvgxt", "swh", "rmsd", "mse", "std"}
 here = Path(__file__).parent
 
 
@@ -84,9 +82,9 @@ def place_legend(ax, reference_label):
     ax.legend(handles, labels, loc="center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
 
 
-def version_colors():
+def version_colors(field):
     """Baseline then experiment, in the style's color cycle, whether or not the baseline is drawn."""
-    return dict(zip([prettify(BASELINE_LABEL), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
+    return dict(zip([prettify(BASELINES[field][0]), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
 
 
 def draw_panel(ax, model, persistence, metric, x_dim, field):
@@ -108,7 +106,7 @@ def draw_panel(ax, model, persistence, metric, x_dim, field):
         y=metric,
         hue="version",
         hue_order=versions,
-        palette={version: version_colors()[version] for version in versions},
+        palette={version: version_colors(field)[version] for version in versions},
         split=len(versions) > 1,
         inner="quart",
         legend=True,
@@ -122,11 +120,12 @@ def draw_panel(ax, model, persistence, metric, x_dim, field):
 def print_differences(seen_at, field):
     """Percent change of each metric, experiment relative to baseline, per seen_at case."""
     scores = abs(seen_at).mean("t0")
-    baseline = scores.sel(version=BASELINE_LABEL, drop=True)
+    baseline_label = BASELINES[field][0]
+    baseline = scores.sel(version=baseline_label, drop=True)
     experiment = scores.sel(version=EXPERIMENT_LABEL, drop=True)
     percent = 100 * (experiment - baseline) / abs(baseline)
 
-    header = f"{prettify(field)}: {prettify(EXPERIMENT_LABEL)} relative to {prettify(BASELINE_LABEL)}, pooled over groups"
+    header = f"{prettify(field)}: {prettify(EXPERIMENT_LABEL)} relative to {prettify(baseline_label)}, pooled over groups"
     print(f"\n{header}\n{'-' * len(header)}")
     print("(time mean of |metric|; negative is an improvement)\n")
     width = max(len(str(label)) for label in seen_at["seen_at_hour"].values)
@@ -162,7 +161,7 @@ def make_figure(model, persistence, x_dim, field, name, rotate_xticks):
 
 
 def plot_field(field):
-    runs = {BASELINE_LABEL: BASELINE_DIRS[field], EXPERIMENT_LABEL: EXPERIMENT_DIR}
+    runs = {**dict([BASELINES[field]]), EXPERIMENT_LABEL: EXPERIMENT_DIR}
     runs = {label: run_dir for label, run_dir in runs.items() if run_dir is not None}
 
     def by_version(suffix=""):
@@ -184,7 +183,7 @@ def plot_field(field):
         {"seen_at_hour": seen_at["seen_at_hour"].values}
     )
 
-    if BASELINE_DIRS[field] is not None:
+    if BASELINES[field][1] is not None:
         print_differences(seen_at, field)
 
     make_figure(by_group, persistence, "group", field, f"metrics.{field}.by_group", rotate_xticks=True)

@@ -29,16 +29,15 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt", "swh"]
 FHR = 24
 
-# Compare to field encoder
-BASELINE_DIRS = {
-    "sla": "../diagnose-uvgxt/runs/v4/inference-validation",
-    "uvgxt": "../diagnose-uvgxt/runs/v4/inference-validation",
-    "swh": None
+# (label, inference dir) per field; diagnose-uvgxt-v4 has no swh, so swh compares against v0
+BASELINES = {
+    "sla": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+    "uvgxt": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
 }
-BASELINE_LABEL = "diagnose-uvgxt-v4"
 
-EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "all-altimeter-v0"
+EXPERIMENT_DIR = "runs/v1/inference-validation"
+EXPERIMENT_LABEL = "all-altimeter-v1"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 
@@ -47,7 +46,7 @@ FIG_DIR = f"{EXPERIMENT_DIR}/figures"
 # ----------------------------------------------------------------------------
 
 UNITS = {"sla": "m", "uvgxt": "m/s", "swh": "m"}
-ACRONYMS = {"rmse", "mae", "sla", "uvgxt", "rmsd", "mse", "std"}
+ACRONYMS = {"rmse", "mae", "sla", "uvgxt", "swh", "rmsd", "mse", "std"}
 here = Path(__file__).parent
 
 
@@ -69,9 +68,9 @@ def place_legend(ax, reference_label):
     ax.legend(handles, labels, loc="center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
 
 
-def version_colors():
+def version_colors(field):
     """Baseline then experiment, in the style's color cycle, whether or not the baseline is drawn."""
-    return dict(zip([prettify(BASELINE_LABEL), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
+    return dict(zip([prettify(BASELINES[field][0]), prettify(EXPERIMENT_LABEL)], sns.color_palette()))
 
 
 def read_extremes(run_dir, field):
@@ -95,7 +94,7 @@ def samples(field):
     """One row per sample: the observations at both cell choices, and each run's prediction."""
     observations = pick(read_extremes(EXPERIMENT_DIR, field), "observation_{}")
     frames = [tidy(observations, cells, OBSERVATIONS_LABEL) for cells in CELLS]
-    runs = {BASELINE_LABEL: BASELINE_DIRS[field], EXPERIMENT_LABEL: EXPERIMENT_DIR}
+    runs = {**dict([BASELINES[field]]), EXPERIMENT_LABEL: EXPERIMENT_DIR}
     for label, run_dir in runs.items():
         if run_dir is None:
             continue
@@ -127,7 +126,7 @@ def draw_panel(ax, df, extreme, field):
         order=CELLS,
         hue="version",
         hue_order=versions,
-        palette={version: version_colors()[version] for version in versions},
+        palette={version: version_colors(field)[version] for version in versions},
         split=len(versions) > 1,
         inner="quart",
         legend=True,
