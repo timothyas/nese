@@ -1,15 +1,5 @@
 # Cross Track Surface Geostrophic Velocities
 
-## TODO:
-
-* figure out if we miss any points with current masking (leak...?)
-* Evaluate max/min of the various models
-* after this is working, make another version with no additional forcing inputs to see what the
-  velocity diagnostics provide on their own
-* evaluate the error using the gridded `mdt_u/v` versus the along track product
-
----
-
 Picking up from `field-encoder`, this experiment tests the impact of including
 surface geostrophic velocities.
 Because these fields are tied to SLA, we design the model to diagnose the
