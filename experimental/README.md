@@ -38,6 +38,11 @@ Lineage
       dataprep side, done per binned cell center, not obs location
     * v4: cell selection from all mdt fields and elevation, small LR schedule
       updates, and field channels = 8
+    * **Conclusion thus far**: the radius processor, field encoder, and velocity
+      fields are useful. The latter two do appear to have improved unseen RMSE in a
+      relative sense, and extreme values (the latter esp.), but differences are
+      less than 1mm on average so it's hard to know how seriously to take this.
+      It seems more useful to scale up and get more baselines.
 
 
 ## Overfitting

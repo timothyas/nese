@@ -173,3 +173,6 @@ velocities:
 * `warmup_t: 500` with `warmup_prefix: true`, as in `diagnose-uvgxt-v4`
 * still `field_channels = 8`
 * other logistical updates to submit with `nese-submit`
+
+The results show less than 1% difference compared to v3 in RMSE and MAE.
+Bias relative differences are more but still less than 0.1 mm.
