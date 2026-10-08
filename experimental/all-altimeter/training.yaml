@@ -121,7 +121,6 @@ data:
       - swh_denoised_ers_1_geodetic
       - swh_denoised_ers_2
       - swh_denoised_jason_1
-      - swh_denoised_jason_1_geodetic
       - swh_denoised_jason_1_interleaved
       - swh_denoised_jason_2
       - swh_denoised_jason_2_geodetic
@@ -140,7 +139,6 @@ data:
       - swh_denoised_count_ers_1_geodetic
       - swh_denoised_count_ers_2
       - swh_denoised_count_jason_1
-      - swh_denoised_count_jason_1_geodetic
       - swh_denoised_count_jason_1_interleaved
       - swh_denoised_count_jason_2
       - swh_denoised_count_jason_2_geodetic
@@ -293,7 +291,6 @@ data:
       - swh_denoised_ers_1_geodetic
       - swh_denoised_ers_2
       - swh_denoised_jason_1
-      - swh_denoised_jason_1_geodetic
       - swh_denoised_jason_1_interleaved
       - swh_denoised_jason_2
       - swh_denoised_jason_2_geodetic
@@ -312,7 +309,6 @@ data:
       - swh_denoised_count_ers_1_geodetic
       - swh_denoised_count_ers_2
       - swh_denoised_count_jason_1
-      - swh_denoised_count_jason_1_geodetic
       - swh_denoised_count_jason_1_interleaved
       - swh_denoised_count_jason_2
       - swh_denoised_count_jason_2_geodetic
@@ -416,7 +412,6 @@ data:
             swh_denoised_ers_1_geodetic: swh_denoised_count_ers_1_geodetic
             swh_denoised_ers_2: swh_denoised_count_ers_2
             swh_denoised_jason_1: swh_denoised_count_jason_1
-            swh_denoised_jason_1_geodetic: swh_denoised_count_jason_1_geodetic
             swh_denoised_jason_1_interleaved: swh_denoised_count_jason_1_interleaved
             swh_denoised_jason_2: swh_denoised_count_jason_2
             swh_denoised_jason_2_geodetic: swh_denoised_count_jason_2_geodetic
@@ -521,7 +516,6 @@ data:
             - swh_denoised_ers_1_geodetic
             - swh_denoised_ers_2
             - swh_denoised_jason_1
-            - swh_denoised_jason_1_geodetic
             - swh_denoised_jason_1_interleaved
             - swh_denoised_jason_2
             - swh_denoised_jason_2_geodetic
@@ -604,7 +598,6 @@ data:
               - swh_denoised_count_ers_1_geodetic
               - swh_denoised_count_ers_2
               - swh_denoised_count_jason_1
-              - swh_denoised_count_jason_1_geodetic
               - swh_denoised_count_jason_1_interleaved
               - swh_denoised_count_jason_2
               - swh_denoised_count_jason_2_geodetic
