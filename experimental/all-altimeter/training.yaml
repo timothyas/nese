@@ -609,6 +609,26 @@ data:
               - swh_denoised_count_sentinel_3b
               - swh_denoised_count_topex_poseidon
               - swh_denoised_count_topex_poseidon_interleaved
+            std:
+              - swh
+              - swh_denoised_cryosat_2
+              - swh_denoised_envisat
+              - swh_denoised_envisat_new_orbit
+              - swh_denoised_ers_1
+              - swh_denoised_ers_1_geodetic
+              - swh_denoised_ers_2
+              - swh_denoised_jason_1
+              - swh_denoised_jason_1_interleaved
+              - swh_denoised_jason_2
+              - swh_denoised_jason_2_geodetic
+              - swh_denoised_jason_2_interleaved
+              - swh_denoised_jason_3
+              - swh_denoised_saral
+              - swh_denoised_saral_geodetic
+              - swh_denoised_sentinel_3a
+              - swh_denoised_sentinel_3b
+              - swh_denoised_topex_poseidon
+              - swh_denoised_topex_poseidon_interleaved
             min-max:
               - elevation
               - land_fraction
@@ -851,7 +871,9 @@ model:
     - edge_dirs
     nodes: []
   compile: []
-  bounding: []
+  bounding:
+    - _target_: anemoi.models.layers.bounding.ReluBounding
+      variables: [swh]
 
 training:
   scalers:

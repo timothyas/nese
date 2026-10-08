@@ -90,6 +90,11 @@ pre_processing:
       kernel_length: null
 
 processing:
+  # SWH cannot be negative; CCI's calm-sea bias correction and denoising can push it below 0
+  clip:
+    - source: cmems_l3_swh
+      variable: swh_denoised
+      min: 0.0
   computed_quantities:
     - cos_latitude
     - sin_latitude
