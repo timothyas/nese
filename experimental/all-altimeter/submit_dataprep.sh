@@ -10,7 +10,7 @@
 #SBATCH --time=01:00:00
 #SBATCH --qos=devel
 
-# Note, this took XX minutes
+# Note, this took 18 minutes
 
 set -euo pipefail
 

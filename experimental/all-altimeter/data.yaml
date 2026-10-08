@@ -3,8 +3,11 @@ time:
   end: 2020-12-31
   freq: 24h
 
+# For SLA:
 # haiyang_2b & cryosat_2_interleaved come online during the validation period
 # so they are omitted here since we compute statistics over the training period
+# For SWH:
+# jason_1_geodetic is all NaN (0 obs) for some reason, so we don't pull it
 sources:
   - name: cmems_l3_sla
     variables:
@@ -69,7 +72,6 @@ sources:
       - jason_1_interleaved
       - cryosat_2
       - envisat_new_orbit
-      - jason_1_geodetic
       - saral
       - saral_geodetic
       - jason_3
