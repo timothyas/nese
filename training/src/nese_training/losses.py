@@ -217,6 +217,7 @@ class ObservationMaskedMSE(FunctionalLoss):
             count: obs_count_sla_{group} # <- this resets the default obs_count_{group} spec
           uvgxt:
             components: [ugxt, vgxt]     # a vector field, scored cross-track
+            weight: 0.9                  # scales this field's term, default 1
 
     ``groups: auto`` recovers the set from the variables the model was given. For example,
     a dataset with ``sla_filtered_topex_poseidon``, ``sla_filtered_jason_2`` will recognize
@@ -226,8 +227,9 @@ class ObservationMaskedMSE(FunctionalLoss):
     Each field's loss is pooled over its groups, weighted by observation count: every
     observed (group, cell) pair counts once, i.e. ``sum(err**2) / sum(count > 0)`` over all
     of the field's groups. This is the ``pooled`` score in ``nese-verify``'s metrics, and
-    groups that observed nothing in a sample drop out without diluting it. Fields are then
-    weighted equally, averaging over those observed in the sample.
+    groups that observed nothing in a sample drop out without diluting it. Each field's
+    pooled loss is then multiplied by its ``weight`` and averaged over the fields observed in
+    the sample, i.e. ``sum(weight * loss) / n_live``. ``field_losses`` records them unweighted.
 
     A vector field is observed only across the satellite track, so the full predicted
     vector is scored by its component along the observed one, ``((p - o) . n)**2`` with
@@ -322,6 +324,8 @@ class ObservationMaskedMSE(FunctionalLoss):
             torch.nn.functional.one_hot(field_of_term, len(field_names)).float(),
             persistent=False,
         )
+        weights = [float(self.observations[field].get("weight", 1.0)) for field in field_names]
+        self.register_buffer("field_weight", torch.tensor(weights), persistent=False)
         if vector:
             self._register_vector_statistics([(term.targets[0], term.targets[1]) for term in vector])
 
@@ -448,6 +452,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         squared_error = torch.cat([error for error, _ in terms], dim=-1)
         mask = torch.cat([mask for _, mask in terms], dim=-1)
 
+        # membership.shape = (n_terms, n_fields)
         membership = self.field_membership.to(dtype=mask.dtype)
         if self._only_field is not None:
             mask = mask * membership[:, self._only_field]
@@ -458,6 +463,9 @@ class ObservationMaskedMSE(FunctionalLoss):
         # sum to its pooled mean and the average runs over the live fields only.
         column_coverage = (field_coverage @ membership.T).clamp_min(self.eps)
         mask = mask / column_coverage * mask.shape[-1] / live_fields
+        # The per-field values recorded for logging stay unweighted
+        if self._only_field is None:
+            mask = mask * (membership @ self.field_weight.to(dtype=mask.dtype))
 
         return squared_error * mask
 
