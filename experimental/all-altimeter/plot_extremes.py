@@ -47,7 +47,7 @@ FIG_DIR = f"{EXPERIMENT_DIR}/figures"
 # ----------------------------------------------------------------------------
 
 UNITS = {"sla": "m", "uvgxt": "m/s", "swh": "m"}
-ACRONYMS = {"rmse", "mae", "sla", "rmsd", "mse", "std"}
+ACRONYMS = {"rmse", "mae", "sla", "uvgxt", "rmsd", "mse", "std"}
 here = Path(__file__).parent
 
 

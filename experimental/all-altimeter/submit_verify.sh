@@ -25,9 +25,10 @@ module load nese
 
 nese-verify plot-loss training.yaml
 srun nese-verify metrics verify.validation.yaml
+srun nese-verify persistence-metrics verify.validation.yaml
 srun nese-verify metrics verify.2015.yaml
 
-#python plot_metrics.py
+python plot_metrics.py
 python plot_extremes.py
 
 nese-verify movie verify.2015.yaml
