@@ -218,6 +218,42 @@ Also...
 * Update `training.optimization.lr_scheduler` `warmup_t = 500` and
   `warmup_prefix = true`, from 1000 and false before
 
+### Results
+
+Compared to v3, RMSE and MAE <1% different. Biases are much more relatively,
+but still under 1mm...
+Compared to field-encoder v4 differences are 1-3 percent in RMSE and MAE.
+Assuming this is significant, it is encouraging to see relative improvement in
+the unseen category, even if this comes at the cost of degradation in the seen
+categories.
+Actually, that makes me feel slightly more confident that it's a signal.
+But, these RMSE/MAE differences are still under 1mm, and biases are even
+smaller, so it's hard to take this all too seriously.
+
+```
+diagnose-uvgxt-v4 relative to field-encoder-v4, pooled over groups
+------------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06184 ->  0.06112 (  -1.2%)    0.03723 ->  0.03714 (  -0.2%)    0.00199 ->  0.00162 ( -18.4%)
++0h       0.04218 ->  0.04286 (  +1.6%)    0.02633 ->  0.02704 (  +2.7%)    0.00053 ->  0.00066 ( +24.6%)
+-24h      0.04329 ->  0.04389 (  +1.4%)    0.02700 ->  0.02767 (  +2.5%)    0.00058 ->  0.00063 (  +8.4%)
+-48h      0.04343 ->  0.04419 (  +1.8%)    0.02718 ->  0.02795 (  +2.8%)    0.00060 ->  0.00075 ( +23.9%)
+```
+
+### Loss
+
+It looks like the loss does not overfit as much with the new schedule,
+but it bottoms out at a higher value.
+It might be worthwhile to tune:
+* the relative loss weighting per-variable, or move to a tendency variance
+  scaling
+* the LR schedule and weight decay
+
+But it doesn't seem worth it for now. More useful is to scale up to more
+variables, higher resolution, and test the overall formulation.
+
 
 ## Comparing extremes
 
@@ -225,4 +261,4 @@ The extreme (max/min) SLA values do seem to be better resolved with the
 inclusion of diagnosed velocity.
 Comparing to the previous baseline, `field-encoder` shows it
 
-![](runs/v2/inference-validation/figures/extremes.sla.jpeg)
+![](runs/v4/inference-validation/figures/extremes.sla.jpeg)

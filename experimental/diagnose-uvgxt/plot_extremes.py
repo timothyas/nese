@@ -29,19 +29,19 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt"]
 FHR = 24
 
-## Compare to field encoder
-#BASELINE_DIRS = {
-#    "sla": "../field-encoder/runs/v4/inference-validation",
-#    "uvgxt": None,
-#}
-#BASELINE_LABEL = "field-encoder-v4"
-
-# Compare within diagnose-uvgxt versions
+# Compare to field encoder
 BASELINE_DIRS = {
-    "sla": "runs/v2/inference-validation",
-    "uvgxt": "runs/v2/inference-validation",
+    "sla": "../field-encoder/runs/v4/inference-validation",
+    "uvgxt": None,
 }
-BASELINE_LABEL = "diagnose-uvgxt-v2"
+BASELINE_LABEL = "field-encoder-v4"
+
+## Compare within diagnose-uvgxt versions
+#BASELINE_DIRS = {
+#    "sla": "runs/v2/inference-validation",
+#    "uvgxt": "runs/v2/inference-validation",
+#}
+#BASELINE_LABEL = "diagnose-uvgxt-v2"
 
 EXPERIMENT_DIR = "runs/v4/inference-validation"
 EXPERIMENT_LABEL = "diagnose-uvgxt-v4"
