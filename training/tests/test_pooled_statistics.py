@@ -10,7 +10,9 @@ exactly one shared map.
 
 import numpy as np
 import pytest
+from nese_training.observations import normalise_spec
 from nese_training.observations import pool_statistics
+from nese_training.observations import resolve_groups
 
 GROUPS = ["cryosat_2", "ers_2", "topex_poseidon", "topex_poseidon_interleaved"]
 SPEC = {"sla": {"observed_as": "sla_filtered", "groups": "auto", "count": "obs_count_{group}"}}
@@ -95,6 +97,20 @@ def test_a_pool_without_the_field_column_still_pools_its_groups():
     stats, n2i = make_stats([0.02, 0.04, 0.05, 0.06], field=False)
     out = pool_statistics(SPEC, n2i, stats)
     assert len({out["mean"][n2i[f"sla_filtered_{g}"]] for g in GROUPS}) == 1
+
+
+def test_count_columns_sharing_the_observed_prefix_are_not_groups():
+    """nese-dataprep names counts after their variable, e.g. sla_filtered_count_jason_2, which
+    the sla_filtered_ prefix also matches."""
+    spec = {"sla": {"observed_as": "sla_filtered", "count": "sla_filtered_count_{group}"}}
+    names = [f"sla_filtered_{g}" for g in GROUPS] + [f"sla_filtered_count_{g}" for g in GROUPS]
+    n2i = {n: i for i, n in enumerate(names)}
+
+    assert resolve_groups(normalise_spec(spec["sla"]), n2i) == GROUPS
+
+    stats = {k: np.ones(len(names)) for k in ("mean", "stdev", "minimum", "maximum")}
+    out = pool_statistics(spec, n2i, stats)
+    assert [out["mean"][n2i[f"sla_filtered_count_{g}"]] for g in GROUPS] == [1.0] * len(GROUPS)
 
 
 def test_a_missing_count_column_is_rejected():

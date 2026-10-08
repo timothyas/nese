@@ -47,8 +47,12 @@ def field_pairs(field: str, spec: dict) -> list[tuple[str, str]]:
     return [(field, spec["observed_as"])]
 
 
-def _groups_with_prefix(prefix: str, available: dict[str, int], owner: str) -> list[str]:
+def _groups_with_prefix(prefix: str, count: str, available: dict[str, int], owner: str) -> list[str]:
+    """The groups behind ``<prefix><group>``, leaving out the count channels when they share the
+    prefix, e.g. ``sla_filtered_count_jason_2`` beside ``sla_filtered_jason_2``."""
     found = [(pos, name[len(prefix) :]) for name, pos in available.items() if name.startswith(prefix)]
+    counts = {count.format(group=group) for _, group in found}
+    found = [(pos, group) for pos, group in found if f"{prefix}{group}" not in counts]
     if not found:
         msg = f"No variables matching '{prefix}*' are available to {owner or 'the caller'}."
         raise ValueError(msg)
@@ -63,9 +67,9 @@ def resolve_groups(spec: dict, available: dict[str, int], owner: str = "") -> li
     if spec["groups"] != "auto":
         return list(spec["groups"])
     first, *others = [observed_as for _, observed_as in field_pairs("", spec)]
-    groups = _groups_with_prefix(f"{first}_", available, owner)
+    groups = _groups_with_prefix(f"{first}_", spec["count"], available, owner)
     for observed_as in others:
-        other = _groups_with_prefix(f"{observed_as}_", available, owner)
+        other = _groups_with_prefix(f"{observed_as}_", spec["count"], available, owner)
         if sorted(other) != sorted(groups):
             msg = f"'{observed_as}_*' and '{first}_*' are observed by different groups: {other} vs {groups}."
             raise ValueError(msg)

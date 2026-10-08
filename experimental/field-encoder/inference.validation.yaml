@@ -1,6 +1,6 @@
 debugging_info:
-  root_dir: runs/v3
-  run_id: 62b68a542e1a4107b281ff71ddc50c2b
+  root_dir: runs/v4
+  run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
 # multistep_input: 3
@@ -19,8 +19,8 @@ initial_state_categories: [dynamic_forcings]
 input:
   dataset:
     join:
-      - dataset: anemoi-hpx6-24h/dataset.zarr
-      - dataset: anemoi-hpx6-24h/dataset.zarr
+      - dataset: anemoi-hpx6-24h-v4/dataset.zarr
+      - dataset: anemoi-hpx6-24h-v4/dataset.zarr
         select:
           - sla_filtered_jason_2
         rename:

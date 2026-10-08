@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=verify-v2
+#SBATCH --job-name=verify-v4
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=small
 #SBATCH --qos=devel
@@ -22,8 +22,12 @@ export DASK_NUM_WORKERS=1
 module purge
 module use /cluster/projects/nn2993k/timith/sw/modules
 module load nese
+
+nese-verify plot-loss training.yaml
 srun nese-verify metrics verify.validation.yaml
 srun nese-verify metrics verify.2015.yaml
+
 python plot_metrics.py
 python plot_extremes.py
+
 nese-verify movie verify.2015.yaml

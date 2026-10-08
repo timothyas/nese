@@ -1,15 +1,5 @@
 # Cross Track Surface Geostrophic Velocities
 
-## TODO:
-
-* figure out if we miss any points with current masking (leak...?)
-* Evaluate max/min of the various models
-* after this is working, make another version with no additional forcing inputs to see what the
-  velocity diagnostics provide on their own
-* evaluate the error using the gridded `mdt_u/v` versus the along track product
-
----
-
 Picking up from `field-encoder`, this experiment tests the impact of including
 surface geostrophic velocities.
 Because these fields are tied to SLA, we design the model to diagnose the
@@ -91,6 +81,24 @@ two, with `defined` taken from the v2 inference output:
   (about 0.5%), so the 5° band on cell centres stays. An exact fix needs per-variable
   counts from `nese-dataprep`, which isn't worth doing at these rates
 
+### With the v3 store
+
+We did it anyway (see Version 3): `nese-dataprep` now applies the band by cell centre and
+writes `uvgxt_count_{group}`, and `check_masks.py` classifies by that count instead
+(output in `runs/mask-check-v3/`, `defined` still from the v2 inference output):
+
+| | Training | Validation |
+|---|---|---|
+| Observed and used (A) | 94.1M | 12.9M |
+| Leak (B) | 0 | 0 |
+| Lost (D) | 240k (0.25%) | 34k (0.26%) |
+
+* No leaks, no finite velocity without a count, none in a cell centred inside the band,
+  and `ugxt`/`vgxt` are always NaN together
+* Every lost cell is coastal, with fewer than 3 sea neighbours. These are encoded as inputs
+  but not scored, since the model can't diagnose a gradient there
+* Nothing is lost near the equator any more: the cells centred at 5–6° are fully used
+
 ## Version 0
 
 * `mdt`, `mdt_u`, and `mdt_v` are provided as static forcing inputs
@@ -158,10 +166,89 @@ Compared to v0:
   (~1.5% at most though), despite what looks like more overfitting
 * uvgxt shows no differences large than 0.5%
 
+## Version 3
+
+Make every stage agree on where a velocity was observed (see "Mask check").
+
+On the data preparation side:
+* `nese-dataprep` now applies the 5° equatorial band to the
+  velocity by the *cell center*, rather than the raw observations as it was before.
+* Counts are written with a source specific `count_name`, so now we see:
+  `sla_count_{group}`, `uvgxt_count_{group}`
+* All things considered (observations, equator, etc), velocity
+  is finite wherever `uvgxt_count > 0`.
+    * This eliminates the "leak" from v0-v2 that was reaching the encoder/loss,
+      where the data side had defined
+      observations at the 4.8deg bins, due to the half of the cell that was
+      poleward of 5deg.
+
+This streamlines the model side implementation.
+* The field encoder, the loss, `ObsCountNaNRestorer` and verify use `uvgxt_count` for the
+  velocity, and `defined_by` is gone: observed means `count > 0`, even where the model
+  can't diagnose a velocity (coastal cells). The loss still scores only defined cells.
+
+## Version 4
+
+Consistent, multi-criteria cell selection during data preparation.
+By comparing extreme values to previous experiments, I found out that this
+experiment no longer captured the Caspian Sea (and a couple other points, like a
+couple points at the poles).
+This boils down to the data preparation.
+Because we diagnose velocities, we also grab MDT with SLA. Previously this meant
+SLA was masked in the same way as MDT, so SLA over the Caspian Sea (et al) were
+being removed from this experiment but not all the previous ones.
+Version 3 addressed this with correct, variable-specific observation counts,
+rather than 1 per observing system.
+However, I don't think we need to represent the Caspian Sea, and I'm just going
+to remove any null MDT points from all the datasets (and also any invalid
+MDT-based absolute geostrophic velocity points too for extreme consistency).
+
+Also...
+* Update `model.model.field_channels = 8` from 32 before
+* Update `training.optimization.lr_scheduler` `warmup_t = 500` and
+  `warmup_prefix = true`, from 1000 and false before
+
+### Results
+
+Compared to v3, RMSE and MAE <1% different. Biases are much more relatively,
+but still under 1mm...
+Compared to field-encoder v4 differences are 1-3 percent in RMSE and MAE.
+Assuming this is significant, it is encouraging to see relative improvement in
+the unseen category, even if this comes at the cost of degradation in the seen
+categories.
+Actually, that makes me feel slightly more confident that it's a signal.
+But, these RMSE/MAE differences are still under 1mm, and biases are even
+smaller, so it's hard to take this all too seriously.
+
+```
+diagnose-uvgxt-v4 relative to field-encoder-v4, pooled over groups
+------------------------------------------------------------------
+(time mean of |metric|; negative is an improvement)
+
+                            RMSE                       MAE                      Bias
+Unseen    0.06184 ->  0.06112 (  -1.2%)    0.03723 ->  0.03714 (  -0.2%)    0.00199 ->  0.00162 ( -18.4%)
++0h       0.04218 ->  0.04286 (  +1.6%)    0.02633 ->  0.02704 (  +2.7%)    0.00053 ->  0.00066 ( +24.6%)
+-24h      0.04329 ->  0.04389 (  +1.4%)    0.02700 ->  0.02767 (  +2.5%)    0.00058 ->  0.00063 (  +8.4%)
+-48h      0.04343 ->  0.04419 (  +1.8%)    0.02718 ->  0.02795 (  +2.8%)    0.00060 ->  0.00075 ( +23.9%)
+```
+
+### Loss
+
+It looks like the loss does not overfit as much with the new schedule,
+but it bottoms out at a higher value.
+It might be worthwhile to tune:
+* the relative loss weighting per-variable, or move to a tendency variance
+  scaling
+* the LR schedule and weight decay
+
+But it doesn't seem worth it for now. More useful is to scale up to more
+variables, higher resolution, and test the overall formulation.
+
+
 ## Comparing extremes
 
 The extreme (max/min) SLA values do seem to be better resolved with the
 inclusion of diagnosed velocity.
 Comparing to the previous baseline, `field-encoder` shows it
 
-![](runs/v2/inference-validation/figures/extremes.sla.jpeg)
+![](runs/v4/inference-validation/figures/extremes.sla.jpeg)

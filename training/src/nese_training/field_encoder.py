@@ -8,10 +8,10 @@ field's components enter that MLP together, so each group's vector maps to one l
 
 The field encoding happens in ``_assemble_input`` rather than in a mapper because the
 parent ``forward`` hands the assembled vector to the decoder too (as ``x_dst``), and
-no per-group column should reach the network by either path. ``obs_count_*`` columns
+no per-group column should reach the network by either path. Each field's count columns
 act only as the observed mask and are not passed through, so coverage is not an input.
-A field with ``defined_by: <physics diagnostic>`` is also masked to the cells where that
-diagnostic is defined, since elsewhere its observations are NaN and were imputed.
+A cell is observed wherever its count is above zero, and nowhere else: each field has a count
+of its own (``uvgxt_count_*`` for the velocity), so that is exactly where its values are finite.
 """
 
 from dataclasses import dataclass
@@ -33,12 +33,18 @@ from nese_training.physics import PhysicsDiagnosticsMixin
 class FieldColumns:
     """Model-input positions of each field's ``(groups, components)`` values and ``(groups,)`` counts, and the rest.
 
-    With the spec ``{"sla": "sla_filtered", "uvgxt": {"components": ["ugxt", "vgxt"]}}`` and
-    the model inputs::
+    With the spec::
 
-        0 sla_filtered_jason_2   3 ugxt_saral     6 obs_count_jason_2
-        1 sla_filtered_saral     4 vgxt_jason_2   7 obs_count_saral
-        2 ugxt_jason_2           5 vgxt_saral     8 elevation
+        {
+            "sla": {"observed_as": "sla_filtered", "count": "sla_count_{group}"},
+            "uvgxt": {"components": ["ugxt", "vgxt"], "count": "uvgxt_count_{group}"},
+        }
+
+    and the model inputs::
+
+        0 sla_filtered_jason_2   3 ugxt_saral     6 sla_count_jason_2     9 uvgxt_count_saral
+        1 sla_filtered_saral     4 vgxt_jason_2   7 sla_count_saral      10 elevation
+        2 ugxt_jason_2           5 vgxt_saral     8 uvgxt_count_jason_2
 
     the groups are ``[jason_2, saral]`` and :func:`resolve_field_columns` gives::
 
@@ -49,10 +55,10 @@ class FieldColumns:
             ),
             "uvgxt": (
                 [[2, 4], [3, 5]],   # (ugxt, vgxt) per group
-                [6, 7],             # the counts are the same
+                [8, 9],             # the velocity's own counts
             ),
         }
-        passthrough = [8]
+        passthrough = [10]
     """
 
     fields: dict[str, tuple[list[list[int]], list[int]]]
@@ -91,32 +97,15 @@ class FieldEncoder(nn.Module):
             }
         )
 
-    def encode(
-        self, field: str, values: torch.Tensor, counts: torch.Tensor, defined: torch.Tensor | None = None
-    ) -> torch.Tensor:
-        """``(..., groups, components)`` values, ``(..., groups)`` counts -> ``(..., channels)``, zero where unobserved.
-
-        ``defined``, broadcast against ``(..., grid)``, removes cells whatever their counts.
-        """
+    def encode(self, field: str, values: torch.Tensor, counts: torch.Tensor) -> torch.Tensor:
+        """``(..., groups, components)`` values, ``(..., groups)`` counts -> ``(..., channels)``, zero where unobserved."""
         embedded = self.mlps[field](values)
-        observed = counts > 0
-        if defined is not None:
-            observed = observed & defined.unsqueeze(-1)
-        observed = observed.to(embedded.dtype).unsqueeze(-1)
+        observed = (counts > 0).to(embedded.dtype).unsqueeze(-1)
         return (embedded * observed).sum(dim=-2) / observed.sum(dim=-2).clamp_min(1)
 
-    def forward(
-        self,
-        x: torch.Tensor,
-        columns: dict[str, tuple[list[list[int]], list[int]]],
-        defined: dict[str, torch.Tensor] | None = None,
-    ) -> torch.Tensor:
-        defined = defined or {}
+    def forward(self, x: torch.Tensor, columns: dict[str, tuple[list[list[int]], list[int]]]) -> torch.Tensor:
         return torch.cat(
-            [
-                self.encode(field, x[..., torch.tensor(values)], x[..., counts], defined.get(field))
-                for field, (values, counts) in columns.items()
-            ],
+            [self.encode(field, x[..., torch.tensor(values)], x[..., counts]) for field, (values, counts) in columns.items()],
             dim=-1,
         )
 
@@ -137,14 +126,6 @@ class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
         super().__init__(model_config=model_config, **kwargs)
 
     def _calculate_shapes_and_indices(self, data_indices: dict) -> None:
-        unknown = {
-            field: spec["defined_by"]
-            for field, spec in self.fields.items()
-            if "defined_by" in spec and spec["defined_by"] not in self.physics_config
-        }
-        if unknown:
-            msg = f"`defined_by` must name a configured physics diagnostic {sorted(self.physics_config)}: {unknown}"
-            raise ValueError(msg)
         self.field_columns = {
             name: resolve_field_columns(self.fields, indices.model.input.name_to_index)
             for name, indices in data_indices.items()
@@ -159,13 +140,6 @@ class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
         super()._build_networks(model_config)
         components = {field: len(field_pairs(field, spec)) for field, spec in self.fields.items()}
         self.field_encoder = FieldEncoder(components, self.field_channels, model_config.model.layer_kernels)
-
-    def _field_defined(self, dataset_name: str) -> dict[str, torch.Tensor]:
-        return {
-            field: self.physics[dataset_name][spec["defined_by"]].defined
-            for field, spec in self.fields.items()
-            if "defined_by" in spec
-        }
 
     def _assemble_input(
         self,
@@ -190,7 +164,7 @@ class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
             node_attributes_data = shard_tensor(node_attributes_data, 0, grid_shard_sizes, model_comm_group)
 
         columns = self.field_columns[dataset_name]
-        field_latents = self.field_encoder(x, columns.fields, self._field_defined(dataset_name))
+        field_latents = self.field_encoder(x, columns.fields)
         x_encoded = torch.cat((field_latents, x[..., columns.passthrough]), dim=-1)
         x_data_latent = torch.cat(
             (

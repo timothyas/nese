@@ -162,3 +162,17 @@ Unseen    0.06183 ->  0.06239 (  +0.9%)    0.03717 ->  0.03758 (  +1.1%)    0.00
 
 Could the per-field latent weights relate to the graph-specific weights?
 Or maybe at least the bias weights within the MLPs?
+
+### Version 4
+
+An apples-to-apples baseline for `diagnose-uvgxt-v4`, so the only difference is predicting
+velocities:
+* the dataset (`anemoi-hpx6-24h-v4`) adds the gridded `mdt`, `mdt_u` and `mdt_v`, and keeps
+  only cells with `land_fraction < 0.1` where all three are defined
+* `mdt`, `mdt_u` and `mdt_v` are static forcing
+* `warmup_t: 500` with `warmup_prefix: true`, as in `diagnose-uvgxt-v4`
+* still `field_channels = 8`
+* other logistical updates to submit with `nese-submit`
+
+The results show less than 1% difference compared to v3 in RMSE and MAE.
+Bias relative differences are more but still less than 0.1 mm.
