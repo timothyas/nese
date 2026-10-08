@@ -12,6 +12,12 @@
 #SBATCH --mem=808G
 #SBATCH --time=01:00:00
 
+# This took 33 minutes total
+# <1 min for the graph
+# 29 min training
+# 2.5 min validation inference
+# 1.5 min 2015 inference
+
 set -euo pipefail
 
 # An aborting rank dumps a multi-GB core file into the experiment directory.
