@@ -114,6 +114,10 @@ except Exception as e:                       # noqa: BLE001  (no GPU at build ti
 from importlib.metadata import entry_points
 names = {e.name for e in entry_points(group="anemoi.inference.outputs")}
 assert "nese-zarr" in names, names
+import shutil
+commands = ("anemoi-graphs", "anemoi-training", "nese-inference", "nese-submit", "nese-resolve-graph")
+missing = [c for c in commands if shutil.which(c) is None]
+assert not missing, f"console scripts not installed: {missing}"
 if not torch.__version__.startswith("2.8"):
     print("WARNING: expected torch 2.8 from NGC 25.06, got", torch.__version__)
 if fa.startswith("unverified"):

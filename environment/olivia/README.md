@@ -54,6 +54,9 @@ Source: <https://documentation.sigma2.no/hpc_machines/olivia/openmpi.html>
 
 ### Build / Rebuild Process
 
+To rebuild both environments as Slurm jobs, run `bash environment/olivia/submit-rebuild.sh`
+from the login node. The steps for each are below.
+
 ```bash
 bash environment/olivia/build-env.sh
 ```
