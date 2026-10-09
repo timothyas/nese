@@ -1,0 +1,36 @@
+debugging_info:
+  root_dir: runs/v1
+  run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
+checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
+
+# multistep_input: 3
+# so start is first day with all inputs in validation period
+date_range:
+  start: 2019-01-03T12
+  end: 2020-12-31T12
+  freq: 24h
+
+output:
+  nese-zarr: ${debugging_info.root_dir}/inference-validation
+lead_time: 24h
+allow_nans: true
+initial_state_categories: [dynamic_forcings]
+
+input:
+  dataset:
+    join:
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+      - dataset: anemoi-hpx6-24h/dataset.zarr
+        select:
+          - sla_filtered_jason_2
+          - ugxt_jason_2
+          - vgxt_jason_2
+          - swh_denoised_jason_2
+        rename:
+          sla_filtered_jason_2: sla
+          ugxt_jason_2: ugxt
+          vgxt_jason_2: vgxt
+          swh_denoised_jason_2: swh
+
+logistics:
+  third_party_log_level: warning

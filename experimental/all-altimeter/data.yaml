@@ -1,0 +1,133 @@
+time:
+  start: 1993-11-01
+  end: 2020-12-31
+  freq: 24h
+
+# For SLA:
+# haiyang_2b & cryosat_2_interleaved come online during the validation period
+# so they are omitted here since we compute statistics over the training period
+# For SWH:
+# jason_1_geodetic is all NaN (0 obs) for some reason, so we don't pull it
+sources:
+  - name: cmems_l3_sla
+    variables:
+      - sla_filtered
+      - ugxt
+      - vgxt
+    groups:
+      - topex_poseidon
+      - ers_1
+      - ers_1_geodetic
+      - ers_2
+      - gfo
+      - jason_1
+      - envisat
+      - topex_poseidon_interleaved
+      - jason_2
+      - jason_1_interleaved
+      - cryosat_2
+      - envisat_new_orbit
+      - jason_1_geodetic
+      - saral
+      - haiyang_2a
+      - saral_geodetic
+      - haiyang_2a_geodetic
+      - jason_3
+      - sentinel_3a
+      - jason_2_interleaved
+      - jason_2_geodetic
+      - sentinel_3b
+
+  - name: gebco
+    variables:
+      - elevation
+      - land_fraction
+    options:
+      uri: ${oc.env:PROJECT}/nese/data/GEBCO_2026.nc
+    pre_processing:
+      regrid_to_healpix:
+        hpx_level: 6
+
+  - name: cmems_mdt
+    variables:
+      - mdt
+      - mdt_u
+      - mdt_v
+    pre_processing:
+      regrid_to_healpix:
+        hpx_level: 6
+
+  - name: cmems_l3_swh
+    variables:
+      - swh_denoised
+    groups:
+      - topex_poseidon
+      - ers_1
+      - ers_1_geodetic
+      - ers_2
+      - jason_1
+      - envisat
+      - topex_poseidon_interleaved
+      - jason_2
+      - jason_1_interleaved
+      - cryosat_2
+      - envisat_new_orbit
+      - saral
+      - saral_geodetic
+      - jason_3
+      - sentinel_3a
+      - jason_2_interleaved
+      - jason_2_geodetic
+      - sentinel_3b
+
+pre_processing:
+  bin_to_healpix:
+    hpx_level: 6
+    ordering_nested: true
+    sparse: false
+    binning:
+      method: gaussian_kernel
+      kernel_length: null
+
+processing:
+  # SWH cannot be negative; CCI's calm-sea bias correction and denoising can push it below 0
+  clip:
+    - source: cmems_l3_swh
+      variable: swh_denoised
+      min: 0.0
+  computed_quantities:
+    - cos_latitude
+    - sin_latitude
+    - cos_longitude
+    - sin_longitude
+    - cos_julian_day
+    - sin_julian_day
+    - insolation
+
+post_processing:
+  select_cells:
+    - source: gebco
+      variable: land_fraction
+      keep: below
+      threshold: 0.1
+    - source: cmems_mdt
+      variable: mdt
+      keep: notnull
+    - source: cmems_mdt
+      variable: mdt_u
+      keep: notnull
+    - source: cmems_mdt
+      variable: mdt_v
+      keep: notnull
+
+target:
+  name: anemoi
+  store_dir: ${oc.env:PWD}/anemoi-hpx6-24h
+  store_float64_as_float32: true
+  compression: blosc_zstd
+  statistics_period:
+    start: 1993-11-01
+    end: 2018-12-31
+
+logistics:
+  use_mpi: true

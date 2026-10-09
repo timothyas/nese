@@ -185,14 +185,14 @@ def test_dead_groups_do_not_dilute_the_loss() -> None:
     assert torch.allclose(call(few, pred, target), call(many, pred, target), atol=1e-6)
 
 
-def make_two_field_batch(swh_target: float) -> tuple:
+def make_two_field_batch(swh_target: float, swh_weight: float | None = None) -> tuple:
     """sla predicted 0.5 and swh 2.0 against targets of 0 and ``swh_target``, seen together."""
     fields = {"sla": "sla_filtered", "swh": "swh_denoised"}
     indices = FakeIndices(GROUPS, fields=fields)
-    loss = ObservationMaskedMSE(
-        observations={name: {"observed_as": observed_as, "groups": "auto"} for name, observed_as in fields.items()},
-        data_indices=indices,
-    )
+    observations = {name: {"observed_as": observed_as, "groups": "auto"} for name, observed_as in fields.items()}
+    if swh_weight is not None:
+        observations["swh"]["weight"] = swh_weight
+    loss = ObservationMaskedMSE(observations=observations, data_indices=indices)
     pred = torch.full((1, 1, 1, GRID, 2), 0.5)
     pred[..., 1] = 2.0
     target = torch.zeros(1, 1, 1, GRID, indices.n_columns)
@@ -206,6 +206,17 @@ def make_two_field_batch(swh_target: float) -> tuple:
 def test_fields_are_weighted_equally() -> None:
     loss, pred, target = make_two_field_batch(swh_target=0.0)
     assert torch.allclose(call(loss, pred, target), torch.tensor((0.5**2 + 2.0**2) / 2), atol=1e-5)
+
+
+def test_field_weight_scales_only_that_field() -> None:
+    loss, pred, target = make_two_field_batch(swh_target=0.0, swh_weight=0.9)
+    assert torch.allclose(call(loss, pred, target), torch.tensor((0.5**2 + 0.9 * 2.0**2) / 2), atol=1e-5)
+
+
+def test_field_weight_leaves_recorded_field_losses_unweighted() -> None:
+    loss, pred, target = make_two_field_batch(swh_target=0.0, swh_weight=0.9)
+    call(loss, pred, target)
+    assert torch.allclose(loss.field_losses["swh"], torch.tensor(4.0), atol=1e-5)
 
 
 def test_a_field_without_error_still_counts_as_live() -> None:
