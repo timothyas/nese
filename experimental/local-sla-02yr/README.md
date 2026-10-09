@@ -23,7 +23,7 @@ MPLBACKEND=Agg anemoi-training train --config-name=training
 Use the utility
 
 ```
-python resolve_graph.py
+nese-resolve-graph training.yaml
 ```
 
 To extract the relevant information from `training.yaml` into

@@ -34,13 +34,13 @@ THREADS=$(( ${SLURM_CPUS_PER_TASK:-$(nproc)} / NRANKS ))
 
 # One process builds the graph; the training ranks load it. A concurrent
 # torch.save from every rank corrupts the file.
-apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" python resolve_graph.py
+apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" nese-resolve-graph training.stage2.yaml
 apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" \
-    anemoi-graphs create --overwrite --no-description graph.resolved.yaml graph.pt
+    anemoi-graphs create --overwrite --no-description graph.resolved.yaml graph.stage2.pt
 
 srun --overlap --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" \
     --env MPLCONFIGDIR="$MPLCONFIGDIR" "$NESE_ANEMOI_SIF" \
-    anemoi-training train --config-name=training
+    anemoi-training train --config-name=training.stage2
 
 # mpirun here only ever launches ranks on this node (plm=isolated), but by default it also
 # reads the Slurm allocation and then has to match Slurm's node name to its own. When that

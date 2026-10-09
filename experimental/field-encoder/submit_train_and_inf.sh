@@ -28,7 +28,7 @@ THREADS=$(( ${SLURM_CPUS_PER_TASK:-$(nproc)} / NRANKS ))
 
 # One process builds the graph; the training ranks load it. A concurrent
 # torch.save from every rank corrupts the file.
-apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" python resolve_graph.py
+apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" nese-resolve-graph training.yaml
 apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" \
     anemoi-graphs create --overwrite --no-description graph.resolved.yaml graph.pt
 
