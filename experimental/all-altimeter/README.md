@@ -109,3 +109,34 @@ Regarding the field encoder spacing, we have
 1. Cut negative values from the data, SWH shouldn't be negative
 2. Add a positivity constraint to the model for SWH
    (similar to precip in the MLWP anemoi models)
+
+RMSE and MAE vs diagnose-uvgxt-v4
+* SLA: slight degradation in unseen category around 2%, but just about 1mm
+* UVGXT: <1% differences
+
+Seen vs Unseen Categories
+* SLA beats persistence in "seen", but is worse in "unseen"
+* UVGXT beats persistence in "seen", but is level with persistence in "unseen"
+* SWH beats persistence in all, with best skill in "unseen"
+
+My current take is that the relatively good "unseen" skill in uvgxt and swh is
+related to the smoothing effect on these fields.
+The model does a better job at capturing the max/min SLA from the data than with
+UVGXT and SWH, suggesting that these fields are blurred a bit more.
+Hence, they benefit in the RMSE metrics.
+
+Biases:
+* SLA: 11-22% degradation, but still <1mm different. This must be noise.
+* UVGXT: <1% degradation, ~.5 mm/s
+
+Extremes:
+* Negligible changes vs diagnose-uvgxt-v4
+* As noted, SWH and UVGXT blur the max/min seemingly significantly
+
+Visually:
+* The "observing line" effect noted before is still visible, but I need to
+  isolate it a bit better
+* The fields "look visually good", except SWH does look a bit blocky.
+  Hard to tell if this is checkerboarding, related to overtraining or lack of
+  data, or simply due to model resolution.
+  Table this for now until we're at higher resolution.

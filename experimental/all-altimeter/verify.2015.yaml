@@ -30,7 +30,3 @@ movie:
   regions:
     - global
     - tropical_pacific
-
-styles:
-  uvgxt:
-    vmin: 0
