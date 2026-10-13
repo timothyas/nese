@@ -124,12 +124,15 @@ def pool_statistics(
         if weights.sum() <= 0:
             msg = f"Cannot pool statistics for {field!r}: every observing group has a zero obs count."
             raise ValueError(msg)
-        weights = weights / weights.sum()
-
-        moments = {
-            output: _pooled_moments(stats, [name_to_index[name] for name in names], weights)
+        # A group with no observations in the statistics period has NaN statistics.
+        live = weights > 0
+        weights = weights[live] / weights[live].sum()
+        live_idx = {
+            output: [name_to_index[name] for name, is_live in zip(names, live) if is_live]
             for output, names in observed.items()
         }
+
+        moments = {output: _pooled_moments(stats, live_idx[output], weights) for output in observed}
         pooled_stdev = np.sqrt(max(np.mean([var for _, var in moments.values()]), 0.0))
 
         for output, names in observed.items():
@@ -139,8 +142,8 @@ def pool_statistics(
             columns = obs_idx + ([name_to_index[output]] if output in name_to_index else [])
             stats["mean"][columns] = moments[output][0]
             stats["stdev"][columns] = pooled_stdev
-            stats["minimum"][columns] = stats["minimum"][obs_idx].min()
-            stats["maximum"][columns] = stats["maximum"][obs_idx].max()
+            stats["minimum"][columns] = stats["minimum"][live_idx[output]].min()
+            stats["maximum"][columns] = stats["maximum"][live_idx[output]].max()
 
     return stats
 

@@ -128,6 +128,23 @@ def test_groups_with_no_observations_at_all_are_rejected():
         pool_statistics(SPEC, n2i, stats)
 
 
+def test_a_group_with_no_observations_is_left_out_and_still_shares_the_map():
+    """A mission outside the statistics period has zero count and NaN statistics; it must
+    neither poison the pooled values nor keep its NaN."""
+    stats, n2i = make_stats([0.02, 0.04, 0.05, 0.06], counts=[1.0, 2.0, 3.0, 0.0])
+    empty = n2i["sla_filtered_topex_poseidon_interleaved"]
+    for key in ("mean", "stdev", "minimum", "maximum"):
+        stats[key][empty] = np.nan
+    out = pool_statistics(SPEC, n2i, stats)
+
+    reference, _ = make_stats([0.02, 0.04, 0.05, 0.06], counts=[1.0, 2.0, 3.0, 0.0])
+    expected = pool_statistics(SPEC, n2i, reference)
+    for key in ("mean", "stdev", "minimum", "maximum"):
+        assert out[key][empty] == pytest.approx(expected[key][n2i["sla"]]), key
+        assert out[key][n2i["sla"]] == pytest.approx(expected[key][n2i["sla"]]), key
+    assert out["maximum"][n2i["sla"]] == pytest.approx(0.05 + 1)  # not the empty group's 0.06 + 1
+
+
 def test_explicit_group_list_is_honoured():
     stats, n2i = make_stats([0.00, 0.10, 0.20, 0.30], counts=[1.0] * 4)
     spec = {"sla": {"observed_as": "sla_filtered", "groups": ["cryosat_2", "ers_2"]}}
