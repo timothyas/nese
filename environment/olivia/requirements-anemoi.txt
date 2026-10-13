@@ -52,7 +52,9 @@ omegaconf
 dask
 healpy
 matplotlib
-xarray
+# 2026.9 passes zarr_format= to zarr 2's open_group, breaking nese-inference's to_zarr; matches
+# the nese env, which writes zarr fine with zarr 2.18.
+xarray==2026.7.0
 netCDF4
 mlflow-skinny>=2.11.1
 gitpython
