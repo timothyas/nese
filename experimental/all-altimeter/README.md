@@ -140,3 +140,22 @@ Visually:
   Hard to tell if this is checkerboarding, related to overtraining or lack of
   data, or simply due to model resolution.
   Table this for now until we're at higher resolution.
+
+### Version 2
+
+This is the best model from the small training schedule tests done in
+`../training-schedule-all-altimeter`.
+
+
+### Version 2p0
+
+Bump horizontal resolution to hpx8, keep temporal resolution at 24h.
+At this resolution, the dataset is 94GB on disk.
+
+See `../throughput-hpx8-06h` for computational throughput tests to determine the
+local batch size, num workers, prefetch factor, and flex attention block size.
+
+Scale the peak LR by 1/4 (just a guess) and apply the same factor to
+weight decay given the EMA timescale argument by Wang and Aitchison (2025),
+given that the model size doesn't really change and dataset size (num. samples)
+is the same.

@@ -1,7 +1,7 @@
 time:
-  start: 1993-11-01T00
-  end: 2020-12-31T23
-  freq: 06h
+  start: 1993-11-01
+  end: 2020-12-31
+  freq: 24h
 
 # For SLA:
 # haiyang_2b & cryosat_2_interleaved come online during the validation period
@@ -126,8 +126,8 @@ target:
   store_float64_as_float32: true
   compression: blosc_zstd
   statistics_period:
-    start: 1993-11-01T00
-    end: 2018-12-31T23
+    start: 1993-11-01
+    end: 2018-12-31
 
 logistics:
   use_mpi: true

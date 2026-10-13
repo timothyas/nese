@@ -1104,7 +1104,7 @@ system:
   input:
     root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
     dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
-    graph: ${system.input.root}/graph.pt
+    graph: ${system.input.root}/graph.stage1.pt
     loss_matrices_path: null
     truncation: null
     truncation_inv: null
