@@ -296,6 +296,50 @@ def test_loss_is_invariant_to_coverage_with_no_grid_scaler(n_observed: int) -> N
     assert torch.allclose(unscaled, call(make_loss(), pred, target), atol=1e-5)
 
 
+@pytest.mark.skipif(not torch.cuda.is_available(), reason="float16 autocast of matmuls is a CUDA behaviour")
+def test_more_observations_than_float16_can_count_under_autocast() -> None:
+    """16-mixed training runs the loss under autocast, which does matmuls in float16 whatever
+    their inputs, and at hpx8/24h a field's observed (group, cell) pairs exceed float16's 65504.
+    The loss must still come out finite."""
+    device = "cuda"
+    grid = 10_000
+    indices = FakeIndices(GROUPS)
+    pred = torch.full((1, 1, 1, grid, 1), 0.5, dtype=torch.float16, device=device)
+    target = torch.zeros(1, 1, 1, grid, indices.n_columns, dtype=torch.float16, device=device)
+    for group in GROUPS:
+        target[..., indices.data_full_name_to_position[f"obs_count_{group}"]] = 1.0
+    total = torch.full((1, 1), float(grid * len(GROUPS)), device=device)
+
+    with torch.autocast(device_type=device, dtype=torch.float16):
+        # the regime the loss has to survive: an fp32 matmul overflows to inf under autocast
+        assert torch.isinf(total @ torch.ones(1, 1, device=device)).all()
+        loss = call(make_loss(node_weights=False).to(device), pred, target)
+    assert torch.isfinite(loss).all()
+    assert torch.allclose(loss.float().cpu(), torch.tensor(0.25), atol=1e-3)
+
+
+def test_a_non_finite_difference_is_reported_by_term(caplog) -> None:
+    """A NaN observation at an observed cell is named by its term, once per process budget."""
+    indices = FakeIndices(GROUPS)
+    pred, target = make_batch(indices, all_observed(GROUPS))
+    target[..., 0, indices.data_full_name_to_position["sla_filtered_ers_2"]] = torch.nan
+
+    loss = make_loss(indices=indices)
+    with caplog.at_level("WARNING"):
+        assert not torch.isfinite(call(loss, pred, target)).all()
+    assert "non-finite difference" in caplog.text
+    assert "squared_error non-finite {'sla:sla_filtered_ers_2': 1}" in caplog.text
+    assert loss.non_finite_reports >= 1
+
+
+def test_finite_losses_report_nothing(caplog) -> None:
+    indices = FakeIndices(GROUPS)
+    loss = make_loss(indices=indices)
+    with caplog.at_level("WARNING"):
+        call(loss, *make_batch(indices, all_observed(GROUPS)))
+    assert not caplog.records and loss.non_finite_reports == 0
+
+
 def test_layout_is_required() -> None:
     indices = FakeIndices(GROUPS)
     pred, target = make_batch(indices, all_observed(GROUPS))

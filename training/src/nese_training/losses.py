@@ -1,5 +1,6 @@
 """Losses for observation-supervised state estimation."""
 
+import functools
 import logging
 from dataclasses import dataclass
 from typing import Any
@@ -27,6 +28,23 @@ from nese_training.physics import geostrophy_defined
 from nese_training.physics import read_static
 
 LOGGER = logging.getLogger(__name__)
+MAX_NON_FINITE_REPORTS = 3
+
+
+def _in_float32(calculate_difference):  # noqa: ANN001, ANN202
+    """Run ``calculate_difference`` in float32 with autocast off.
+
+    Under 16-mixed precision autocast runs matmuls in float16 whatever their inputs, and at
+    hpx8/24h a field's observed (group, cell) count passes float16's 65504 (~85k for sla in
+    2019). The inf then meets ``field_membership``'s zeros and NaNs the whole loss.
+    """
+
+    @functools.wraps(calculate_difference)
+    def wrapper(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:  # noqa: ANN001
+        with torch.autocast(device_type=pred.device.type, enabled=False):
+            return calculate_difference(self, pred.float(), target.float())
+
+    return wrapper
 
 
 def _coverage_divisor(loss: FunctionalLoss, mask: torch.Tensor, eps: float) -> torch.Tensor:
@@ -167,6 +185,7 @@ class CountMaskedAndWeightedMSE(FunctionalLoss):
         super().__init__(*args, **kwargs)
         self.eps = eps
 
+    @_in_float32
     def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         if target.shape[-1] % 2 != 0:
             msg = (
@@ -273,6 +292,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         # Each field's own pooled loss from the latest call, for logging; see forward.
         self.field_losses: dict[str, torch.Tensor] = {}
         self._only_field: int | None = None
+        self.non_finite_reports = 0  # see _report_non_finite
         if self.vector_fields:
             if dataset is None or graph_data is None or data_node_name is None:
                 msg = f"{type(self).__name__}: vector fields need `dataset` and the graph for their statistics and latitudes."
@@ -316,6 +336,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         self.n_scalar_columns = sum(len(term.targets) for term in scalar)
         self.predicted_variables = [name for term in ordered for name in term.predicted]
         self.target_variables = [name for term in ordered for name in term.targets]
+        self.term_names = [f"{term.field}:{term.targets[0]}" for term in ordered]
 
         field_names = list(self.observations)
         field_of_term = torch.tensor([field_names.index(term.field) for term in ordered])
@@ -408,7 +429,11 @@ class ObservationMaskedMSE(FunctionalLoss):
         target = _select(
             target, target_layout, self.target_indices_by_layout, "target", type(self).__name__
         )
+        self._difference_finite = True
         loss = super().forward(pred, target, squash, **kwargs)
+        if self._difference_finite and not torch.isfinite(loss).all() and self.non_finite_reports < MAX_NON_FINITE_REPORTS:
+            self.non_finite_reports += 1
+            LOGGER.warning("%s: difference finite but loss %s after anemoi's scale/reduce", type(self).__name__, loss)
         if squash and len(self.observations) > 1:
             self._record_field_losses(pred, target, **kwargs)
         return loss
@@ -444,6 +469,7 @@ class ObservationMaskedMSE(FunctionalLoss):
         mask = (counts > 0) & (speed > self.min_speed) & self.defined
         return torch.square(error), mask.to(pred.dtype)
 
+    @_in_float32
     def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         split = self.n_scalar_columns
         terms = [self._scalar_terms(pred[..., :split], target[..., :split])]
@@ -467,7 +493,42 @@ class ObservationMaskedMSE(FunctionalLoss):
         if self._only_field is None:
             mask = mask * (membership @ self.field_weight.to(dtype=mask.dtype))
 
-        return squared_error * mask
+        difference = squared_error * mask
+        if not torch.isfinite(difference).all():
+            self._difference_finite = False
+            self._report_non_finite(pred, target, squared_error, mask, field_coverage, column_coverage)
+        return difference
+
+    @torch.no_grad()
+    def _report_non_finite(self, pred, target, squared_error, mask, field_coverage, column_coverage) -> None:  # noqa: ANN001, PLR0913
+        """Log which intermediate of :meth:`calculate_difference` first went non-finite, by term.
+
+        Costs one ``isfinite`` reduction per call while everything is finite; reports at most
+        ``MAX_NON_FINITE_REPORTS`` times per process.
+        """
+        if self.non_finite_reports >= MAX_NON_FINITE_REPORTS:
+            return
+        self.non_finite_reports += 1
+
+        def bad_terms(tensor: torch.Tensor) -> dict[str, int]:
+            counts = (~torch.isfinite(tensor)).flatten(end_dim=-2).sum(dim=0).tolist()
+            return {self.term_names[i]: int(n) for i, n in enumerate(counts) if n}
+
+        def bad_columns(tensor: torch.Tensor, names: list[str]) -> dict[str, int]:
+            counts = (~torch.isfinite(tensor)).flatten(end_dim=-2).sum(dim=0).tolist()
+            return {names[i]: int(n) for i, n in enumerate(counts) if n}
+
+        fields = list(self.observations)
+        lines = [
+            f"{type(self).__name__}: non-finite difference (only_field={self._only_field})",
+            f"  pred {pred.dtype} non-finite {bad_columns(pred, self.predicted_variables) or 'none'}, max |pred| {float(pred.nan_to_num().abs().max())}",
+            f"  target {target.dtype} non-finite {bad_columns(target, self.target_variables) or 'none'}, max |target| {float(target.nan_to_num().abs().max())}",
+            f"  squared_error non-finite {bad_terms(squared_error) or 'none'}",
+            f"  mask non-finite {bad_terms(mask) or 'none'}",
+            f"  field coverage {dict(zip(fields, field_coverage.flatten(end_dim=-2).tolist()[0]))}",
+            f"  column coverage non-finite {bad_terms(column_coverage) or 'none'}, min {float(column_coverage.min())}",
+        ]
+        LOGGER.warning("\n".join(lines))
 
 
 class MaternPenalty(BaseLoss):
