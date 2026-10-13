@@ -888,7 +888,9 @@ training:
       betas:
       - 0.9
       - 0.95
-      weight_decay: 0.1
+      # tau = 1 / (4 * lr * weight_decay) = 2500 steps = 4.3 epochs; see
+      # ../training-schedule-all-altimeter/README.md
+      weight_decay: 0.4
     lr_scheduler:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
@@ -1066,7 +1068,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v1
+      experiment_name: v2
       project_name: all-altimeter
       terminal: false
       system: false
