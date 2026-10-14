@@ -96,7 +96,26 @@ dependencies:
   - coverage
   - ruff=0.15.20
   - pre-commit
+  # anemoi-core [tests] extras (graphs, models, training); azure-ai-ml brings marshmallow,
+  # which training/pytest.ini imports
+  - hypothesis
+  - pytest-mock
+  - pytest-asyncio
+  - trimesh
+  - azure-ai-ml
+  - azure-identity
+  - strenum
+  - wandb
+  - aiohttp
+  - sshfs
+  - boto3  # anemoi-utils[s3]
+  - datashader
+  - distinctipy
+  - pyshtools
   - pip
   - pip:
     - nvsmi  # anemoi-utils[provenance]; not on conda-forge
+    - torch-dct  # anemoi-models[spectral]
+    - azureml-mlflow
+    - pytest-skip-slow
     - xmovie @ git+https://github.com/timothyas/xmovie.git@b6a36ab8b4e5abcaea23a50e79b61f1ef26ca0ba

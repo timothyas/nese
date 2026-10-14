@@ -294,6 +294,10 @@ are live (editable installs, source bind-mounted from `/cluster`). Rebuild only 
   requirements entry, because PyPI's manylinux wheels bundle their own MPICH and it
   has to be compiled `--no-binary` against the container's HPC-X OpenMPI
   (`MPICC=/opt/hpcx/ompi/bin/mpicc`) instead.
+- The image carries anemoi-core's `[tests]` extras, except cartopy (its aarch64 source
+  build needs numpy>=2), so the anemoi-core suites run in it. `marshmallow` (via
+  `azure-ai-ml`) is required: `anemoi-core/training/pytest.ini` names its warning classes
+  in `filterwarnings`, and pytest refuses to start without them.
 - **Throwaway (no rebuild):** an Apptainer overlay --
   `apptainer overlay create --sparse --size 5120 ov.img`, then
   `apptainer exec --overlay ov.img "$NESE_ANEMOI_SIF" pip install <pkg>` in a

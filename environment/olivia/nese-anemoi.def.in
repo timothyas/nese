@@ -68,6 +68,10 @@ PY
     # build on py3.12 -- not worth failing the image over.
     $PIP nvsmi || echo ">> nvsmi skipped (provenance GPU info degrades gracefully)"
 
+    # best-effort: anemoi-training[plotting] test dep; may have no aarch64 wheel,
+    # and a Fortran source build is not worth failing the image over.
+    $PIP "pyshtools>=4.13" || echo ">> pyshtools skipped (a few anemoi-training plotting tests will fail)"
+
     # 2. editable anemoi-core over the PyPI copies. Source trees are bind-mounted
     #    from /cluster during the build and at runtime, so .py edits stay live.
     #    %post runs as (mapped) root; the trees are owned by the user, so git
@@ -94,6 +98,7 @@ python - <<'PY'
 import torch, numpy, dask.array  # noqa: F401
 import anemoi.models, anemoi.graphs, anemoi.training  # noqa: F401
 import nese_training, nese.logistics, nese.inference  # noqa: F401
+import marshmallow, pytest_asyncio, trimesh, torch_dct  # noqa: F401  anemoi-core tests
 
 # Which MPI mpi4py linked -- a bundled-MPICH wheel would import just as happily
 # and be the wrong one. Importing mpi4py.MPI normally runs MPI_Init, which aborts
