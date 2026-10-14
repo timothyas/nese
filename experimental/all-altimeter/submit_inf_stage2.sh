@@ -12,12 +12,9 @@
 #SBATCH --mem=808G
 #SBATCH --time=01:00:00
 
-# Validation and 2015 inference from the stage 2 checkpoint, after submit_train_stage2.sh.
-# hpx6 took ~4 min for both; hpx8 has 16x the cells, so the hour is a guess -- update once timed.
-#
-# This took XX minutes total
-# XX min validation inference
-# XX min 2015 inference
+# This took 11 minutes total
+# 7 min validation inference
+# 3.5 min 2015 inference
 
 set -euo pipefail
 

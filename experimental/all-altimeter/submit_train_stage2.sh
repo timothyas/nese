@@ -12,12 +12,7 @@
 #SBATCH --mem=808G
 #SBATCH --time=02:00:00
 
-# Inference runs in submit_inf_stage2.sh on one node, so this job keeps all 16 GPUs busy. Chain them:
-#   nese-submit training.stage2.yaml submit_train_stage2.sh submit_inf_stage2.sh submit_verify.sh
-#
-# This took XX minutes total
-# XX min for the graph
-# XX min training
+# This took 1.5 hours total
 
 set -euo pipefail
 

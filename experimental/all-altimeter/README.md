@@ -159,3 +159,22 @@ Scale the peak LR by 1/4 (just a guess) and apply the same factor to
 weight decay given the EMA timescale argument by Wang and Aitchison (2025),
 given that the model size doesn't really change and dataset size (num. samples)
 is the same.
+
+Compared to persistence
+* SLA barely beats it at RMSE for seen at t0, and worse at seen at t-48h. Unseen error
+  is worse (as with 100km model)
+* UVGXT and SWH beat persistence for MAE/RMSE almost all categories, except
+  UVGXT MAE unseen. Bias shows similar patterns to 100km model
+* SLA max/min are damped relative to obs, more so than 100km model
+* UVGXT max/min are damped relative to obs, but UVGXT higher max than 100km
+  model whereas SWH somewhat lower...
+
+Compared to v2 (100km model)
+* raw errors look better, but it's just a different metric
+* relatively worse SLA error in seen locations, but somewhat similar
+  seen/unseen behavior
+
+Qualitatively...
+* The maps look aesthetically pleasing, but the predictions in data gaps is more
+  obvious since there are more grid cells between available input altimeter tracks
+* See especially velocity, which is ~0 in the gaps

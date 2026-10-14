@@ -10,6 +10,12 @@
 #SBATCH --mem-per-cpu=8G
 #SBATCH --time=02:00:00
 
+# This took 22 minutes total
+# loss plot: ~6s
+# validation metrics: 4 min
+# persistence metrics: ~8.7-9 min
+# movie: ~8.5-9 min
+
 set -euo pipefail
 
 # --- one thread per rank (nese-dataprep sets no thread caps; ranks are packed) ---
