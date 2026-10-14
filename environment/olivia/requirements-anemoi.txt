@@ -77,6 +77,7 @@ aiohttp>=3.8          # anemoi-training[remote]
 sshfs
 datashader>=0.17      # anemoi-training[plotting]
 distinctipy>=1
+pyshtools>=4.13
 
 # --- developer ---
 setuptools_scm>=8
