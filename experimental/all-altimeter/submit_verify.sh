@@ -1,14 +1,14 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=verify-v2p0
+#SBATCH --job-name=verify-v2p1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=small
 #SBATCH --qos=devel
 #SBATCH --ntasks=64
 #SBATCH --cpus-per-task=1
 #SBATCH --mem-per-cpu=8G
-#SBATCH --time=02:00:00
+#SBATCH --time=00:30:00
 
 # This took 22 minutes total
 # loss plot: ~6s
@@ -31,7 +31,7 @@ module load nese
 
 nese-verify plot-loss training.stage2.yaml
 srun nese-verify metrics verify.validation.yaml
-srun nese-verify persistence-metrics verify.validation.yaml
+#srun nese-verify persistence-metrics verify.validation.yaml
 
 python plot_metrics.py
 python plot_extremes.py

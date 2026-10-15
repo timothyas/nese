@@ -715,7 +715,7 @@ task:
   _target_: anemoi.training.tasks.Forecaster
   multistep_input: 3
   multistep_output: 1
-  timestep: 24H
+  timestep: ${data.frequency}
   rollout:
     start: 1
     epoch_increment: 0
@@ -888,7 +888,7 @@ training:
       betas:
       - 0.9
       - 0.95
-      # tau = 1 / (4 * lr * weight_decay) = 2500 steps = 4.3 epochs; see
+      # tau = 1 / (global_lr * weight_decay) = 2500 steps ~ 4.3 epochs; see
       # ../training-schedule-all-altimeter/README.md
       weight_decay: 0.4
     lr_scheduler:
@@ -898,7 +898,7 @@ training:
       warmup_t: 500
       warmup_prefix: true
       t_in_epochs: false
-    lr: 2.5e-04
+    lr: 2.5e-04  # global lr = 1.0e-3
     pl_lr_scheduler:
       interval: step
 
@@ -1103,7 +1103,7 @@ system:
     profiler: profiler
   input:
     root: ${oc.decode:${oc.env:WORK}}/nese/experimental/${diagnostics.log.mlflow.project_name}
-    dataset: ${system.input.root}/anemoi-hpx6-24h/dataset.zarr
+    dataset: ${system.input.root}/anemoi-hpx6-${data.frequency}/dataset.zarr
     graph: ${system.input.root}/graph.stage1.pt
     loss_matrices_path: null
     truncation: null

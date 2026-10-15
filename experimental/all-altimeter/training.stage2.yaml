@@ -890,7 +890,7 @@ training:
       - 0.95
       # tau = 1 / (global_lr * weight_decay) = 2500 steps ~ 4.3 epochs; see
       # ../training-schedule-all-altimeter/README.md
-      weight_decay: 1.6
+      weight_decay: 0.4
     lr_scheduler:
       _target_: timm.scheduler.CosineLRScheduler
       lr_min: 3.0e-07
@@ -898,7 +898,7 @@ training:
       warmup_t: 500
       warmup_prefix: true
       t_in_epochs: false
-    lr: 1.5625e-05  # global lr = 2.5e-4 = 0.25x stage 1's peak
+    lr: 2.5e-04  # global lr = 1.0e-3
     pl_lr_scheduler:
       interval: step
 
@@ -909,10 +909,10 @@ training:
   # Start from the schedule sweep winner's weights with a fresh optimizer and schedule.
   # Graph-sized buffers (physics stencils, node attributes) no longer match and are rebuilt; the
   # normaliser statistics come from this dataset rather than stage 1's.
-  transfer_learning: true
-  load_weights_only: true
+  transfer_learning: false
+  load_weights_only: false
   update_ds_stats_on_ckpt_load:
-    states: true
+    states: false
     tendencies: true
   check_variables_compatibility:
     ignore_units: true
@@ -1071,7 +1071,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v2p0
+      experiment_name: v2p1
       project_name: all-altimeter
       terminal: false
       system: false
@@ -1111,7 +1111,7 @@ system:
     loss_matrices_path: null
     truncation: null
     truncation_inv: null
-    warm_start: ${system.input.root}/runs/v2/checkpoint/832ebd6ebc1b4fab8bcf93299fa37e11/last.ckpt
+    warm_start: null
   hardware:
     accelerator: cuda
     num_gpus_per_node: ${oc.decode:${oc.env:SLURM_GPUS_PER_NODE}}

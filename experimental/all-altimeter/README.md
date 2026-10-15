@@ -177,4 +177,27 @@ Compared to v2 (100km model)
 Qualitatively...
 * The maps look aesthetically pleasing, but the predictions in data gaps is more
   obvious since there are more grid cells between available input altimeter tracks
-* See especially velocity, which is ~0 in the gaps
+* The velocity makes this apparent, it is ~0 in the gaps
+* The SWH field looks crazy, the nested healpix stencil becomes obvious. Is this
+  a sign of overfitting?
+
+The loss looks ridiculous, it looks like an upside down U, ending essentially
+where it started.
+
+### Version 2p1
+
+
+Given the funky loss and the blocky SWH patterns in v2p1, it looks like the
+model is either overtrained, or the weight decay is too high.
+So, this run I just trained from scratch to see what would happen.
+Lo and behold, the loss looks much better behaved, and is descending the entire
+time. Actually, it looks like it could keep going for quite a while.
+
+Qualitatively...
+* The SWH blockiness is better, but still present to some degree
+
+
+Compared to v2p0...
+* RMSE and MAE actually looks a bit better, although same general trend exists
+* Bias shows a bit of a degradation. My background hypothesis has been that this
+  takes longer to "train out" but IDK.

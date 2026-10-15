@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=training-v2p0
+#SBATCH --job-name=training-v2p1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel

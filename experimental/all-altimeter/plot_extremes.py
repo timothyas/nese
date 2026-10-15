@@ -37,15 +37,22 @@ FHR = 24
 #    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
 #}
 
-# 100km model, same version as baseline
+## 100km model, same version as baseline
+#BASELINES = {
+#    "sla": ("hpx6-24h", "runs/v2/inference-validation"),
+#    "uvgxt": ("hpx6-24h", "runs/v2/inference-validation"),
+#    "swh": ("hpx6-24h", "runs/v2/inference-validation"),
+#}
+
+# 25km model, same version as baseline
 BASELINES = {
-    "sla": ("hpx6-24h", "runs/v2/inference-validation"),
-    "uvgxt": ("hpx6-24h", "runs/v2/inference-validation"),
-    "swh": ("hpx6-24h", "runs/v2/inference-validation"),
+    "sla":   ("v2p0", "runs/v2p0/inference-validation"),
+    "uvgxt": ("v2p0", "runs/v2p0/inference-validation"),
+    "swh":   ("v2p0", "runs/v2p0/inference-validation"),
 }
 
-EXPERIMENT_DIR = "runs/v2p0/inference-validation"
-EXPERIMENT_LABEL = "hpx8-24h"
+EXPERIMENT_DIR = "runs/v2p1/inference-validation"
+EXPERIMENT_LABEL = "v2p1"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 

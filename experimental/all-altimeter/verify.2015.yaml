@@ -1,5 +1,5 @@
 forecast:
-  store_dir: runs/v2p0/inference-2015
+  store_dir: runs/v2p1/inference-2015
 verification:
   dataset: anemoi-hpx8-24h/dataset.zarr
   observations:
@@ -23,10 +23,12 @@ metrics:
 movie:
   date_range:
     start: 2015-05-01T12
-    end: 2015-06-30T12
+    end: 2015-05-31T12
   loop: t0
   fhr: 24
   left_panel: all_input_obs_locations
   regions:
     - global
     - tropical_pacific
+    - north_atlantic
+    - gulf_stream

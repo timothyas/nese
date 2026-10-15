@@ -1,5 +1,5 @@
 debugging_info:
-  root_dir: runs/v2p0
+  root_dir: runs/v2p1
   run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
