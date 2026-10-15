@@ -1,0 +1,37 @@
+
+📦 Path       : graph.stage1.pt
+💽 Size       : 29.1 MiB (30539092)
+
+🪩  Nodes summary
+
+   Nodes name │ Num. nodes │ Attributes │ Attribute dim │ Min. latitude │ Max. latitude │ Min. longitude │ Max. longitude
+   ───────────┼────────────┼────────────┼───────────────┼───────────────┼───────────────┼────────────────┼───────────────
+   ocean      │      33416 │            │             0 │      -77.5491 │        88.538 │              0 │        359.297
+   hidden     │      12288 │            │             0 │       -88.538 │        88.538 │              0 │        358.594
+   ───────────┴────────────┴────────────┴───────────────┴───────────────┴───────────────┴────────────────┴───────────────
+
+
+🌐  Edges summary
+
+   Source │ Target │  Num. edges │ Isolated Source │ Isolated Target │ Min edges/target │ Max edges/target │ Attribute dim │                     Attributes
+   ───────┼────────┼─────────────┼─────────────────┼─────────────────┼──────────────────┼──────────────────┼───────────────┼───────────────────────────────
+   ocean  │ hidden │      107769 │               0 │            2996 │                1 │               15 │             3 │ edge_length(1D), edge_dirs(2D)
+   hidden │ hidden │ 1.30066e+06 │               0 │               0 │              103 │              113 │             3 │ edge_length(1D), edge_dirs(2D)
+   hidden │ ocean  │      100248 │            3020 │               0 │                3 │                3 │             3 │ edge_length(1D), edge_dirs(2D)
+   ───────┴────────┴─────────────┴─────────────────┴─────────────────┴──────────────────┴──────────────────┴───────────────┴───────────────────────────────
+
+
+📊 Attribute distributions
+
+   Type │ Source          │        Name │         Dtype │     Min. │         Mean │    Max. │ Std. dev.
+   ─────┼─────────────────┼─────────────┼───────────────┼──────────┼──────────────┼─────────┼──────────
+   Edge │ ocean-->hidden  │ edge_length │ torch.float32 │ 0.291465 │     0.685247 │       1 │  0.226038
+   Edge │ ocean-->hidden  │   edge_dirs │ torch.float32 │ -1.41421 │  -0.00148018 │ 1.41421 │         1
+   Edge │ hidden-->hidden │ edge_length │ torch.float32 │        0 │     0.656233 │       1 │  0.233457
+   Edge │ hidden-->hidden │   edge_dirs │ torch.float32 │ -1.41516 │ -5.20973e-05 │ 1.41516 │         1
+   Edge │ hidden-->ocean  │ edge_length │ torch.float32 │ 0.283659 │     0.646824 │       1 │  0.214939
+   Edge │ hidden-->ocean  │   edge_dirs │ torch.float32 │ -1.41421 │ -0.000324104 │ 1.41421 │         1
+   ─────┴─────────────────┴─────────────┴───────────────┴──────────┴──────────────┴─────────┴──────────
+
+🔋 Graph ready.
+
