@@ -43,6 +43,20 @@ Lineage
       relative sense, and extreme values (the latter esp.), but differences are
       less than 1mm on average so it's hard to know how seriously to take this.
       It seems more useful to scale up and get more baselines.
+8. `all-altimeter`: add Significant Wave Height as inputs and full-field
+   predictor. This required some data-quirks to enforce positivity.
+    * v0: Also scaled uvgxt loss by 0.9 due to near equator points, this one did
+      no special handling for negative points
+    * v1: Cut negative values from dataprep, and added a postivity bound to the
+      model
+    * v2: Best model from training schedule hyperparameter search in
+      `training-schedule-all-altimeter`, changed the weight decay
+    * v2p0: Bump horizontal resolution to hpx8, keep temporal at 24h.
+      Fine tune for 12 epochs from the v2 checkpoint. This performed strangely.
+      See `throughput-hpx8-06h` for tests related to dataloading, local batch
+      size, which were used to optimize this setup.
+    * v2p1: Train from scratch for 12 epochs, same training schedule settings as
+      v2. Could use more training, but it's getting better.
 
 
 ## Overfitting
