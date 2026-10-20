@@ -29,15 +29,30 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt", "swh"]
 FHR = 24
 
-# (label, inference dir) per field; diagnose-uvgxt-v4 has no swh, so swh compares against v0
+# (label, inference dir) per field
+# Baseline = diagnose-uvgxt
+#BASELINES = {
+#    "sla": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+#    "uvgxt": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+#    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
+#}
+
+## 100km model, same version as baseline
+#BASELINES = {
+#    "sla": ("hpx6-24h", "runs/v2/inference-validation"),
+#    "uvgxt": ("hpx6-24h", "runs/v2/inference-validation"),
+#    "swh": ("hpx6-24h", "runs/v2/inference-validation"),
+#}
+
+# 25km model, same version as baseline
 BASELINES = {
-    "sla": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
-    "uvgxt": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
-    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
+    "sla":   ("v2p0", "runs/v2p0/inference-validation"),
+    "uvgxt": ("v2p0", "runs/v2p0/inference-validation"),
+    "swh":   ("v2p0", "runs/v2p0/inference-validation"),
 }
 
-EXPERIMENT_DIR = "runs/v1/inference-validation"
-EXPERIMENT_LABEL = "all-altimeter-v1"
+EXPERIMENT_DIR = "runs/v2p1/inference-validation"
+EXPERIMENT_LABEL = "v2p1"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 

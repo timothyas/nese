@@ -140,3 +140,64 @@ Visually:
   Hard to tell if this is checkerboarding, related to overtraining or lack of
   data, or simply due to model resolution.
   Table this for now until we're at higher resolution.
+
+### Version 2
+
+This is the best model from the small training schedule tests done in
+`../training-schedule-all-altimeter`.
+
+
+### Version 2p0
+
+Bump horizontal resolution to hpx8, keep temporal resolution at 24h.
+At this resolution, the dataset is 94GB on disk.
+
+See `../throughput-hpx8-06h` for computational throughput tests to determine the
+local batch size, num workers, prefetch factor, and flex attention block size.
+
+Scale the peak LR by 1/4 (just a guess) and apply the same factor to
+weight decay given the EMA timescale argument by Wang and Aitchison (2025),
+given that the model size doesn't really change and dataset size (num. samples)
+is the same.
+
+Compared to persistence
+* SLA barely beats it at RMSE for seen at t0, and worse at seen at t-48h. Unseen error
+  is worse (as with 100km model)
+* UVGXT and SWH beat persistence for MAE/RMSE almost all categories, except
+  UVGXT MAE unseen. Bias shows similar patterns to 100km model
+* SLA max/min are damped relative to obs, more so than 100km model
+* UVGXT max/min are damped relative to obs, but UVGXT higher max than 100km
+  model whereas SWH somewhat lower...
+
+Compared to v2 (100km model)
+* raw errors look better, but it's just a different metric
+* relatively worse SLA error in seen locations, but somewhat similar
+  seen/unseen behavior
+
+Qualitatively...
+* The maps look aesthetically pleasing, but the predictions in data gaps is more
+  obvious since there are more grid cells between available input altimeter tracks
+* The velocity makes this apparent, it is ~0 in the gaps
+* The SWH field looks crazy, the nested healpix stencil becomes obvious. Is this
+  a sign of overfitting?
+
+The loss looks ridiculous, it looks like an upside down U, ending essentially
+where it started.
+
+### Version 2p1
+
+
+Given the funky loss and the blocky SWH patterns in v2p1, it looks like the
+model is either overtrained, or the weight decay is too high.
+So, this run I just trained from scratch to see what would happen.
+Lo and behold, the loss looks much better behaved, and is descending the entire
+time. Actually, it looks like it could keep going for quite a while.
+
+Qualitatively...
+* The SWH blockiness is better, but still present to some degree
+
+
+Compared to v2p0...
+* RMSE and MAE actually looks a bit better, although same general trend exists
+* Bias shows a bit of a degradation. My background hypothesis has been that this
+  takes longer to "train out" but IDK.

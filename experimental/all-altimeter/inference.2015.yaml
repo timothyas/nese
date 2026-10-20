@@ -1,5 +1,5 @@
 debugging_info:
-  root_dir: runs/v1
+  root_dir: runs/v2p1
   run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
@@ -19,8 +19,8 @@ initial_state_categories: [dynamic_forcings]
 input:
   dataset:
     join:
-      - dataset: anemoi-hpx6-24h/dataset.zarr
-      - dataset: anemoi-hpx6-24h/dataset.zarr
+      - dataset: anemoi-hpx8-24h/dataset.zarr
+      - dataset: anemoi-hpx8-24h/dataset.zarr
         select:
           - sla_filtered_jason_2
           - ugxt_jason_2

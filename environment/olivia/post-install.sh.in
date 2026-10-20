@@ -18,4 +18,7 @@ python -m pip install --no-deps --no-build-isolation -e "$LOGISTICS_DIR"
 python -m pip install --no-deps --no-build-isolation -e "$DATAPREP_DIR"
 python -m pip install --no-deps --no-build-isolation -e "$VERIFY_DIR"
 
+for command in nese-submit nese-resolve-graph nese-dataprep nese-verify; do
+    command -v "$command" >/dev/null || { echo "console script not installed: $command" >&2; exit 1; }
+done
 python -c "import nese.logistics, nese.dataprep, nese.verify, mpi4py; print('post-install ok')"

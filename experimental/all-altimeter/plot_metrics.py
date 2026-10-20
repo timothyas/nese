@@ -1,8 +1,9 @@
 """A/B comparison of verification metrics between a baseline and this experiment.
 
 Run immediately after nese-verify. Each x category shows split (half) violins for the
-two versions, drawn on top of a wide gray persistence violin for reference. A field whose
-BASELINES dir is None gets one full violin, in the color it has beside a baseline.
+two versions, drawn on top of a wide persistence violin for reference, split in half when
+PERSISTENCE has two resolutions. A field whose BASELINES dir is None gets one full violin,
+in the color it has beside a baseline.
 """
 
 from pathlib import Path
@@ -17,20 +18,39 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt", "swh"]
 FHR = 24
 
-# (label, inference dir) per field; diagnose-uvgxt-v4 has no swh, so swh compares against v0
+# (label, inference dir) per field
+# Baseline = diagnose-uvgxt
+#BASELINES = {
+#    "sla": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+#    "uvgxt": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
+#    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
+#}
+
+# 100km model, same version as baseline
 BASELINES = {
-    "sla": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
-    "uvgxt": ("diagnose-uvgxt-v4", "../diagnose-uvgxt/runs/v4/inference-validation"),
-    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
+    "sla":   ("100km-24h", "runs/v2/inference-validation"),
+    "uvgxt": ("100km-24h", "runs/v2/inference-validation"),
+    "swh":   ("100km-24h", "runs/v2/inference-validation"),
 }
 
-EXPERIMENT_DIR = "runs/v1/inference-validation"
-EXPERIMENT_LABEL = "all-altimeter-v1"
+### fine tune or from scratch
+#BASELINES = {
+#    "sla":   ("v2p0", "runs/v2p0/inference-validation"),
+#    "uvgxt": ("v2p0", "runs/v2p0/inference-validation"),
+#    "swh":   ("v2p0", "runs/v2p0/inference-validation"),
+#}
 
-PERSISTENCE_DIR = EXPERIMENT_DIR
+EXPERIMENT_DIR = "runs/v2p1/inference-validation"
+EXPERIMENT_LABEL = "25km-24h"
+
+# (inference dir, violin color) per persistence resolution
+PERSISTENCE = {
+    "100km": ("runs/v1/inference-validation", "#cfe8dc"),
+    "25km": ("runs/v2p0/inference-validation", "lightgray"),
+}
 PERSISTENCE_LABEL = "persistence"
 
-METRICS = ["rmse", "mae", "bias"]
+METRICS = ["rmse"]#, "bias"]#, "mae", "bias"]
 STYLE = "../experiments.mplstyle"
 SEEN_AT_LABELS = {24: "Unseen"}  # hours outside the input window get a name, not "+24h"
 FIG_DIR = f"{EXPERIMENT_DIR}/figures"
@@ -61,9 +81,15 @@ def read_metrics(run_dir, field, suffix=""):
 
 
 def read_persistence(field):
-    path = here / PERSISTENCE_DIR / "persistence-metrics" / f"{field}.nc"
-    ds = xr.open_dataset(path).sel(fhr=FHR, drop=True)[METRICS].load()
-    return ds.sel(source="pooled", drop=True)
+    def read(run_dir):
+        path = here / run_dir / "persistence-metrics" / f"{field}.nc"
+        return xr.open_dataset(path).sel(fhr=FHR, source="pooled", drop=True)[METRICS].load()
+
+    return xr.concat(
+        [read(run_dir).expand_dims({"resolution": [resolution]})
+         for resolution, (run_dir, _) in PERSISTENCE.items()],
+        dim="resolution",
+    )
 
 
 def tidy(ds, x_dim):
@@ -75,10 +101,13 @@ def tidy(ds, x_dim):
 
 
 def place_legend(ax, reference_label):
-    """The versions' legend, outside the axes, with the gray reference violin added."""
+    """The versions' legend, outside the axes, with the reference violins added."""
     legend = ax.get_legend()
-    handles = [*legend.legend_handles, Patch(facecolor="lightgray", edgecolor="0.4")]
-    labels = [*(text.get_text() for text in legend.get_texts()), prettify(reference_label)]
+    handles = [*legend.legend_handles,
+               *(Patch(facecolor=color, edgecolor="0.4") for _, color in PERSISTENCE.values())]
+    labels = [*(text.get_text() for text in legend.get_texts()),
+              *(f"{prettify(reference_label)} {resolution}" if len(PERSISTENCE) > 1
+                else prettify(reference_label) for resolution in PERSISTENCE)]
     ax.legend(handles, labels, loc="center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
 
 
@@ -92,10 +121,14 @@ def draw_panel(ax, model, persistence, metric, x_dim, field):
         tidy(persistence[[metric]], x_dim),
         x=x_dim,
         y=metric,
-        color="lightgray",
+        hue="resolution",
+        hue_order=list(PERSISTENCE),
+        palette={resolution: color for resolution, (_, color) in PERSISTENCE.items()},
+        split=len(PERSISTENCE) > 1,
         linecolor="0.4",
         inner=None,
         width=0.95,
+        legend=False,
         zorder=0,
         ax=ax,
     )
@@ -142,7 +175,8 @@ def print_differences(seen_at, field):
 
 
 def make_figure(model, persistence, x_dim, field, name, rotate_xticks):
-    fig, axs = plt.subplots(len(METRICS), 1, figsize=(12, 5 * len(METRICS)), sharex=True)
+    fig, axs = plt.subplots(len(METRICS), 1, figsize=(12, 5 * len(METRICS)), sharex=True, squeeze=False)
+    axs = axs[:, 0]
     for metric, ax in zip(METRICS, axs):
         draw_panel(ax, model, persistence, metric, x_dim, field)
         if ax is not axs[0]:

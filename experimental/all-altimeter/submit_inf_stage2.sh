@@ -1,7 +1,7 @@
 #!/bin/bash -l
 
 #SBATCH --account=nn2993k
-#SBATCH --job-name=training-inference-v1
+#SBATCH --job-name=inference-v2p1
 #SBATCH --output=slurm/%x-%j.out
 #SBATCH --partition=accel
 #SBATCH --qos=devel
@@ -12,11 +12,9 @@
 #SBATCH --mem=808G
 #SBATCH --time=01:00:00
 
-# This took 33 minutes total
-# <1 min for the graph
-# 29 min training
-# 2.5 min validation inference
-# 1.5 min 2015 inference
+# This took 11 minutes total
+# 7 min validation inference
+# 3.5 min 2015 inference
 
 set -euo pipefail
 
@@ -31,16 +29,6 @@ module load nese-anemoi
 MPLCONFIGDIR="/cluster/gpuscratch/jobs/$SLURM_JOB_ID/mpl"; mkdir -p "$MPLCONFIGDIR"
 NRANKS="${SLURM_GPUS_ON_NODE:?no GPUs allocated -- this script expects --gpus-per-node}"
 THREADS=$(( ${SLURM_CPUS_PER_TASK:-$(nproc)} / NRANKS ))
-
-# One process builds the graph; the training ranks load it. A concurrent
-# torch.save from every rank corrupts the file.
-apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" python resolve_graph.py
-apptainer exec --nv --bind /cluster --pwd "$PWD" "$NESE_ANEMOI_SIF" \
-    anemoi-graphs create --overwrite --no-description graph.resolved.yaml graph.pt
-
-srun --overlap --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" \
-    --env MPLCONFIGDIR="$MPLCONFIGDIR" "$NESE_ANEMOI_SIF" \
-    anemoi-training train --config-name=training
 
 # mpirun here only ever launches ranks on this node (plm=isolated), but by default it also
 # reads the Slurm allocation and then has to match Slurm's node name to its own. When that
