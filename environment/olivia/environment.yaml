@@ -38,6 +38,7 @@ dependencies:
   - ipykernel
   - jupyterlab_vim
   - ffmpeg
+  - asciinema
   # HPC / MPI -- link mpi4py against the system OpenMPI (module-loaded at runtime)
   - mpi4py
   - openmpi=5.0.*=external_*
