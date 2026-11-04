@@ -201,3 +201,19 @@ Compared to v2p0...
 * RMSE and MAE actually looks a bit better, although same general trend exists
 * Bias shows a bit of a degradation. My background hypothesis has been that this
   takes longer to "train out" but IDK.
+
+### Version 2p2
+
+v2p1 looks undertrained, or perhaps had too high of a learning rate.
+I accidentally launched the run with 4x the learning rate, since I forgot how
+the local LR gets scaled, and that the 100km runs had a local batch size of 4.
+So, I'll first test the second idea with the same number of iterations here:
+Keep `weight_decay: 0.4`, `max_steps: 6912`, but drop `lr: 6.25e-5` (was
+`2.5e-4`.
+
+If this doesn't work, I'll bump the iterations.
+
+Results...
+Generally it looks improved. RMSE is lower and extremes are a bit better. But we
+still see the larger error the further away from t0 that we get.
+So, maybe even more training is needed.

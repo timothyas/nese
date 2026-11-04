@@ -40,7 +40,7 @@ BASELINES = {
 #    "swh":   ("v2p0", "runs/v2p0/inference-validation"),
 #}
 
-EXPERIMENT_DIR = "runs/v2p1/inference-validation"
+EXPERIMENT_DIR = "runs/v2p2/inference-validation"
 EXPERIMENT_LABEL = "25km-24h"
 
 # (inference dir, violin color) per persistence resolution
