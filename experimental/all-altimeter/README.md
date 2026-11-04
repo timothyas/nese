@@ -217,3 +217,15 @@ Results...
 Generally it looks improved. RMSE is lower and extremes are a bit better. But we
 still see the larger error the further away from t0 that we get.
 So, maybe even more training is needed.
+
+### Version 2p3
+
+v2p2 validation loss was still dropping at the end of training (about −0.0015 per
+epoch), even with the cosine LR almost at zero. The train−val gap was getting
+smaller (0.110 → 0.102), so the model isn't overfitting.
+A rough power-law fit gives ~0.02 lower val loss per doubling of steps, with
+little sign of that slowing down.
+So this run keeps v2p2's settings (`lr: 6.25e-5`, `weight_decay: 0.4`) and
+increases `max_steps` 2x to 13824 (24 epochs).
+The best guess is val ≈ 0.47–0.475, compared with 0.4905, which is still probably not converged (4x looked closer).
+Expected ~3 hours, which is over the 2h `devel` limit, so this uses the `nn2993k` QOS.

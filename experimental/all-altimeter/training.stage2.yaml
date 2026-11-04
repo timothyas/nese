@@ -980,7 +980,7 @@ training:
     datasets:
       ocean: []
   max_epochs: null
-  max_steps: 6912 # = 12 epochs * 576 iterations/epoch
+  max_steps: 13824 # = 24 epochs * 576 iterations/epoch
   submodules_to_freeze: []
 
 diagnostics:
@@ -1071,7 +1071,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v2p2
+      experiment_name: v2p3
       project_name: all-altimeter
       terminal: false
       system: false
