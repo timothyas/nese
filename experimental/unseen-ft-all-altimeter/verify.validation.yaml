@@ -1,5 +1,5 @@
 forecast:
-  store_dir: runs/v0/inference-validation
+  store_dir: runs/control/inference-validation
 verification:
   dataset: ../all-altimeter/anemoi-hpx8-24h/dataset.zarr
   observations:

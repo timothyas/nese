@@ -948,7 +948,7 @@ training:
     datasets:
       ocean:
         _target_: anemoi.training.losses.combined.CombinedLoss
-        loss_weights: [1.0, 2.0]
+        loss_weights: [1.0, 0.0]
         losses:
         - _target_: nese_training.losses.ObservationMaskedMSE
           scalers: []
@@ -1081,7 +1081,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v0
+      experiment_name: control
       project_name: unseen-ft-all-altimeter
       terminal: false
       system: false

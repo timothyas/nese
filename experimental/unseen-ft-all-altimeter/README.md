@@ -53,6 +53,12 @@ The standard loss is already dominated by unseen points (about 3/4). The
 
 ## Results
 
+### Control
+
+Submit a control run that uses the standard base loss for the same training
+time, so we can see if it really is the new loss term that's impacting
+validation error, or it it's just due to more training.
+
 ### v0
 
 Here I used `w = 2` and ran for 2 epochs (~1.1k iterations).
