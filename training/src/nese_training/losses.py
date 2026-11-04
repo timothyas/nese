@@ -264,6 +264,8 @@ class ObservationMaskedMSE(FunctionalLoss):
     """
 
     name: str = "observation_masked_mse"
+    # Prepended to each field in ``FieldLossLogger``'s keys, so two leaves cannot collide
+    field_loss_prefix: str = ""
     factory_context_keys = frozenset({LossFactoryContextKey.DATA_INDICES})
     needs_graph_data: bool = True
 
@@ -469,14 +471,17 @@ class ObservationMaskedMSE(FunctionalLoss):
         mask = (counts > 0) & (speed > self.min_speed) & self.defined
         return torch.square(error), mask.to(pred.dtype)
 
-    @_in_float32
-    def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def _masked_terms(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Each term's squared error and the mask of cells it is scored on, before pooling."""
         split = self.n_scalar_columns
         terms = [self._scalar_terms(pred[..., :split], target[..., :split])]
         if self.vector_fields:
             terms.append(self._vector_terms(pred[..., split:], target[..., split:]))
-        squared_error = torch.cat([error for error, _ in terms], dim=-1)
-        mask = torch.cat([mask for _, mask in terms], dim=-1)
+        return torch.cat([error for error, _ in terms], dim=-1), torch.cat([mask for _, mask in terms], dim=-1)
+
+    @_in_float32
+    def calculate_difference(self, pred: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        squared_error, mask = self._masked_terms(pred, target)
 
         # membership.shape = (n_terms, n_fields)
         membership = self.field_membership.to(dtype=mask.dtype)
@@ -529,6 +534,67 @@ class ObservationMaskedMSE(FunctionalLoss):
             f"  column coverage non-finite {bad_terms(column_coverage) or 'none'}, min {float(column_coverage.min())}",
         ]
         LOGGER.warning("\n".join(lines))
+
+
+class UnseenObservationMaskedMSE(ObservationMaskedMSE):
+    """``ObservationMaskedMSE`` scored only on target observations at cells unseen in the input.
+
+    A cell is seen for a field when any of that field's groups observed it at any input step,
+    i.e. the complement of nese-verify's ``seen_at_hour == +timestep`` split. Each field gets
+    its own seen mask, read from its ``count`` columns. The loss is called with the target
+    time only, so the training method has to hand it the inputs first with :meth:`set_inputs`;
+    see :class:`nese_training.methods.UnseenAwareTraining`.
+    """
+
+    name: str = "unseen_observation_masked_mse"
+    field_loss_prefix: str = "unseen_"
+    seen: torch.Tensor | None = None
+
+    def set_data_indices(self, data_indices: Any) -> "UnseenObservationMaskedMSE":  # noqa: ANN401
+        super().set_data_indices(data_indices)
+        data_input = data_indices.data.input.name_to_position
+        columns, field_of_column = [], []
+        for index, (field, spec) in enumerate(self.observations.items()):
+            groups = self._resolve_groups(spec, data_indices.data_full_name_to_position)
+            counts = [spec["count"].format(group=group) for group in groups]
+            missing = [name for name in counts if name not in data_input]
+            if missing:
+                msg = f"{type(self).__name__}: '{field}' needs its counts {missing} as model inputs."
+                raise ValueError(msg)
+            columns += [data_input[name] for name in counts]
+            field_of_column += [index] * len(counts)
+
+        self.register_buffer("input_count_columns", torch.tensor(columns), persistent=False)
+        self.register_buffer(
+            "input_count_membership",
+            torch.nn.functional.one_hot(torch.tensor(field_of_column), len(self.observations)).float(),
+            persistent=False,
+        )
+        return self
+
+    @torch.no_grad()
+    def set_inputs(self, x: torch.Tensor) -> None:
+        """Record, per field, where any group observed at any input step.
+
+        ``x`` is the model input, ``(batch, time, [ensemble,] grid, variable)``. Counts are
+        max-normalised and never imputed, so ``> 0`` still means observed.
+        """
+        observed = (x[..., self.input_count_columns] > 0).any(dim=1).float()
+        seen = observed @ self.input_count_membership > 0
+        self.seen = seen if seen.ndim == 4 else seen.unsqueeze(1)
+
+    def _masked_terms(self, pred: torch.Tensor, target: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        if self.seen is None:
+            msg = f"{type(self).__name__} needs set_inputs before use; train with nese_training.methods.UnseenAwareTraining."
+            raise RuntimeError(msg)
+        if self.seen.shape[-2] != pred.shape[-2]:
+            msg = f"{type(self).__name__}: seen mask has {self.seen.shape[-2]} cells, prediction {pred.shape[-2]}."
+            raise ValueError(msg)
+
+        squared_error, mask = super()._masked_terms(pred, target)
+        seen_by_term = self.seen.to(mask.dtype) @ self.field_membership.to(mask.dtype).T
+        seen_by_term = seen_by_term.reshape(seen_by_term.shape[0], *[1] * (mask.ndim - 4), *seen_by_term.shape[1:])
+        return squared_error, mask * (1 - seen_by_term)
 
 
 class MaternPenalty(BaseLoss):

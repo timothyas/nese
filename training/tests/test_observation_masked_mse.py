@@ -30,6 +30,19 @@ GROUPS = [
 ]
 
 
+def fake_data_index(data_full: dict[str, int], model_output: dict[str, int]) -> type:
+    """``data.output`` is the full layout; ``data.input`` is every column but the outputs, as forcing."""
+    inputs = [name for name in data_full if name not in model_output]
+    return type(
+        "_D",
+        (),
+        {
+            "output": type("_O", (), {"name_to_position": data_full}),
+            "input": type("_I", (), {"name_to_position": {name: i for i, name in enumerate(inputs)}}),
+        },
+    )
+
+
 class FakeIndices:
     """The three name->position maps ObservationMaskedMSE reads off IndexCollection."""
 
@@ -48,7 +61,7 @@ class FakeIndices:
 
         self.data_full_name_to_position = {name: i for i, name in enumerate(names)}
         model_output = {name: i for i, name in enumerate(fields)}
-        self.data = type("_D", (), {"output": type("_O", (), {"name_to_position": self.data_full_name_to_position})})
+        self.data = fake_data_index(self.data_full_name_to_position, model_output)
         self.model = type("_M", (), {"output": type("_O", (), {"name_to_position": model_output})})
 
     @property
@@ -363,7 +376,7 @@ class VectorIndices:
             names += [f"sla_filtered_{group}", f"ugxt_{group}", f"vgxt_{group}", f"obs_count_{group}"]
         self.data_full_name_to_position = {name: i for i, name in enumerate(names)}
         model_output = {name: i for i, name in enumerate(outputs)}
-        self.data = type("_D", (), {"output": type("_O", (), {"name_to_position": self.data_full_name_to_position})})
+        self.data = fake_data_index(self.data_full_name_to_position, model_output)
         self.model = type("_M", (), {"output": type("_O", (), {"name_to_position": model_output})})
 
     def column(self, name: str) -> int:
@@ -392,7 +405,7 @@ def fake_graph(lat: np.ndarray, lon: np.ndarray) -> dict:
     return {"data": {"x": torch.from_numpy(np.deg2rad(np.stack([lat, lon], -1))).float()}}
 
 
-def make_vector_loss(monkeypatch, lat, lon, observations=None, missing_mdt=(), **kwargs):
+def make_vector_loss(monkeypatch, lat, lon, observations=None, missing_mdt=(), cls=ObservationMaskedMSE, **kwargs):
     indices = VectorIndices()
     monkeypatch.setattr(losses, "open_dataset", lambda dataset: FakeStore(indices.data_full_name_to_position))
 
@@ -402,7 +415,7 @@ def make_vector_loss(monkeypatch, lat, lon, observations=None, missing_mdt=(), *
         return {name: mdt for name in names}
 
     monkeypatch.setattr(losses, "read_static", read_static)
-    loss = ObservationMaskedMSE(
+    loss = cls(
         observations=observations or {"uvgxt": {"components": ["ugxt", "vgxt"]}},
         data_indices=indices,
         dataset="store.zarr",

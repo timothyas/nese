@@ -53,7 +53,8 @@ class FieldLossLogger(Callback):
 
     ``ObservationMaskedMSE`` averages its fields into one number before anemoi sees it. It
     also records each field's own pooled loss (``field_losses``), and this logs those as
-    ``{stage}_field_loss/{dataset}/{field}``, per step and per epoch like anemoi's total.
+    ``{stage}_field_loss/{dataset}/{prefix}{field}``, per step and per epoch like anemoi's total,
+    where ``prefix`` is the leaf's ``field_loss_prefix`` (``unseen_`` for the unseen term).
     Nothing is logged for a loss with a single field, whose value is the total.
 
     Configured under ``diagnostics.callbacks``::
@@ -79,7 +80,7 @@ class FieldLossLogger(Callback):
                     continue
                 for field, value in leaf.field_losses.items():
                     pl_module.log(
-                        f"{stage}_field_loss/{dataset_name}/{field}",
+                        f"{stage}_field_loss/{dataset_name}/{leaf.field_loss_prefix}{field}",
                         value,
                         on_step=True,
                         on_epoch=True,
@@ -117,7 +118,7 @@ class NonFiniteLossReporter(Callback):
 
     def _check(self, trainer, pl_module, stage, batch, batch_idx, loss, predictions) -> None:  # noqa: ANN001, PLR0913
         field_losses = {
-            f"{name}/{field}": float(value)
+            f"{name}/{leaf.field_loss_prefix}{field}": float(value)
             for name, dataset_loss in pl_module.loss.items()
             for leaf in dataset_loss.modules()
             if isinstance(leaf, ObservationMaskedMSE)
