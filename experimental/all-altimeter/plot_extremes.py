@@ -46,13 +46,13 @@ FHR = 24
 
 # 25km model, same version as baseline
 BASELINES = {
-    "sla":   ("v2p0", "runs/v2p0/inference-validation"),
-    "uvgxt": ("v2p0", "runs/v2p0/inference-validation"),
-    "swh":   ("v2p0", "runs/v2p0/inference-validation"),
+    "sla":   ("v2p1", "runs/v2p1/inference-validation"),
+    "uvgxt": ("v2p1", "runs/v2p1/inference-validation"),
+    "swh":   ("v2p1", "runs/v2p1/inference-validation"),
 }
 
-EXPERIMENT_DIR = "runs/v2p1/inference-validation"
-EXPERIMENT_LABEL = "v2p1"
+EXPERIMENT_DIR = "runs/v2p2/inference-validation"
+EXPERIMENT_LABEL = "v2p2"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 

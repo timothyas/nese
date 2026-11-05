@@ -898,7 +898,7 @@ training:
       warmup_t: 500
       warmup_prefix: true
       t_in_epochs: false
-    lr: 2.5e-04  # global lr = 1.0e-3
+    lr: 6.25e-05  # global lr = 1.0e-3 with 16 GPUs
     pl_lr_scheduler:
       interval: step
 
@@ -1071,7 +1071,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v2p1
+      experiment_name: v2p2
       project_name: all-altimeter
       terminal: false
       system: false
