@@ -62,3 +62,25 @@ validation error, or it it's just due to more training.
 ### v0
 
 Here I used `w = 2` and ran for 2 epochs (~1.1k iterations).
+
+Comparing error against control: there's really no difference between these
+runs, so any additional gains in the unseen regions is simply due to more
+training.
+
+![](runs/v0/inference-validation/figures/metrics.sla.seen_at.jpeg)
+
+Evaluating the sensitivities has been useful on its own, but not really useful
+for this particular experiment.
+Not only does the model trained with this loss function show the same
+sensitivity patterns, the sensitivities themselves look identical.
+
+## Sensitivity Noise Floor
+
+`sensitivity.py` runs in 16-mixed precision with the loss scaled by up to 2^16 before the
+backward pass. To check which gradient magnitudes are numerically trustworthy, both cases were
+rerun with a loss scale of 256 and with bf16-mixed
+(`sbatch submit_sensitivity.sh scale256 --loss-scale 256`, `... bf16 --precision bf16-mixed`).
+Per hidden node or input cell, the single-cell sensitivities agreed with the main run to within
+20% down to 1e-9 to 1e-6 of their maximum, depending on the comparison. **1e-6 of the maximum is a
+reasonable worst case**; below it, differences can be numerical. Exact zeros (from float16
+underflow, and over land far from the ocean mesh) were excluded from the comparison.
