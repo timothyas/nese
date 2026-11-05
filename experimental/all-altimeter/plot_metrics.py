@@ -26,26 +26,26 @@ FHR = 24
 #    "swh": ("all-altimeter-v0", "runs/v0/inference-validation"),
 #}
 
-# 100km model, same version as baseline
-BASELINES = {
-    "sla":   ("100km-24h", "runs/v2/inference-validation"),
-    "uvgxt": ("100km-24h", "runs/v2/inference-validation"),
-    "swh":   ("100km-24h", "runs/v2/inference-validation"),
-}
-
-### fine tune or from scratch
+## 100km model, same version as baseline
 #BASELINES = {
-#    "sla":   ("v2p0", "runs/v2p0/inference-validation"),
-#    "uvgxt": ("v2p0", "runs/v2p0/inference-validation"),
-#    "swh":   ("v2p0", "runs/v2p0/inference-validation"),
+#    "sla":   ("100km-24h", "runs/v2/inference-validation"),
+#    "uvgxt": ("100km-24h", "runs/v2/inference-validation"),
+#    "swh":   ("100km-24h", "runs/v2/inference-validation"),
 #}
 
+## fine tune or from scratch
+BASELINES = {
+    "sla":   ("v2p1", "runs/v2p1/inference-validation"),
+    "uvgxt": ("v2p1", "runs/v2p1/inference-validation"),
+    "swh":   ("v2p1", "runs/v2p1/inference-validation"),
+}
+
 EXPERIMENT_DIR = "runs/v2p2/inference-validation"
-EXPERIMENT_LABEL = "25km-24h"
+EXPERIMENT_LABEL = "v2p2"
 
 # (inference dir, violin color) per persistence resolution
 PERSISTENCE = {
-    "100km": ("runs/v1/inference-validation", "#cfe8dc"),
+    #"100km": ("runs/v1/inference-validation", "#cfe8dc"),
     "25km": ("runs/v2p0/inference-validation", "lightgray"),
 }
 PERSISTENCE_LABEL = "persistence"

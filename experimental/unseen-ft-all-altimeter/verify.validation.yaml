@@ -1,0 +1,37 @@
+forecast:
+  store_dir: runs/control/inference-validation
+verification:
+  dataset: ../all-altimeter/anemoi-hpx8-24h/dataset.zarr
+  observations:
+    sla:
+      observed_as: sla_filtered
+      groups: auto
+      count: "sla_filtered_count_{group}"
+    uvgxt:
+      components: ["ugxt", "vgxt"]
+      groups: auto
+      count: "uvgxt_count_{group}"
+    swh:
+      observed_as: swh_denoised
+      groups: auto
+      count: "swh_denoised_count_{group}"
+
+metrics:
+  split:
+    - seen_at_hour
+    - overlap
+
+movie:
+  date_range:
+    start: 2019-05-01T12
+    end: 2019-06-30T12
+  loop: t0
+  fhr: 24
+  left_panel: all_input_obs_locations
+  regions:
+    - global
+    - tropical_pacific
+
+styles:
+  uvgxt:
+    vmin: 0

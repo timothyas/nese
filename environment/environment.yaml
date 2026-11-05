@@ -32,6 +32,7 @@ dependencies:
   - ipykernel
   - jupyterlab_vim
   - ffmpeg
+  - asciinema
   # HPC / MPI
   - mpi4py
   - mpich
