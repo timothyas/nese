@@ -16,6 +16,10 @@
 # ../all-altimeter/graph.stage2.pt, so there is no graph build here.
 
 set -euo pipefail
+
+# Apptainer variables from a `nese` (Tykky) shell would reach the apptainer exec below and fail
+# its mounts ("mount source /node doesn't exist"); nese-submit strips them, a bare sbatch does not.
+for name in ${!APPTAINER@} ${!SINGULARITY@}; do unset "$name"; done
 ulimit -c 0
 
 module purge

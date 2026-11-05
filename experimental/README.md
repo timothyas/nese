@@ -57,6 +57,12 @@ Lineage
       size, which were used to optimize this setup.
     * v2p1: Train from scratch for 12 epochs, same training schedule settings as
       v2. Could use more training, but it's getting better.
+    * v2p2: correct the learning rate to actually be an effective value of 1e-3.
+      Results in slight improvements than what happened originally (4e-3)
+9. `unseen-ft-all-altimeter`: picks up from all-altimeter v2p2 and fine tunes
+   for 2 epochs with a loss focusing on the "unseen" targets. This has no
+   improvement over training for 2 more epochs with the standard loss.
+
 
 
 ## Overfitting

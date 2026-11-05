@@ -18,6 +18,10 @@
 
 set -euo pipefail
 
+# Apptainer variables from a `nese` (Tykky) shell would reach the apptainer exec below and fail
+# its mounts ("mount source /node doesn't exist"); nese-submit strips them, a bare sbatch does not.
+for name in ${!APPTAINER@} ${!SINGULARITY@}; do unset "$name"; done
+
 # An aborting rank dumps a multi-GB core file into the experiment directory.
 ulimit -c 0
 
