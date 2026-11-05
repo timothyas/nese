@@ -1,17 +1,18 @@
 """Loss sensitivities at the processor input and the model input, for one validation date.
 
-Runs in nese-anemoi on one GPU (submit_sensitivity.sh). The model, loss and data come from this
-experiment's training.yaml. Only the weights change between checkpoints, so every checkpoint is
-scored against the same date, the same target cell and the same loss definitions. The
-sensitivities are written to ``sensitivity/<case>/<label>.zarr``, and sensitivity.ipynb plots them in
-the ``nese`` environment.
+Runs in nese-anemoi on one GPU (submit_sensitivity.sh). The model, its ObservationMaskedMSE and
+the data come from the training yaml given as --config; only the weights change between
+checkpoints, so every checkpoint is scored against the same date, target cell and loss. The
+sensitivities are written under ``sensitivity/``, and sensitivity_cell.ipynb and
+sensitivity_global.ipynb plot them in the ``nese`` environment.
 
 Two modes, each differentiating its scalars in their own forward and backward passes:
 
-    --scalars cell     cell    UnseenObservationMaskedMSE on sla at one unseen target cell only,
+    --scalars cell     cell    ObservationMaskedMSE on sla at one unseen target cell only,
                                written to <output>/<case>/
-    --scalars global   unseen  UnseenObservationMaskedMSE over the globe
-                       base    ObservationMaskedMSE over the globe,
+    --scalars global   unseen  ObservationMaskedMSE over the target observations at cells their
+                               field saw in no input bin (nese-verify's seen_at_hour = +timestep)
+                       base    ObservationMaskedMSE over every target observation,
                                written to <output>/global/<t0>/, since they depend only on the date
 
 --variant appends one more directory, for reruns with other numerics.
@@ -38,9 +39,10 @@ before backward so float16 does not flush the small far-field gradients to zero.
 halves until every gradient is finite. Plain float32 crashed the compiled flex_attention
 kernel ("illegal memory access", job 2716267), so --precision 32 is for debugging only.
 
-    python sensitivity.py --scalars cell --case gulf_stream --checkpoint v2p2=<path> \
-        --checkpoint v0=<path> [--date 2019-07-14T12] [--near 38.5 -63]
-    python sensitivity.py --scalars global --checkpoint v2p2=<path> --date 2019-07-14T12
+    python sensitivity.py --config training.yaml --scalars cell --case gulf_stream \
+        --checkpoint v2p2=<path> --checkpoint v0=<path> [--date 2019-07-14T12] [--near 38.5 -63]
+    python sensitivity.py --config training.yaml --scalars global --checkpoint v2p2=<path> \
+        --date 2019-07-14T12
 """
 
 import argparse
@@ -59,7 +61,6 @@ from anemoi.training.utils.index_space import IndexSpace
 from hydra import compose
 from hydra import initialize_config_dir
 from nese_training.losses import ObservationMaskedMSE
-from nese_training.losses import UnseenObservationMaskedMSE
 
 LOGGER = logging.getLogger("sensitivity")
 EARTH_RADIUS_KM = 6371.0
@@ -78,8 +79,8 @@ KINDS = {
 STATIC = "static"  # everything else: elevation, land fraction, lat/lon encodings, MDT and its gradients
 
 
-def load_module(experiment: Path, checkpoint: str) -> torch.nn.Module:
-    """The training module from ``training.yaml`` with ``checkpoint``'s weights, in eval mode."""
+def load_module(config_path: Path, checkpoint: str) -> torch.nn.Module:
+    """The training module from the yaml at ``config_path``, with ``checkpoint``'s weights, in eval mode."""
     os.environ.setdefault("SLURM_GPUS_PER_NODE", "1")
     os.environ.setdefault("SLURM_NNODES", "1")
     overrides = [
@@ -89,8 +90,8 @@ def load_module(experiment: Path, checkpoint: str) -> torch.nn.Module:
         "training.load_weights_only=true",
         f"system.input.warm_start={checkpoint}",
     ]
-    with initialize_config_dir(config_dir=str(experiment.resolve()), version_base=None):
-        config = compose(config_name="training", overrides=overrides)
+    with initialize_config_dir(config_dir=str(config_path.parent.resolve()), version_base=None):
+        config = compose(config_name=config_path.stem, overrides=overrides)
     trainer = AnemoiTrainer(config)
     module = trainer.model.to("cuda").eval()
     module.trainer_ = trainer  # keeps the graph and task reachable
@@ -161,15 +162,37 @@ PROCESSOR_KERNEL = ["model.processor.block_size=128", "model.processor.compile_m
 PRECISIONS = {"16-mixed": torch.float16, "bf16-mixed": torch.bfloat16, "32": None}
 
 
-def leaves(module: torch.nn.Module) -> tuple[ObservationMaskedMSE, UnseenObservationMaskedMSE]:
-    found = list(module.loss[DATASET].modules())
-    base = next(m for m in found if type(m) is ObservationMaskedMSE)
-    unseen = next(m for m in found if isinstance(m, UnseenObservationMaskedMSE))
-    return base, unseen
+def base_loss(module: torch.nn.Module) -> ObservationMaskedMSE:
+    return next(m for m in module.loss[DATASET].modules() if isinstance(m, ObservationMaskedMSE))
+
+
+def count_columns(module: torch.nn.Module) -> dict[str, list[int]]:
+    """Each observed field's count columns, as positions in the full data layout."""
+    leaf = base_loss(module)
+    names = module.data_indices[DATASET].data_full_name_to_position
+    return {
+        field: [names[spec["count"].format(group=group)] for group in leaf._resolve_groups(spec, names)]
+        for field, spec in leaf.observations.items()
+    }
+
+
+def seen_by_field(module: torch.nn.Module, batch: torch.Tensor) -> dict[str, torch.Tensor]:
+    """Per field, ``(grid,)``: whether any of its groups observed the cell in any input bin."""
+    inputs = batch[0, module.task.get_batch_input_indices(), 0]  # (time, grid, variable)
+    return {field: (inputs[..., columns] > 0).any(-1).any(0) for field, columns in count_columns(module).items()}
+
+
+def only_unseen(module, target: torch.Tensor, seen: dict[str, torch.Tensor]) -> torch.Tensor:
+    """The target with each field's counts zeroed wherever that field was seen in the input."""
+    masked = target.clone()
+    for field, columns in count_columns(module).items():
+        for column in columns:
+            masked[..., seen[field], column] = 0.0
+    return masked
 
 
 def choose_target_cell(
-    module, batch, unseen, seed: int, near: tuple[float, float] | None, max_distance_km: float
+    module, batch, seen: torch.Tensor, seed: int, near: tuple[float, float] | None, max_distance_km: float
 ) -> int:
     """A cell where sla was observed at the target time but not in any input bin: random, or the
     nearest to ``near``, which must lie within ``max_distance_km`` of it."""
@@ -177,8 +200,7 @@ def choose_target_cell(
     target = module.task.get_targets(batch)[DATASET][0, 0, 0]
     sla_counts = [position for name, position in names.items() if name.startswith("sla_filtered_count_")]
     observed = (target[:, sla_counts] > 0).any(-1)
-    sla_field = list(unseen.observations).index("sla")
-    candidates = torch.nonzero(observed & ~unseen.seen[0, 0, :, sla_field]).flatten().cpu().numpy()
+    candidates = torch.nonzero(observed & ~seen).flatten().cpu().numpy()
     if near is None:
         return int(np.random.default_rng(seed).choice(candidates))
     distance = distance_km(module, near)[candidates]
@@ -241,14 +263,14 @@ def scaled_backward(module, batch, leaf, y, hooks, precision: str, scale: float)
 def sensitivities(module, batch: torch.Tensor, cell: int | None, hooks: dict, precision: str, scale: float) -> dict:
     """``{scalar: {loss, loss_scale, latent, ...}}`` for one cell, or for the globe when ``cell`` is
     None; see the module docstring."""
-    base, unseen = leaves(module)
+    leaf = base_loss(module)
     target = module.task.get_targets({DATASET: batch})[DATASET]
     if cell is None:
-        scalars = {"unseen": (unseen, target), "base": (base, target)}
+        scalars = {"unseen": only_unseen(module, target, seen_by_field(module, batch)), "base": target}
     else:
-        scalars = {"cell": (unseen, only_sla_at(module, target, cell))}
+        scalars = {"cell": only_sla_at(module, target, cell)}
     results = {}
-    for name, (leaf, y) in scalars.items():
+    for name, y in scalars.items():
         loss, used_scale, x_grad, grads = scaled_backward(module, batch, leaf, y, hooks, precision, scale)
         total, skip = grads["processor_input"], grads["decoder_input"]
         network = module.model.model
@@ -374,7 +396,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--precision", choices=list(PRECISIONS), default="16-mixed")
     parser.add_argument("--loss-scale", type=float, default=2.0**16, help="starting scale; 1 for --precision 32")
-    parser.add_argument("--experiment", type=Path, default=Path(__file__).parent)
+    parser.add_argument("--config", type=Path, required=True, help="training yaml the checkpoints were trained with")
     parser.add_argument("--output", type=Path, default=Path(__file__).parent / "sensitivity")
     args = parser.parse_args()
     if (args.scalars == "cell") != (args.case is not None):
@@ -386,16 +408,14 @@ def main() -> None:
     cell, t0 = None, pd.Timestamp(args.date) if args.date else None
     for item in args.checkpoint:
         label, path = item.split("=", 1)
-        module = load_module(args.experiment, path)
+        module = load_module(args.config, path)
         hooks = captures(module)
         t0 = t0 if t0 is not None else random_t0(module, args.seed)
         batch, dates = make_batch(module, t0)
         normalised = module.on_after_batch_transfer({DATASET: batch.to("cuda")}, 0)[DATASET]
-        module.set_loss_inputs({DATASET: normalised})
         if args.scalars == "cell" and cell is None:
-            cell = choose_target_cell(
-                module, {DATASET: normalised}, leaves(module)[1], args.seed, args.near, args.max_distance_km
-            )
+            seen = seen_by_field(module, normalised)["sla"]
+            cell = choose_target_cell(module, {DATASET: normalised}, seen, args.seed, args.near, args.max_distance_km)
             if args.near is not None:
                 LOGGER.info("target is %.0f km from %s", distance_km(module, args.near)[cell], args.near)
         run = args.case if args.scalars == "cell" else f"global/{t0:%Y-%m-%dT%H}"

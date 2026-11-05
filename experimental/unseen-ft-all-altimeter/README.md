@@ -84,3 +84,20 @@ Per hidden node or input cell, the single-cell sensitivities agreed with the mai
 20% down to 1e-9 to 1e-6 of their maximum, depending on the comparison. **1e-6 of the maximum is a
 reasonable worst case**; below it, differences can be numerical. Exact zeros (from float16
 underflow, and over land far from the ocean mesh) were excluded from the comparison.
+
+## Code archive
+
+The training code for the unseen loss was removed before merging, since it made no difference
+over the control run. It is kept at tag `unseen-ft-all-altimeter-v0`. `training.yaml`,
+`submit_train.sh`, `submit_smoke.sh` and `submit_tests.sh` need it:
+`git checkout unseen-ft-all-altimeter-v0 -- training/`.
+
+- **Seen mask:** a cell is seen for a field if any of that field's groups has a count above 0 at
+  any input step (nese-verify's `seen_at_hour` complement of `+timestep`).
+- **Loss:** `UnseenObservationMaskedMSE` subclasses `ObservationMaskedMSE`, zeroes each term's
+  mask at its field's seen cells, and then pools as usual.
+- **Training method:** anemoi calls a loss with the target only, so `UnseenAwareTraining`
+  (a `SingleTraining`) passes the input batch to every loss leaf with `set_inputs` before each step.
+
+`sensitivity.py` doesn't need this code. It computes the same seen mask itself and scores
+`ObservationMaskedMSE` against targets with the seen counts zeroed, which equals the unseen loss.

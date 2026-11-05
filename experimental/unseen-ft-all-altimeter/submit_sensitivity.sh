@@ -33,6 +33,10 @@ module load nese-anemoi
 
 MPLCONFIGDIR="/cluster/gpuscratch/jobs/$SLURM_JOB_ID/mpl"; mkdir -p "$MPLCONFIGDIR"
 
+# The v2p2 architecture, data and ObservationMaskedMSE, which v0 and control share. This
+# experiment's training.yaml needs the unseen-loss code from tag unseen-ft-all-altimeter-v0.
+CONFIG=../all-altimeter/training.stage2.yaml
+
 CHECKPOINTS=(
     --checkpoint v2p2=../all-altimeter/runs/v2p2/checkpoint/ae31444877904a0bab02b1d25a173aa9/last.ckpt
     --checkpoint v0=runs/v0/checkpoint/c4fbe8c1bc4144a9bdd7ebcb3a4a540b/last.ckpt
@@ -45,7 +49,7 @@ EXTRA=("${@:2}")
 sensitivity() {
     srun --gpu-bind=none apptainer exec --nv --bind /cluster --pwd "$PWD" \
         --env MPLCONFIGDIR="$MPLCONFIGDIR" "$NESE_ANEMOI_SIF" \
-        python sensitivity.py "${CHECKPOINTS[@]}" ${VARIANT:+--variant "$VARIANT"} "$@" "${EXTRA[@]}"
+        python sensitivity.py --config "$CONFIG" "${CHECKPOINTS[@]}" ${VARIANT:+--variant "$VARIANT"} "$@" "${EXTRA[@]}"
 }
 
 # The turbulent Gulf Stream extension, on the validation date the first runs drew (seed 0)

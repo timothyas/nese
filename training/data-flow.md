@@ -71,14 +71,6 @@ so it is differentiated.
 anemoi's own NaN loss mask is deliberately not used. It builds its mask from the oldest *input*
 bin, not the target bin.
 
-`UnseenObservationMaskedMSE` (`losses.py`) is the same loss with one more mask: a field's terms
-are scored only at cells that none of that field's missions observed in any *input* bin. This is
-nese-verify's `seen_at_hour = +timestep` split. anemoi calls a loss with the target bin only, so
-it needs `training.method` set to `nese_training.methods.UnseenAwareTraining`. Each step, that
-method passes the model input to every loss that has `set_inputs`, before the stock step runs. It
-is meant to be combined with the base loss in a `CombinedLoss`. Its per-field values are logged
-as `unseen_{field}`.
-
 ## 5. Post-processors: inverse pass, on model outputs only
 
 - **Plots:** the diagnostics callbacks (`training/.../diagnostics/callbacks/plot.py`) run the
