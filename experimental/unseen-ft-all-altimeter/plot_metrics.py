@@ -28,9 +28,9 @@ FHR = 24
 
 ## fine tune or from scratch
 BASELINES = {
-    "sla":   ("all-altimeter-v2p2", "../all-altimeter/runs/v2p0/inference-validation"),
-    "uvgxt": ("all-altimeter-v2p2", "../all-altimeter/runs/v2p0/inference-validation"),
-    "swh":   ("all-altimeter-v2p2", "../all-altimeter/runs/v2p0/inference-validation"),
+    "sla":   ("control", "runs/control/inference-validation"),
+    "uvgxt": ("control", "runs/control/inference-validation"),
+    "swh":   ("control", "runs/control/inference-validation"),
 }
 
 EXPERIMENT_DIR = "runs/v0/inference-validation"
