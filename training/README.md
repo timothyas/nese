@@ -114,6 +114,25 @@ An observed velocity is still encoded where the model cannot diagnose one (e.g. 
 with too few neighbours). It only informs the latent state, and the loss scores only cells where
 the diagnosed velocity is defined.
 
+### Static and known-in-advance forcings
+
+Two optional `model.model` keys change how the non-field inputs enter the encoder:
+
+```yaml
+task:
+  _target_: nese_training.tasks.KnownForcingForecaster
+model:
+  model:
+    static_forcing: [elevation, land_fraction, mdt]   # once, from t0, not once per input step
+    future_forcing_steps: ${task.multistep_output}    # the forcings at the target time too
+```
+
+`KnownForcingForecaster` is the stock `Forecaster` with the target times appended to the
+input window, so `x` gets one more slot per output step. That slot also holds the target
+bin's observations. The model reads only the non-static passthrough columns from it (the
+calendar and insolation), never a field or a count. It supports a single forecast step,
+not a rollout. With neither key set, the input is exactly what it was before.
+
 ## Physics diagnostics
 
 `model.physics_diagnostics` lists model outputs computed from other model outputs rather

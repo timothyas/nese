@@ -12,8 +12,13 @@ no per-group column should reach the network by either path. Each field's count 
 act only as the observed mask and are not passed through, so coverage is not an input.
 A cell is observed wherever its count is above zero, and nowhere else: each field has a count
 of its own (``uvgxt_count_*`` for the velocity), so that is exactly where its values are finite.
+
+``static_forcing`` columns enter once, from t0, instead of once per input step. The last
+``future_forcing_steps`` slots of ``x`` (see ``nese_training.tasks``) are at target times, where
+only the passthrough columns are known: their observations and static columns are never read.
 """
 
+import dataclasses
 from dataclasses import dataclass
 
 import einops
@@ -40,13 +45,14 @@ class FieldColumns:
             "uvgxt": {"components": ["ugxt", "vgxt"], "count": "uvgxt_count_{group}"},
         }
 
-    and the model inputs::
+    the model inputs::
 
         0 sla_filtered_jason_2   3 ugxt_saral     6 sla_count_jason_2     9 uvgxt_count_saral
         1 sla_filtered_saral     4 vgxt_jason_2   7 sla_count_saral      10 elevation
-        2 ugxt_jason_2           5 vgxt_saral     8 uvgxt_count_jason_2
+        2 ugxt_jason_2           5 vgxt_saral     8 uvgxt_count_jason_2  11 cos_julian_day
 
-    the groups are ``[jason_2, saral]`` and :func:`resolve_field_columns` gives::
+    and ``static=["elevation"]``, the groups are ``[jason_2, saral]`` and
+    :func:`resolve_field_columns` gives::
 
         fields = {
             "sla": (
@@ -58,14 +64,16 @@ class FieldColumns:
                 [8, 9],             # the velocity's own counts
             ),
         }
-        passthrough = [10]
+        passthrough = [11]  # every other input, read at each step
+        static = [10]       # read once, never in passthrough
     """
 
     fields: dict[str, tuple[list[list[int]], list[int]]]
     passthrough: list[int]
+    static: list[int] = dataclasses.field(default_factory=list)
 
 
-def resolve_field_columns(fields: dict, name_to_index: dict[str, int]) -> FieldColumns:
+def resolve_field_columns(fields: dict, name_to_index: dict[str, int], static: list[str] = ()) -> FieldColumns:
     encoded, consumed = {}, set()
     for field, raw in fields.items():
         spec = normalise_spec(raw)
@@ -80,8 +88,13 @@ def resolve_field_columns(fields: dict, name_to_index: dict[str, int]) -> FieldC
         encoded[field] = ([[name_to_index[name] for name in group] for group in values], [name_to_index[name] for name in counts])
         consumed.update(names)
 
-    passthrough = sorted(index for name, index in name_to_index.items() if name not in consumed)
-    return FieldColumns(encoded, passthrough)
+    misplaced = [name for name in static if name not in name_to_index or name in consumed]
+    if misplaced:
+        msg = f"Static forcings {misplaced} must be model inputs outside the encoded fields."
+        raise ValueError(msg)
+
+    passthrough = sorted(index for name, index in name_to_index.items() if name not in consumed | set(static))
+    return FieldColumns(encoded, passthrough, sorted(name_to_index[name] for name in static))
 
 
 class FieldEncoder(nn.Module):
@@ -111,30 +124,49 @@ class FieldEncoder(nn.Module):
 
 
 class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
-    """``AnemoiModelEncProcDec`` whose input is ``[field latents || other inputs || node attributes]``.
+    """``AnemoiModelEncProcDec`` whose input per data-space mesh node, before the encoder maps it to the hidden mesh, is::
+
+        [(field latents || passthrough) per observed step || passthrough per future step || static || node attributes]
 
     Configured under ``model.model``::
 
         fields: ${training.training_loss.datasets.ocean.observations}
         field_channels: 32
+        static_forcing: [elevation, mdt]   # optional, once per sample
+        future_forcing_steps: 1            # optional, with KnownForcingForecaster
     """
 
     def __init__(self, *, model_config, **kwargs) -> None:  # noqa: ANN001
         # Needed by _calculate_input_dim, which the parent calls before _build_networks.
         self.fields = {field: normalise_spec(spec) for field, spec in model_config.model.model.fields.items()}
         self.field_channels = model_config.model.model.field_channels
+        self.static_forcing = list(model_config.model.model.get("static_forcing", []))
+        self.future_forcing_steps = model_config.model.model.get("future_forcing_steps", 0)
         super().__init__(model_config=model_config, **kwargs)
 
     def _calculate_shapes_and_indices(self, data_indices: dict) -> None:
+        if not 0 <= self.future_forcing_steps < self.n_step_input:
+            msg = f"future_forcing_steps={self.future_forcing_steps} must leave an observed step of {self.n_step_input}."
+            raise ValueError(msg)
         self.field_columns = {
-            name: resolve_field_columns(self.fields, indices.model.input.name_to_index)
+            name: resolve_field_columns(self.fields, indices.model.input.name_to_index, self.static_forcing)
             for name, indices in data_indices.items()
         }
         super()._calculate_shapes_and_indices(data_indices)
 
     def _calculate_input_dim(self, dataset_name: str) -> int:
-        per_step = len(self.fields) * self.field_channels + len(self.field_columns[dataset_name].passthrough)
-        return self.n_step_input * per_step + self.node_attributes.attr_ndims[dataset_name]
+        columns = self.field_columns[dataset_name]
+        per_step = len(self.fields) * self.field_channels + len(columns.passthrough)
+        return (
+            self.n_observed_steps * per_step
+            + self.future_forcing_steps * len(columns.passthrough)
+            + len(columns.static)
+            + self.node_attributes.attr_ndims[dataset_name]
+        )
+
+    @property
+    def n_observed_steps(self) -> int:
+        return self.n_step_input - self.future_forcing_steps
 
     def _build_networks(self, model_config) -> None:  # noqa: ANN001
         super()._build_networks(model_config)
@@ -152,9 +184,11 @@ class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
         node_attributes_data = self.node_attributes(dataset_name, batch_size=batch_size)
         grid_shard_sizes = grid_shard_sizes[dataset_name] if grid_shard_sizes is not None else None
 
+        observed, future = x[:, : self.n_observed_steps], x[:, self.n_observed_steps :]
+
         # this is only used in _assemble_output, and only passes prognostic variables
         x_skip = self.residual[dataset_name](
-            x,
+            observed,
             grid_shard_sizes=grid_shard_sizes,
             model_comm_group=model_comm_group,
             n_step_output=self.n_step_output,
@@ -164,11 +198,14 @@ class FieldEncoderEncProcDec(PhysicsDiagnosticsMixin, AnemoiModelEncProcDec):
             node_attributes_data = shard_tensor(node_attributes_data, 0, grid_shard_sizes, model_comm_group)
 
         columns = self.field_columns[dataset_name]
-        field_latents = self.field_encoder(x, columns.fields)
-        x_encoded = torch.cat((field_latents, x[..., columns.passthrough]), dim=-1)
+        x_encoded = torch.cat((self.field_encoder(observed, columns.fields), observed[..., columns.passthrough]), dim=-1)
         x_data_latent = torch.cat(
             (
                 einops.rearrange(x_encoded, "batch time ensemble grid vars -> (batch ensemble grid) (time vars)"),
+                einops.rearrange(
+                    future[..., columns.passthrough], "batch time ensemble grid vars -> (batch ensemble grid) (time vars)"
+                ),
+                einops.rearrange(observed[:, -1, ..., columns.static], "batch ensemble grid vars -> (batch ensemble grid) vars"),
                 node_attributes_data,
             ),
             dim=-1,
