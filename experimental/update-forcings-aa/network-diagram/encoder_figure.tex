@@ -6,7 +6,8 @@
 % The tikzpicture only -- \input it into a document whose preamble loads
 % notation.tex and the tikz libraries listed in network_diagram.tex.
 %
-% Layout: three lanes flowing left to right --
+% Layout: the input assembly on the far left (field encoder, forcings), then three
+% lanes flowing left to right --
 %   DATA   (top)     x-space nodes:  psi -> Linear -> LayerNorm -> key, value
 %   EDGE   (middle)  encoder edges:  a_e -> Linear -> eps
 %   LATENT (bottom)  z-space nodes:  a_z -> Linear -> LayerNorm -> query, self
@@ -28,6 +29,8 @@
 \def\rowffskip{-3.0}     % skip around the feed forward
 
 % --- column positions -------------------------------------------------------
+\def\colin{-14.0}   % raw inputs, before assembly
+\def\colfe{-8.0}     % field encoder
 \def\colA{0}        % inputs
 \def\colcat{4.8}    % concatenation
 \def\colB{7.7}      % embedding Linear
@@ -50,6 +53,7 @@
                     line width=1.1pt, align=center, inner sep=5pt,
                     minimum height=1.2cm, minimum width=2.1cm},
   attnblk/.style = {blk, fill=attnfill},
+  fieldblk/.style = {blk, draw=dataclr, fill=dataclr!8, line width=1.6pt},
   sum/.style     = {circle, draw=trapline, fill=white, line width=1.1pt,
                     inner sep=0pt, minimum size=0.72cm},
   term/.style    = {align=center, inner sep=2pt},
@@ -65,13 +69,33 @@
 % =========================== lane labels ====================================
 % anchored on the left edge of the input boxes so nothing overhangs the
 % bounding box (the standalone crop would clip it)
-\node[lane, text=dataclr]   at ({\colA-1.8}, {\rowdata+\stack+0.55}) {data};
 \node[lane, text=edgeclr]   at ({\colA-1.8}, {\rowedge+0.55})        {edges};
 \node[lane, text=latentclr] at ({\colA-1.8}, {\rowlat+0.55})         {latent};
 
+% =========================== INPUT ASSEMBLY =================================
+% Observations reach the network only through the field encoder; the forcings pass
+% through. Static forcings are taken once, at t; dynamic ones also at the target time.
+\node[blk, text width=3.4cm] (obsin) at (\colin, {\rowdata+3.2})
+  {observations\\[1pt]{\small per field and group}};
+\node[blk, text width=3.4cm] (dynin) at (\colin, {\rowdata+1.6})
+  {dynamic forcings};
+\node[blk, text width=3.4cm] (statin) at (\colin, {\rowdata+0.2})
+  {static forcings};
+\node[lane, text=dataclr] at (obsin.north west) {data};
+\node[fieldblk, text width=3.8cm] (fenc) at (\colfe, {\rowdata+3.2})
+  {\textbf{Field encoder}\\[1pt]{\small MLP per field, mean over\\[-1pt]groups with count $>0$}};
+\node[blk, text width=3.4cm, minimum height=3.8cm] (uin) at (\colA, {\rowdata+1.7})
+  {flatten time,\\concatenate};
+
+\draw[wire, dataclr] (obsin) -- (fenc);
+\draw[wire, dataclr] (fenc.east) -- node[shp, above]
+  {\shapethree{\NT}{\Nx}{\Nfield\Nfc}} (fenc.east -| uin.west);
+\draw[wire, dataclr] (dynin.east) -- node[shp, above, pos=0.72]
+  {\shapethree{(\NT{+}\NTf)}{\Nx}{\Npass}} (dynin.east -| uin.west);
+\draw[wire, dataclr] (statin.east) -- node[shp, above, pos=0.72]
+  {\shapetwo{\Nx}{\Nstatic}\ at $t$} (statin.east -| uin.west);
+
 % =========================== DATA LANE ======================================
-\node[blk, text width=3.4cm] (uin)  at (\colA, {\rowdata+\stack})
-  {field latents\\and forcings};
 \node[blk, text width=3.4cm] (axin) at (\colA, {\rowdata-\stack})
   {node attributes\\$\attrx$};
 \node[sum] (cat)  at (\colcat, \rowdata) {\scriptsize$\|$};

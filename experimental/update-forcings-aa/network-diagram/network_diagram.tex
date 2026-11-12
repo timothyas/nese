@@ -39,11 +39,11 @@
 \figurepage{encoder_figure}{%
   \textbf{Encoder.}\;
   \texttt{GraphTransformerForwardMapper} maps the data-space input onto the latent mesh.
-  The input $\inputvec$ is assembled per data node:
-  each field's observations pass through one MLP shared across missions
-  ($\Nfield$ fields, $\Nfc$ channels each) at each of the $\NT$ observed steps,
-  alongside the $\Npass$ dynamic forcings; the dynamic forcings are also given at the
-  $\NTf$ target step, and the $\Nstatic$ static forcings once, from $t$.
+  The input $\inputvec$ is assembled per data node.
+  The field encoder passes each field's observations through one MLP shared across
+  missions and averages over the missions that observed the node, at each of the $\NT$
+  observed steps; counts act only as the mask.
+  Dynamic forcings are also given at the $\NTf$ target step, static forcings once.
   Shapes are for one batch element and ensemble member.
   The source nodes are returned unchanged, so all three residual paths act on the latent
   stream.}
@@ -61,8 +61,8 @@
   exchanged.  It has no source embedding, and its destination input is the raw
   $\inputvec$, re-embedded by its own Linear.
   \texttt{node\_data\_extractor} emits the $\Nnet$ network outputs
-  (\valnetnamesplain); the physics block then diagnoses the other $\Nphys$
-  (\valphysnamesplain) from them, giving $\Nout$ outputs.
+  (\valnetnamesplain); the physics block, defined per diagnostic, computes the other
+  $\Nphys$ (\valphysnamesplain) from them and from static fields, with gradients.
   All are diagnostic ($\idxprog = \varnothing$), so the prognostic residual add is empty.}
 
 \begin{center}

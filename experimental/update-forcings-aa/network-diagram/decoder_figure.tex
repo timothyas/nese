@@ -53,7 +53,8 @@
 \def\colJ{36.2}     % residual 3
 \def\colK{39.4}     % node_data_extractor
 \def\colL{42.8}     % residual add on the prognostic channels
-\def\colM{44.8}     % output
+\def\colM{46.6}     % physics diagnostics
+\def\colN{50.0}     % output
 
 \def\stack{1.15}    % vertical offset of paired sub-boxes
 
@@ -64,6 +65,7 @@
                     minimum height=1.2cm, minimum width=2.1cm},
   attnblk/.style = {blk, fill=attnfill},
   diagblk/.style = {blk, draw=diagclr, fill=diagfill, line width=1.6pt},
+  physblk/.style = {blk, draw=dataclr, fill=dataclr!8, line width=1.6pt},
   sum/.style     = {circle, draw=trapline, fill=white, line width=1.1pt,
                     inner sep=0pt, minimum size=0.72cm},
   deadsum/.style = {sum, draw=inactiveclr},
@@ -154,7 +156,12 @@
 \node[diagblk, text width=2.4cm] (extract) at (\colK, \rowedge)
   {LayerNorm\\Linear};
 \node[deadsum] (resprog) at (\colL, \rowedge) {\scriptsize$+$};
-\node[term, anchor=west, align=left] (out) at ({\colM+0.1}, \rowedge)
+% Physics diagnostics, defined case by case: computed from the network outputs (and
+% static fields), outside the network.
+\node[physblk, text width=3.0cm] (phys) at (\colM, \rowedge)
+  {\textbf{Physics}\\[1pt]{\small adds $\Nphys$ outputs\\[-1pt]from the $\Nnet$}};
+\node[term, anchor=south, font=\small, text=dataclr] at (phys.north) {+ static fields};
+\node[term, anchor=west, align=left] (out) at ({\colN+0.1}, \rowedge)
   {$\outvec(t{+}\Delta t)$\\[2pt]{\small the prediction}};
 
 \draw[wire, dataclr] (attn.east) -- (res1);
@@ -167,7 +174,8 @@
 \draw[wire, dataclr] (res3) -- node[shp, above] {\shapetwo{\Nx}{\Nphi}} (extract);
 \draw[wire, diagclr] (extract) -- node[shp, above] {\shapetwo{\Nx}{\Nnet}}
   node[tag, below, text=diagclr] {$\idxdiag$} (resprog);
-\draw[wire, dataclr] (resprog) -- (out);
+\draw[wire, dataclr] (resprog) -- (phys);
+\draw[wire, dataclr] (phys) -- node[shp, above] {\shapetwo{\Nx}{\Nout}} (out);
 
 % residual 1 -- the self branch, added in attention space, ahead of the
 % output projection (AIAYN draws that projection inside its attention box)
