@@ -194,6 +194,8 @@ ROWS = [
     (r"\Naz", r"width of $\attrz$", r"\valNazsplit"),
     (r"\Nphi", "number of latent channels ({\\tt num\\_channels})", r"\valNphi"),
     SPLIT,
+    (r"\Nprog", r"prognostic outputs ($\idxprog$): also inputs, predicted as an increment on $t$", r"\valNprog"),
+    (r"\Ndiag", r"diagnostic outputs ($\idxdiag$): not inputs, predicted directly", r"\valNdiag"),
     (r"\Nout", r"output channels, $\Nout = \Nprog + \Ndiag$", r"\valNout"),
     (r"\Nnet", r"of which emitted by the decoder (\valnetnamesplain)", r"\valNnet"),
     (r"\Nphys", r"of which diagnosed by physics (\valphysnamesplain)", r"\valNphys"),

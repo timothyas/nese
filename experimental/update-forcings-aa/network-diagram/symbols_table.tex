@@ -31,6 +31,8 @@ $\Nphi$ & number of latent channels ({\tt num\_channels}) & \valNphi \\
 }
 
 \newcommand{\symbolrowstwo}{%
+$\Nprog$ & prognostic outputs ($\idxprog$): also inputs, predicted as an increment on $t$ & \valNprog \\
+$\Ndiag$ & diagnostic outputs ($\idxdiag$): not inputs, predicted directly & \valNdiag \\
 $\Nout$ & output channels, $\Nout = \Nprog + \Ndiag$ & \valNout \\
 $\Nnet$ & of which emitted by the decoder (\valnetnamesplain) & \valNnet \\
 $\Nphys$ & of which diagnosed by physics (\valphysnamesplain) & \valNphys \\
