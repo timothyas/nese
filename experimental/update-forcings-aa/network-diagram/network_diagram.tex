@@ -1,0 +1,105 @@
+% Encoder, processor and decoder of the update-forcings-aa model, then the notation table.
+% Numbers come from dims.tex and symbols_table.tex, written by extract_dims.py.
+
+\documentclass[11pt,landscape]{article}
+\usepackage[a4paper,landscape,margin=1.2cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, calc, fit}
+
+\definecolor{trapfill}{HTML}{E8E8E8}
+\definecolor{trapline}{HTML}{0E2841}
+\definecolor{dataclr}{HTML}{4C72B0}
+\definecolor{edgeclr}{HTML}{D95F02}
+\definecolor{latentclr}{HTML}{55A868}
+\definecolor{diagclr}{HTML}{8172B2}
+\colorlet{diagfill}{diagclr!8}
+\colorlet{inactiveclr}{black!45}
+\colorlet{attnfill}{latentclr!8}
+
+\input{notation}
+\input{dims}
+\input{symbols_table}
+
+\pagestyle{empty}
+
+\newcommand{\figurepage}[2]{%
+  \vspace*{\fill}
+  \begin{center}\resizebox{\textwidth}{!}{\input{#1}}\end{center}
+  \vspace*{\fill}
+  {\footnotesize #2\par}
+  \clearpage}
+
+\begin{document}
+
+\figurepage{encoder_figure}{%
+  \textbf{Encoder.}\;
+  \texttt{GraphTransformerForwardMapper} maps the data-space input onto the latent mesh.
+  The input $\inputvec$ is assembled per data node:
+  each field's observations pass through one MLP shared across missions
+  ($\Nfield$ fields, $\Nfc$ channels each) at each of the $\NT$ observed steps,
+  alongside the $\Npass$ dynamic forcings; the dynamic forcings are also given at the
+  $\NTf$ target step, and the $\Nstatic$ static forcings once, from $t$.
+  Shapes are for one batch element and ensemble member.
+  The source nodes are returned unchanged, so all three residual paths act on the latent
+  stream.}
+
+\figurepage{processor_figure}{%
+  \textbf{Processor.}\;
+  \texttt{RadiusTransformerProcessor}: $\NL$ pre-norm transformer blocks over the latent
+  nodes, each attending only along the $\NPE$ latent-to-latent edges plus itself ---
+  a disc of about \valproccutoffkm\,km, \valprocdegmean\ neighbours on average.
+  The \texttt{latent\_skip} add belongs to the model rather than to the processor.}
+
+\figurepage{decoder_figure}{%
+  \textbf{Decoder.}\;
+  \texttt{GraphTransformerBackwardMapper}, the encoder's block with the two spaces
+  exchanged.  It has no source embedding, and its destination input is the raw
+  $\inputvec$, re-embedded by its own Linear.
+  \texttt{node\_data\_extractor} emits the $\Nnet$ network outputs
+  (\valnetnamesplain); the physics block then diagnoses the other $\Nphys$
+  (\valphysnamesplain) from them, giving $\Nout$ outputs.
+  All are diagnostic ($\idxprog = \varnothing$), so the prognostic residual add is empty.}
+
+\begin{center}
+  \begin{minipage}{0.98\textwidth}
+    \section*{Notation}
+    Integer counts are written $N_{\text{quantity}}$; values are read from the checkpoint.
+
+    \medskip
+    \begin{minipage}[t]{0.49\textwidth}
+      \vspace{0pt}
+      \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{6.4cm} r@{}}
+        \toprule
+        symbol & meaning & value \\
+        \midrule
+        \symbolrowsone
+        \bottomrule
+      \end{tabular}
+    \end{minipage}\hfill
+    \begin{minipage}[t]{0.49\textwidth}
+      \vspace{0pt}
+      \begin{tabular}{@{}l >{\raggedright\arraybackslash}p{6.4cm} r@{}}
+        \toprule
+        symbol & meaning & value \\
+        \midrule
+        \symbolrowstwo
+        \bottomrule
+      \end{tabular}
+    \end{minipage}
+
+    \bigskip
+    {\footnotesize
+    $\|$ is concatenation along the feature axis.
+    $\nbhd(\coordz_j)$ holds \valdegmin--\valdegmax\ data nodes (\valdegmean\ on average)
+    and is empty for \valdegzero\ of the \valNz\ latent nodes;
+    $\nbhd(\coordx_j)$ holds \valdecdegmax\ latent nodes.
+    \par}
+  \end{minipage}
+\end{center}
+
+\end{document}
