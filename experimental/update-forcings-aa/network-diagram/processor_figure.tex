@@ -1,0 +1,135 @@
+% ---------------------------------------------------------------------------
+% Processor of AnemoiModelEncProcDec (TransformerProcessor), drawn to match
+% encoder_figure.tex and decoder_figure.tex.
+%
+% The tikzpicture only -- \input it into a document whose preamble loads
+% notation.tex and the tikz libraries listed in network_diagram.tex (this one
+% additionally needs the `fit` library, for the repeat box).
+%
+% A single lane: one space, one stream. RadiusTransformerProcessor masks attention
+% to the hidden-to-hidden edges plus self; the edges set the mask only and carry no
+% attributes, so there is no edge lane to draw.
+%
+% Every node is placed off the \row*/\col* registers below, so the figure is
+% reflowed by editing numbers in one place rather than by moving nodes.
+% ---------------------------------------------------------------------------
+
+% --- row positions ----------------------------------------------------------
+\def\rowlat{0}            % the one lane
+\def\rowskip{10.4}         % latent skip, added by the model around the processor
+\def\rowmlpskip{6.2}      % pre-norm skip around the MLP sublayer
+\def\rowattnskip{-9.2}    % pre-norm skip around the attention sublayer
+
+% --- column positions -------------------------------------------------------
+\def\colA{0}        % input
+\def\colB{6.0}      % LayerNorm
+\def\colsplit{8.6}  % where the LayerNorm output fans out three ways
+\def\colC{11.2}     % q / k / v projections
+\def\colD{17.6}     % radius attention
+\def\colE{22.6}     % output projection
+\def\colF{25.8}     % residual 1
+\def\colG{29.2}     % LayerNorm + MLP
+\def\colH{32.6}     % residual 2
+\def\colI{35.2}     % output
+
+\def\stack{3.6}     % vertical offset of the q and v boxes off the k box
+
+\begin{tikzpicture}[
+  x=1cm, y=1cm, font=\large,
+  blk/.style     = {rounded corners=3pt, draw=trapline, fill=trapfill,
+                    line width=1.1pt, align=center, inner sep=5pt,
+                    minimum height=1.2cm, minimum width=2.1cm},
+  attnblk/.style = {blk, fill=attnfill},
+  sum/.style     = {circle, draw=trapline, fill=white, line width=1.1pt,
+                    inner sep=0pt, minimum size=0.72cm},
+  term/.style    = {align=center, inner sep=2pt},
+  wire/.style    = {-{Stealth[length=3.4mm,width=2.8mm]}, line width=1.1pt,
+                    line cap=round, rounded corners=5pt},
+  plain/.style   = {line width=1.1pt, line cap=round, rounded corners=5pt},
+  shp/.style     = {font=\normalsize, inner sep=2pt, fill=white,
+                    fill opacity=0.85, text opacity=1},
+  tag/.style     = {font=\normalsize\itshape, inner sep=2pt},
+  lane/.style    = {font=\small\bfseries, anchor=south west},
+  repeat/.style  = {draw=latentclr, densely dashed, line width=1.1pt,
+                    rounded corners=6pt, inner sep=10pt},
+]
+
+% =========================== INPUT ==========================================
+\node[blk, text width=3.6cm] (phin) at (\colA, \rowlat)
+  {latent state\\[1pt]{\normalsize$\latentvec$ from the encoder}};
+\node[lane, text=latentclr, anchor=south west] at (phin.north west) {latent};
+
+% =========================== ATTENTION SUBLAYER =============================
+\node[blk] (lna)  at (\colB, \rowlat) {LayerNorm};
+\node[blk] (linq) at (\colC, {\rowlat+\stack}) {Linear};
+\node[blk] (link) at (\colC, \rowlat)          {Linear};
+\node[blk] (linv) at (\colC, {\rowlat-\stack}) {Linear};
+\coordinate (fan) at (\colsplit, \rowlat);
+
+\coordinate (blockin) at ({\colB-1.7}, \rowlat);
+\draw[wire, latentclr] (phin) -- node[shp, above, pos=0.35] {\shapetwo{\Nz}{\Nphi}} (lna);
+\draw[plain, latentclr] (lna.east) -- (fan);
+\draw[wire, latentclr] (fan) |- (linq.west);
+\draw[wire, latentclr] (fan) -- (link.west);
+\draw[wire, latentclr] (fan) |- (linv.west);
+
+\node[attnblk, minimum height=15.4cm, text width=6.2cm] (attn) at (\colD, \rowlat)
+  {\textbf{Radius}\\[1pt]\textbf{Self-Attention}\\[3pt]
+   {\small $\NH$ heads $\times$ $\Nc$ channels}\\[10pt]
+   {\large$\displaystyle
+      \attn_{ij}=\operatorname*{softmax}_{j\in\nbhd(\coordz_i)\cup\{i\}}
+      \frac{\query_i\cdot\keyv_j}{\sqrt{\Nc}}$}\\[9pt]
+   {\large$\displaystyle\sum_{j\in\nbhd(\coordz_i)\cup\{i\}}\attn_{ij}\,\valuev_j$}\\[10pt]
+   {\small mask from the latent-to-latent\\[-1pt]edges, built once and reused}};
+
+\draw[wire, latentclr] (linq.east) -- node[shp, above]
+  {\shapethree{\Nz}{\NH}{\Nc}} node[tag, below, text=latentclr] {$\query$}
+  (linq.east -| attn.west);
+\draw[wire, latentclr] (link.east) -- node[tag, below, text=latentclr] {$\keyv$}
+  (link.east -| attn.west);
+\draw[wire, latentclr] (linv.east) -- node[tag, below, text=latentclr] {$\valuev$}
+  (linv.east -| attn.west);
+
+\node[blk] (proj) at (\colE, \rowlat) {Linear};
+\node[sum] (res1) at (\colF, \rowlat) {\scriptsize$+$};
+\draw[wire, latentclr] (attn.east) -- (proj);
+\draw[wire, latentclr] (proj) -- node[shp, above] {\shapetwo{\Nz}{\Nphi}} (res1);
+
+% pre-norm skip around the whole attention sublayer, added AFTER the output
+% projection -- the standard transformer arrangement, and not what the two
+% mappers do with their lin_self branch
+\coordinate (attnskipturn) at ({\colF}, \rowattnskip);
+\draw[wire, latentclr] (blockin) |- (attnskipturn) -- (res1.south);
+\node[tag, text=trapline, align=center, anchor=north]
+  at ({(\colD+\colF)/2}, {\rowattnskip+0.55})
+  {\small added \emph{after} the output projection};
+
+% =========================== MLP SUBLAYER ===================================
+\node[blk, text width=2.4cm] (ff)  at (\colG, \rowlat) {LayerNorm\\MLP};
+\node[sum]                   (res2) at (\colH, \rowlat) {\scriptsize$+$};
+\draw[wire, latentclr] (res1) -- (ff);
+\draw[wire, latentclr] (ff) -- (res2);
+\coordinate (mlpskipturn) at ({\colH}, \rowmlpskip);
+\draw[wire, latentclr] ({(\colF+\colG)/2}, \rowlat) |- (mlpskipturn)
+  -- (res2.north);
+
+% =========================== REPEAT + OUTPUT ================================
+\node[repeat, fit=(blockin) (lna) (linq) (linv) (attn) (res2)
+                   (attnskipturn) (mlpskipturn)] (layer) {};
+\node[tag, text=latentclr, anchor=north east] at (layer.south east)
+  {$\times\,\NL$ layers, weights not shared};
+
+\node[sum] (skipadd) at (\colI, \rowlat) {\scriptsize$+$};
+\node[term, anchor=west, align=left] (out) at ({\colI+2.4}, \rowlat)
+  {$\latentvec'$\\[2pt]{\small to the decoder}};
+\draw[wire, latentclr] (res2) -- node[shp, above] {\shapetwo{\Nz}{\Nphi}} (skipadd);
+\draw[wire, latentclr] (skipadd) -- (out);
+
+% the model's own latent skip, outside the layer stack: x_latent_proc + x_latent
+\draw[wire, latentclr] (phin.north) |- ({\colI}, \rowskip) -- (skipadd.north);
+\node[shp] at ({(\colB+\colD)/2}, \rowskip) {\shapetwo{\Nz}{\Nphi}};
+\node[term, anchor=south, align=center, font=\small, text=latentclr]
+  at ({(\colE+\colI)/2}, {\rowskip+0.35})
+  {{\tt latent\_skip}: added by the model, outside the processor};
+
+\end{tikzpicture}

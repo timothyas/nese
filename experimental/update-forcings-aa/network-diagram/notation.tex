@@ -1,0 +1,79 @@
+% Symbol macros for the network diagrams.
+%
+% Convention: lowercase for variables and functions; uppercase is reserved for
+% matrices, except for integer counts, which are always N_{quantity}.
+%
+% This is the ONE place a symbol is renamed -- the figure, the notation table and
+% any caption all pick the change up.  Numbers live in dims.tex (generated).
+
+% --- data space --------------------------------------------------------------
+\newcommand{\coordx}{x}                 % data-space node coordinate
+\newcommand{\Nx}{N_{x}}                 % number of data-space nodes
+\newcommand{\datavec}{u}                % data features at one timestep
+\newcommand{\Nu}{N_{u}}                 % number of model input variables
+\newcommand{\Nfield}{N_{F}}             % encoded fields
+\newcommand{\Nfc}{N_{c_F}}              % latent channels per field
+\newcommand{\Npass}{N_{\mathrm{dyn}}}    % dynamic forcings
+\newcommand{\Nstatic}{N_{\mathrm{stat}}} % static forcings, given once
+\newcommand{\NT}{N_{T}}                 % observed input timesteps
+\newcommand{\NTf}{N_{T_f}}              % forcing-only target timesteps
+\newcommand{\attrx}{a_{x}}              % data-node attributes
+\newcommand{\Nax}{N_{a_{x}}}
+\newcommand{\inputvec}{\psi}            % assembled data-node input
+\newcommand{\Npsi}{N_{\psi}}
+
+% --- latent space ------------------------------------------------------------
+\newcommand{\coordz}{z}                 % latent-space node coordinate
+\newcommand{\Nz}{N_{z}}                 % number of latent-space nodes
+\newcommand{\attrz}{a_{z}}              % latent-node attributes
+\newcommand{\Naz}{N_{a_{z}}}
+\newcommand{\latentvec}{\varphi}        % latent state vector
+\newcommand{\Nphi}{N_{\varphi}}         % number of latent channels
+
+% --- graph edges -------------------------------------------------------------
+% The encoder and decoder graphs are distinct edge sets with distinct attributes
+% and distinct weights; only the widths happen to coincide, so one symbol serves
+% both and the edge counts carry the distinction.
+\newcommand{\attre}{a_{e}}              % edge attributes
+\newcommand{\Nae}{N_{a_{e}}}
+\newcommand{\NEE}{N_{EE}}               % encoder edges, data -> latent
+\newcommand{\NDE}{N_{DE}}               % decoder edges, latent -> data
+\newcommand{\NPE}{N_{PE}}               % processor edges, latent -> latent
+\newcommand{\nbhd}{\mathcal{N}}         % incoming neighbourhood of a destination node
+
+% --- model output ------------------------------------------------------------
+\newcommand{\outvec}{y}                 % model output in data space
+\newcommand{\Nout}{N_{y}}               % number of output channels
+\newcommand{\idxprog}{\mathcal{P}}      % prognostic output channels
+\newcommand{\idxdiag}{\mathcal{D}}      % diagnostic output channels
+% Counts of the two, so the sets keep the set symbols and the integer counts are
+% written N_{quantity} like every other count here.  Subscripting the set macro
+% means renaming a set renames its count with it.
+\newcommand{\Nprog}{N_{\idxprog}}
+\newcommand{\Ndiag}{N_{\idxdiag}}
+\newcommand{\Nnet}{N_{y_{\mathrm{net}}}}   % output channels emitted by the decoder
+\newcommand{\Nphys}{N_{y_{\mathrm{phys}}}} % output channels diagnosed by physics
+
+% --- processor ---------------------------------------------------------------
+\newcommand{\NL}{N_{L}}                 % processor layers
+
+% --- attention ---------------------------------------------------------------
+\newcommand{\NH}{N_{H}}                 % attention heads
+\newcommand{\Nc}{N_{c}}                 % channels per head, N_phi / N_H
+\newcommand{\query}{q}
+\newcommand{\keyv}{k}
+\newcommand{\valuev}{v}
+\newcommand{\edgeemb}{\epsilon}         % embedded edge attributes
+\newcommand{\selfv}{r}                  % lin_self branch
+\newcommand{\attn}{\alpha}
+
+% --- mlp ---------------------------------------------------------------------
+% anemoi's own name for this block (cf. the mlp_hidden_ratio config knob)
+\newcommand{\ff}{f}                     % the MLP
+\newcommand{\Nf}{N_{f}}                 % MLP hidden width
+
+% --- shape annotation --------------------------------------------------------
+% One macro so the styling of every wire label changes in one place.
+\newcommand{\shape}[1]{\ensuremath{#1}}
+\newcommand{\shapetwo}[2]{\shape{#1 \!\times\! #2}}
+\newcommand{\shapethree}[3]{\shape{#1 \!\times\! #2 \!\times\! #3}}

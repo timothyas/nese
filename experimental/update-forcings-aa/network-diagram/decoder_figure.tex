@@ -1,0 +1,214 @@
+% ---------------------------------------------------------------------------
+% Decoder of AnemoiModelEncProcDec (GraphTransformerBackwardMapper), drawn to
+% match encoder_figure.tex block for block.
+%
+% The tikzpicture only -- \input it into a document whose preamble loads
+% notation.tex and the tikz libraries listed in network_diagram.tex.
+%
+% Lane convention is shared with the encoder page: the SOURCE lane is on top and
+% supplies key and value, the edge lane is in the middle, the DESTINATION lane is
+% at the bottom and supplies query and self, and the destination stream leaves
+% along the middle line.  The encoder and the decoder therefore have the same
+% shape; only the colours swap, because the two spaces have swapped roles --
+%   encoder:  source = data (blue),   destination = latent (green)
+%   decoder:  source = latent (green), destination = data (blue)
+%
+% Two things differ structurally from the encoder and both are drawn:
+%   1. there is no source embedding -- the mapper has no emb_nodes_src, so the
+%      latent state enters the LayerNorm directly (mapper.py:698-701);
+%   2. post_process is not the identity -- node_data_extractor, a LayerNorm and a
+%      Linear, projects the latent width down onto the model's output channels
+%      (mapper.py:688-705).  That Linear is where the diagnostic appears.
+%
+% Every node is placed off the \row*/\col* registers below, so the figure is
+% reflowed by editing numbers in one place rather than by moving nodes.
+% ---------------------------------------------------------------------------
+
+% --- lane (row) positions ---------------------------------------------------
+% The decoder chain is longer than the encoder's -- it carries the extractor and
+% the residual add past the point where the encoder stops -- so the lanes are
+% spread further apart than the encoder's to keep the aspect ratio near 1.8:1.
+% Apparent text size is set by that ratio, not by the font size, because the
+% figure is placed with \resizebox{\textwidth}{!}.
+\def\rowlat{0}           % latent-space lane -- the source here
+\def\rowedge{-7.0}       % edge lane; also the data stream after attention
+\def\rowdata{-14.0}      % data-space lane -- the destination here
+\def\rowskip{5.0}        % raw input state running over the top to the residual add
+\def\rowconn{-10.4}      % graph connectivity entering the attention block
+\def\rowselfskip{-18.5}  % self branch routed under the attention block
+\def\rowdstskip{-21.5}   % pre-norm destination skip routed under everything
+\def\rowffskip{-3.6}     % skip around the feed forward
+
+% --- column positions -------------------------------------------------------
+\def\colA{0}        % inputs
+\def\colB{6.2}      % embedding Linear (destination lane only)
+\def\colC{10.6}     % LayerNorm
+\def\colD{13.6}     % q / k / v / edge projections
+\def\colsplit{12.3} % where a LayerNorm output branches in two
+\def\colE{19.8}     % graph attention
+\def\colF{24.8}     % residual 1
+\def\colG{27.4}     % projection
+\def\colH{30.4}     % residual 2
+\def\colI{33.4}     % LayerNorm + feed forward
+\def\colJ{36.2}     % residual 3
+\def\colK{39.4}     % node_data_extractor
+\def\colL{42.8}     % residual add on the prognostic channels
+\def\colM{46.6}     % physics diagnostics
+\def\colN{50.0}     % output
+
+\def\stack{1.15}    % vertical offset of paired sub-boxes
+
+\begin{tikzpicture}[
+  x=1cm, y=1cm, font=\large,
+  blk/.style     = {rounded corners=3pt, draw=trapline, fill=trapfill,
+                    line width=1.1pt, align=center, inner sep=5pt,
+                    minimum height=1.2cm, minimum width=2.1cm},
+  attnblk/.style = {blk, fill=attnfill},
+  diagblk/.style = {blk, draw=diagclr, fill=diagfill, line width=1.6pt},
+  physblk/.style = {blk, draw=dataclr, fill=dataclr!8, line width=1.6pt},
+  sum/.style     = {circle, draw=trapline, fill=white, line width=1.1pt,
+                    inner sep=0pt, minimum size=0.72cm},
+  deadsum/.style = {sum, draw=inactiveclr},
+  term/.style    = {align=center, inner sep=2pt},
+  wire/.style    = {-{Stealth[length=3.4mm,width=2.8mm]}, line width=1.1pt,
+                    line cap=round, rounded corners=5pt},
+  plain/.style   = {line width=1.1pt, line cap=round, rounded corners=5pt},
+  shp/.style     = {font=\normalsize, inner sep=2pt, fill=white,
+                    fill opacity=0.85, text opacity=1},
+  tag/.style     = {font=\normalsize\itshape, inner sep=2pt},
+  lane/.style    = {font=\small\bfseries, anchor=south west},
+]
+
+% =========================== LATENT LANE (source) ===========================
+% No embedding Linear: the backward mapper has no emb_nodes_src, so the
+% processor's output enters the block's LayerNorm at its own width.
+\node[blk, text width=3.6cm] (phin) at (\colA, \rowlat)
+  {latent state\\[1pt]{\normalsize$\latentvec$ from the processor}};
+\node[lane, text=latentclr, anchor=south west] at (phin.north west) {latent};
+\node[blk] (lnz)  at (\colC, \rowlat) {LayerNorm};
+\node[blk] (link) at (\colD, {\rowlat+\stack}) {Linear};
+\node[blk] (linv) at (\colD, {\rowlat-\stack}) {Linear};
+\coordinate (zsplit) at (\colsplit, \rowlat);
+
+\draw[wire, latentclr] (phin) -- node[shp, above] {\shapetwo{\Nz}{\Nphi}}
+  node[term, below, font=\small, text=latentclr, align=center, yshift=-1pt]
+  {no source embedding} (lnz);
+\draw[plain, latentclr] (lnz.east) -- (zsplit);
+\draw[wire, latentclr] (zsplit) |- (link.west);
+\draw[wire, latentclr] (zsplit) |- (linv.west);
+
+% =========================== EDGE LANE ======================================
+\node[blk, text width=3.6cm] (aein) at (\colA, \rowedge)
+  {edge attributes\\$\attre$};
+\node[lane, text=edgeclr, anchor=south west] at (aein.north west) {edges};
+\node[blk] (line) at (\colD, \rowedge) {Linear};
+\node[term, anchor=west, align=left, font=\small, text=edgeclr,
+      fill=white, inner sep=2pt] (conn)
+  at ({\colB-1.4}, \rowconn) {graph connectivity\ \ $2\!\times\!\NDE$};
+
+\draw[wire, edgeclr] (aein) -- node[shp, above] {\shapetwo{\NDE}{\Nae}} (line);
+
+% =========================== DATA LANE (destination) ========================
+\node[blk, text width=3.6cm] (psiin) at (\colA, \rowdata)
+  {assembled data input\\[1pt]{\normalsize$\inputvec$ from the encoder}};
+\node[lane, text=dataclr, anchor=south west] at (psiin.north west) {data};
+\node[blk] (embx) at (\colB, \rowdata) {Linear};
+\node[blk] (lnx)  at (\colC, \rowdata) {LayerNorm};
+\node[blk] (linq) at (\colD, {\rowdata+\stack}) {Linear};
+\node[blk] (lins) at (\colD, {\rowdata-\stack}) {Linear};
+\coordinate (xsplit) at (\colsplit, \rowdata);
+
+\draw[wire, dataclr] (psiin) -- node[shp, above] {\shapetwo{\Nx}{\Npsi}} (embx);
+\draw[wire, dataclr] (embx) -- node[shp, above] {\shapetwo{\Nx}{\Nphi}} (lnx);
+\draw[plain, dataclr] (lnx.east) -- (xsplit);
+\draw[wire, dataclr] (xsplit) |- (linq.west);
+\draw[wire, dataclr] (xsplit) |- (lins.west);
+
+% =========================== ATTENTION ======================================
+\node[attnblk, minimum height=17.4cm, text width=5.4cm] (attn) at (\colE, \rowedge)
+  {\textbf{Graph Multi-Head}\\[1pt]\textbf{Attention}\\[3pt]
+   {\small $\NH$ heads $\times$ $\Nc$ channels}\\[10pt]
+   {\large$\displaystyle
+      \attn_{ij}=\operatorname*{softmax}_{i\in\nbhd(\coordx_j)}
+      \frac{\query_j\cdot(\keyv_i+\edgeemb_{ij})}{\sqrt{\Nc}}$}\\[9pt]
+   {\large$\displaystyle
+      \sum_{i\in\nbhd(\coordx_j)}\attn_{ij}\,(\valuev_i+\edgeemb_{ij})$}};
+
+\draw[wire, latentclr] (link.east) -- node[shp, above]
+  {\shapethree{\Nz}{\NH}{\Nc}} node[tag, below, text=latentclr] {$\keyv$}
+  (link.east -| attn.west);
+\draw[wire, latentclr] (linv.east) -- node[tag, below, text=latentclr] {$\valuev$}
+  (linv.east -| attn.west);
+\draw[wire, edgeclr] (line.east) -- node[shp, above, pos=0.42]
+  {\shapethree{\NDE}{\NH}{\Nc}} node[tag, below, pos=0.42, text=edgeclr] {$\edgeemb$}
+  (line.east -| attn.west);
+\draw[wire, dataclr] (linq.east) -- node[shp, above]
+  {\shapethree{\Nx}{\NH}{\Nc}} node[tag, below, text=dataclr] {$\query$}
+  (linq.east -| attn.west);
+\draw[plain, edgeclr, densely dotted] (conn.east) -- (conn.east -| attn.west);
+
+% =========================== POST-ATTENTION CHAIN ===========================
+\node[sum] (res1) at (\colF, \rowedge) {\scriptsize$+$};
+\node[blk] (proj) at (\colG, \rowedge) {Linear};
+\node[sum] (res2) at (\colH, \rowedge) {\scriptsize$+$};
+\node[blk, text width=2.4cm] (ff) at (\colI, \rowedge) {LayerNorm\\MLP};
+\node[sum] (res3) at (\colJ, \rowedge) {\scriptsize$+$};
+\node[diagblk, text width=2.4cm] (extract) at (\colK, \rowedge)
+  {LayerNorm\\Linear};
+\node[deadsum] (resprog) at (\colL, \rowedge) {\scriptsize$+$};
+% Physics diagnostics, defined case by case: computed from the network outputs (and
+% static fields), outside the network.
+\node[physblk, text width=3.0cm] (phys) at (\colM, \rowedge)
+  {\textbf{Physics}\\[1pt]{\small adds $\Nphys$ outputs\\[-1pt]from the $\Nnet$}};
+\node[term, anchor=south, font=\small, text=dataclr] at (phys.north) {+ static fields};
+\node[term, anchor=west, align=left] (out) at ({\colN+0.1}, \rowedge)
+  {$\outvec(t{+}\Delta t)$\\[2pt]{\small the prediction}};
+
+\draw[wire, dataclr] (attn.east) -- (res1);
+\draw[wire, dataclr] (res1) -- (proj);
+\node[tag, above=6pt of res1, text=trapline, align=center]
+  {\small added \emph{before} the\\[-1pt]\small output projection};
+\draw[wire, dataclr] (proj) -- node[shp, above] {\shapetwo{\Nx}{\Nphi}} (res2);
+\draw[wire, dataclr] (res2) -- (ff);
+\draw[wire, dataclr] (ff) -- (res3);
+\draw[wire, dataclr] (res3) -- node[shp, above] {\shapetwo{\Nx}{\Nphi}} (extract);
+\draw[wire, diagclr] (extract) -- node[shp, above] {\shapetwo{\Nx}{\Nnet}}
+  node[tag, below, text=diagclr] {$\idxdiag$} (resprog);
+\draw[wire, dataclr] (resprog) -- (phys);
+\draw[wire, dataclr] (phys) -- node[shp, above] {\shapetwo{\Nx}{\Nout}} (out);
+
+% residual 1 -- the self branch, added in attention space, ahead of the
+% output projection (AIAYN draws that projection inside its attention box)
+\draw[wire, dataclr] (lins.south) |- ({\colF}, \rowselfskip) -- (res1.south);
+\node[shp] at ({(\colD+\colF)/2}, \rowselfskip) {\shapetwo{\Nx}{\Nphi}};
+\node[tag, anchor=west, text=dataclr]
+  at ({\colD+1.25}, {\rowdata-\stack}) {$\selfv$};
+
+% residual 2 -- pre-norm skip taken from the data embedding
+\draw[wire, dataclr] (embx.south) |- ({\colH}, \rowdstskip) -- (res2.south);
+\node[shp] at ({(\colC+\colH)/2}, \rowdstskip) {\shapetwo{\Nx}{\Nphi}};
+
+% residual 3 -- pre-norm skip around the MLP
+\draw[wire, dataclr] ({(\colH+\colI)/2}, \rowedge) |- ({\colJ}, \rowffskip)
+  -- (res3.north);
+
+% =========================== OUTPUT =========================================
+% node_data_extractor is the only place the network leaves latent width; its
+% output columns are the model's output channels.  Which of those columns the
+% residual add reaches -- prognostic only -- is what separates prognostic from
+% diagnostic, and there is no diagnostic branch anywhere to draw.  See the Notes
+% section of network_diagram.tex.
+\node[term, anchor=south, align=center, text=diagclr, font=\small]
+  at ({\colK}, {\rowedge+1.05})
+  {the only projection out of\\[-1pt]latent width};
+
+% the state-persistence residual, which reaches the prognostic channels only.
+% Drawn grey and dashed: here that index set is empty.
+\node[blk, text width=3.6cm, draw=inactiveclr, text=inactiveclr]
+  (skipin) at ({\colA+1.1}, \rowskip)
+  {input state\\[1pt]{\normalsize$\datavec(t)$}};
+\draw[wire, inactiveclr, densely dashed] (skipin.east) -- ({\colL}, \rowskip)
+  node[shp, above, pos=0.58, text=inactiveclr]
+  {added on $\idxprog$ only} -- (resprog.north);
+
+\end{tikzpicture}

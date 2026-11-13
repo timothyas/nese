@@ -120,7 +120,9 @@ def toy_graph() -> HeteroData:
     return graph.to("cpu")
 
 
-def toy_model(n_step_input: int = 2, groups: list[str] = GROUPS) -> tuple[FieldEncoderEncProcDec, IndexCollection]:
+def toy_model(
+    n_step_input: int = 2, groups: list[str] = GROUPS, **model_options
+) -> tuple[FieldEncoderEncProcDec, IndexCollection]:
     variables = names(groups)
     data_config = OmegaConf.create(
         {
@@ -149,6 +151,7 @@ def toy_model(n_step_input: int = 2, groups: list[str] = GROUPS) -> tuple[FieldE
                     "latent_skip": True,
                     "fields": "${training.training_loss.datasets.data.observations}",
                     "field_channels": CHANNELS,
+                    **model_options,
                 },
                 "trainable_parameters": {"data": 0, "hidden": 0, "data2hidden": 0, "hidden2data": 0, "hidden2hidden": 0},
                 "layer_kernels": {},
@@ -227,3 +230,76 @@ def test_unobserved_extra_group_leaves_prediction_unchanged():
         expected = trained({"data": stack_inputs(trained_indices, columns)})["data"]
         actual = extended({"data": stack_inputs(extended_indices, columns | extra)})["data"]
     torch.testing.assert_close(actual, expected)
+
+
+def test_resolve_field_columns_moves_static_out_of_passthrough():
+    name_to_index = {name: i for i, name in enumerate(names()[:-1])}
+    columns = resolve_field_columns(SPEC, name_to_index, static=["elevation"])
+    assert columns.static == [6]
+    assert columns.passthrough == [7]
+
+
+@pytest.mark.parametrize("static", ["obs_count_jason_2", "not_an_input"])
+def test_resolve_field_columns_rejects_misplaced_static(static):
+    name_to_index = {name: i for i, name in enumerate(names()[:-1])}
+    with pytest.raises(ValueError, match=static):
+        resolve_field_columns(SPEC, name_to_index, static=[static])
+
+
+def test_future_forcing_steps_must_leave_an_observed_step():
+    with pytest.raises(ValueError, match="future_forcing_steps"):
+        toy_model(n_step_input=2, future_forcing_steps=2)
+
+
+KNOWN_FORCING = {"static_forcing": ["elevation"], "future_forcing_steps": 1}
+
+
+def test_input_dim_counts_static_once_and_future_dynamic_forcings():
+    model, _ = toy_model(n_step_input=3, **KNOWN_FORCING)
+    node_attributes = model.node_attributes.attr_ndims["data"]
+    assert model.input_dim["data"] == 2 * (CHANNELS + 1) + 1 + 1 + node_attributes
+
+
+def test_default_options_reproduce_the_original_layout():
+    torch.manual_seed(0)
+    default, indices = toy_model()
+    torch.manual_seed(0)
+    explicit, _ = toy_model(static_forcing=[], future_forcing_steps=0)
+    grid = default._graph_data["data"].num_nodes
+    x = torch.randn(1, 2, 1, grid, len(indices.model.input))
+    default.eval(), explicit.eval()
+    with torch.no_grad():
+        torch.testing.assert_close(explicit({"data": x})["data"], default({"data": x})["data"], rtol=0, atol=0)
+
+
+def predict_perturbed(step: int, name: str) -> tuple[torch.Tensor, torch.Tensor]:
+    """Predictions from a 3-step window (t0-dt, t0, t0+dt) before and after perturbing one input."""
+    torch.manual_seed(0)
+    model, indices = toy_model(n_step_input=3, **KNOWN_FORCING)
+    grid = model._graph_data["data"].num_nodes
+    shape = (1, 3, 1, grid)
+    columns = {name: torch.randn(shape) for name in names()}
+    columns |= {f"obs_count_{group}": torch.ones(shape) for group in GROUPS}
+    x = stack_inputs(indices, columns)
+    perturbed = x.clone()
+    perturbed[:, step, ..., indices.model.input.name_to_index[name]] += 10.0
+    model.eval()
+    with torch.no_grad():
+        return model({"data": x})["data"], model({"data": perturbed})["data"]
+
+
+@pytest.mark.parametrize("name", ["sla_filtered_jason_2", "obs_count_jason_2", "elevation"])
+def test_future_slot_reads_no_observation_or_static(name):
+    expected, actual = predict_perturbed(step=-1, name=name)
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+def test_static_forcing_is_read_from_t0_only():
+    expected, actual = predict_perturbed(step=0, name="elevation")
+    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
+
+
+@pytest.mark.parametrize(("step", "name"), [(-1, "cos_latitude"), (1, "elevation"), (1, "sla_filtered_jason_2")])
+def test_known_inputs_reach_the_prediction(step, name):
+    expected, actual = predict_perturbed(step=step, name=name)
+    assert not torch.allclose(actual, expected)
