@@ -37,7 +37,7 @@ BASELINES = {
 }
 
 EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "update-forcings-v0"
+EXPERIMENT_LABEL = "no-latent-skip-aa-v0"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 

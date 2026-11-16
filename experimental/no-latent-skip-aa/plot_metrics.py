@@ -26,7 +26,7 @@ BASELINES = {
 }
 
 EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "update-forcings-v0"
+EXPERIMENT_LABEL = "no-latent-skip-aa-v0"
 
 # (inference dir, violin color) per persistence resolution
 PERSISTENCE = {
