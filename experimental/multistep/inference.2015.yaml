@@ -14,7 +14,11 @@ date_range:
 output:
   nese-zarr: ${debugging_info.root_dir}/inference-2015
 # Only the center estimate is kept, at the date itself, see nese-inference docs/runners.md
-runner: state_estimation
+# Hides observations as training did, so verification can score where the model saw nothing
+runner:
+  state_estimation:
+    mask_fraction: 0.25
+    mask_seed: 0
 lead_time: 0h
 write_initial_state: false
 # Never written, but nese-zarr reads the grid from it, and this model has no prognostics
