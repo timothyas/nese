@@ -1,0 +1,41 @@
+debugging_info:
+  root_dir: runs/v0
+  run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
+checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
+
+# Each date is the time estimated, from observations at:
+# [date-24h, date, date+24h],
+# so the range is every date with a neighbour either side inside the period
+date_range:
+  start: 2019-01-02T12
+  end: 2020-12-30T12  # the dataset ends 2020-12-31
+  freq: 24h
+
+output:
+  nese-zarr: ${debugging_info.root_dir}/inference-validation
+# Only the center estimate is kept, at the date itself, see nese-inference docs/runners.md
+runner: state_estimation
+lead_time: 0h
+write_initial_state: false
+# Never written, but nese-zarr reads the grid from it, and this model has no prognostics
+initial_state_categories: [dynamic_forcings]
+allow_nans: true
+
+input:
+  dataset:
+    join:
+      - dataset: ../all-altimeter/anemoi-hpx8-24h/dataset.zarr
+      - dataset: ../all-altimeter/anemoi-hpx8-24h/dataset.zarr
+        select:
+          - sla_filtered_jason_2
+          - ugxt_jason_2
+          - vgxt_jason_2
+          - swh_denoised_jason_2
+        rename:
+          sla_filtered_jason_2: sla
+          ugxt_jason_2: ugxt
+          vgxt_jason_2: vgxt
+          swh_denoised_jason_2: swh
+
+logistics:
+  third_party_log_level: warning
