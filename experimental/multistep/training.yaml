@@ -708,7 +708,7 @@ task:
   _target_: nese_training.tasks.MaskedStateEstimator
   timestep: ${data.frequency}
   fields: ${training.training_loss.datasets.ocean.observations}
-  mask_fraction: 0.25
+  mask_fraction: 0.75
   validation_seed: 0
 
 graph:
@@ -1073,7 +1073,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v1.25
+      experiment_name: v1.75
       project_name: multistep
       terminal: false
       system: false

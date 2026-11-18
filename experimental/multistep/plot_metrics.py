@@ -21,11 +21,11 @@ import xarray as xr
 FIELDS = ["sla", "uvgxt", "swh"]
 FHR = {"baseline": 0, "experiment": 0}
 
-BASELINE_DIR = "runs/v0/inference-validation"
-BASELINE_LABEL = "State Estimation (multistep-v0)"
+BASELINE_DIR = "runs/v1.25/inference-validation"
+BASELINE_LABEL = "State Estimation (multistep-v1.25)"
 
-EXPERIMENT_DIR = "runs/v1.25/inference-validation"
-EXPERIMENT_LABEL = "State Estimation (multistep-v1.25)"
+EXPERIMENT_DIR = "runs/v1.75/inference-validation"
+EXPERIMENT_LABEL = "State Estimation (multistep-v1.75)"
 
 # (inference dir, violin color) per persistence resolution; {} for none. A guiding reference at
 # PERSISTENCE_FHR: persistence is scored at forecast hours only, not at the runs' fhr 0
