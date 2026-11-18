@@ -36,3 +36,65 @@ middle time step and slide the 3 step window across the observation record.
       `[-2𝚫t, -𝚫t, 0, +𝚫t, +2𝚫t] -> [-𝚫t, 0, +𝚫t]`
     * It could be uncentered, e.g.
       `[-2𝚫t, -𝚫t, 0, +𝚫t] -> [-2𝚫t, -𝚫t, 0, +𝚫t]`
+
+## Results
+
+### Version 0
+
+This hides a fraction of `(cell, time)`, so it hides any cell regardless of
+whether or not it was observed.
+
+Here I used `mask_fraction = 0.25`, different from what I originally proposed
+above, although what I originally wrote is a little confusing.
+Here, this meant that this fraction of cells was removed by setting
+`obs_count_{x} = 0`, effectively a mask.
+
+It is hard to directly compare to the forecasting setup.
+On the one hand, the forecast setup receives 3 timesteps on input, and scores
+them on one.
+From that perspective, it's like the model sees 75% of the observations with 25%
+masked.
+On the other hand, if we think of observed vs unobserved cells, in
+`../unseen-ft-all-altimeter/README.md` it was shown that the typical loss is
+made up of ~75% grid cells that are unseen at input time.
+
+In short, this motivates a sensitivity study once the hidden fraction definition
+is settled.
+
+#### RMSE:
+* The RMSE scores are overall excellent, significantly beating persistence in
+  all seen/unseen combinations.
+* The `fhr` doesn't matter, each has the same accuracy relatively speaking.
+* For each `fhr` selected, the lowest error is achieved for observations in that
+  time slot (~0.9 cm).
+* Error is a little higher at grid cells that are observed at input time, but at
+  different forecast hours (~1.3 cm).
+* Error at unseen grid cells, determined by the `input_hidden` mask, is highest
+  of all again, but signficantly lower than before (2.3 cm vs 5.5 cm with
+  forecasting)
+* Those numbers are for SLA, but improvements are across the board for all
+  variables
+
+#### Extrema:
+* Extreme values for all variables match the observed values surprisingly well
+
+#### Qualitative plots:
+* This is where we see some issues. Plots are visibly noisy
+* "unobserved patches" exist as in the forecasting task, except here things are
+  much noisier
+
+#### Interpretation / conclusion:
+The model is not regularized enough, and spitting out predictions that fit the
+data too well.
+Possible paths forward, after fixing the masking:
+* Test different mask fractions, e.g. 0.25 and 0.75 for now. Does a higher mask
+  fraction return something closer to the forecasting setup?
+  Is the better fit + noisy predictions just coming from the fact that I copied
+  this setup over (same `weight_decay`), but the misfit / weight decay ratio is
+  very different here?
+* Could a variable mask fraction schedule be appropriate? Give the model tons of
+  observations at first, and then continually stress its ability to fill in the
+  gaps as training proceeds?
+* If not, I need to think about why this is so different from the forecasting
+  setup.
+* Or, is it really time to add a Matern-type regularization here?

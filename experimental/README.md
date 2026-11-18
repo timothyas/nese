@@ -62,10 +62,16 @@ Lineage
 9. `unseen-ft-all-altimeter`: picks up from all-altimeter v2p2 and fine tunes
    for 2 epochs with a loss focusing on the "unseen" targets. This has no
    improvement over training for 2 more epochs with the standard loss.
+10. `no-latent-skip-aa`: TL; DR nothing to see here. Just seeing if this changed
+    the nature of predictions, or forced the model to use different pathways to
+    learn the signal. No, it's just slightly worse.
+11. `multistep`: state estimation over `[t-dt, t, t+dt]` as inputs and outputs
 
 
 
 ## Overfitting
+
+This note stopped being relevant at all-altimeter 25km setup, at least.
 
 These runs are still simple univariate prototypes, so this isn't worth a ton of
 attention, but even 10k iterations results in overfitting, at least with a peak
