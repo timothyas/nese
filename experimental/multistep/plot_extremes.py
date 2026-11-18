@@ -28,13 +28,13 @@ import xarray as xr
 # --- things to update -------------------------------------------------------
 
 FIELDS = ["sla", "uvgxt", "swh"]
-FHR = {"baseline": 24, "experiment": 0}
+FHR = {"baseline": 0, "experiment": 0}
 
-BASELINE_DIR = "../update-forcings-aa/runs/v0/inference-validation"
-BASELINE_LABEL = "Forecasting (update-forcings-v0)"
+BASELINE_DIR = "runs/v0/inference-validation"
+BASELINE_LABEL = "State Estimation (multistep-v0)"
 
-EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "State Estimation (multistep-v0)"
+EXPERIMENT_DIR = "runs/v1.25/inference-validation"
+EXPERIMENT_LABEL = "State Estimation (multistep-v1.25)"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 

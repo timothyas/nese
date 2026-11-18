@@ -1073,7 +1073,7 @@ diagnostics:
       _target_: anemoi.training.diagnostics.mlflow.logger.AnemoiMLflowLogger
       offline: true
       on_resume_create_child: false
-      experiment_name: v0
+      experiment_name: v1.25
       project_name: multistep
       terminal: false
       system: false

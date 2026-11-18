@@ -19,18 +19,20 @@ import xarray as xr
 # --- things to update -------------------------------------------------------
 
 FIELDS = ["sla", "uvgxt", "swh"]
-FHR = {"baseline": 24, "experiment": 0}
+FHR = {"baseline": 0, "experiment": 0}
 
-BASELINE_DIR = "../update-forcings-aa/runs/v0/inference-validation"
-BASELINE_LABEL = "Forecasting (update-forcings-v0)"
+BASELINE_DIR = "runs/v0/inference-validation"
+BASELINE_LABEL = "State Estimation (multistep-v0)"
 
-EXPERIMENT_DIR = "runs/v0/inference-validation"
-EXPERIMENT_LABEL = "State Estimation (multistep-v0)"
+EXPERIMENT_DIR = "runs/v1.25/inference-validation"
+EXPERIMENT_LABEL = "State Estimation (multistep-v1.25)"
 
-# (inference dir, violin color) per persistence resolution, at the baseline's FHR; {} for none
+# (inference dir, violin color) per persistence resolution; {} for none. A guiding reference at
+# PERSISTENCE_FHR: persistence is scored at forecast hours only, not at the runs' fhr 0
 PERSISTENCE = {
     "25km": ("../all-altimeter/runs/v2p0/inference-validation", "lightgray"),
 }
+PERSISTENCE_FHR = 24
 PERSISTENCE_LABEL = "persistence"
 
 METRICS = ["rmse"]
@@ -96,7 +98,7 @@ def in_time_order(seen_at):
 def read_persistence(field):
     def read(run_dir):
         path = here / run_dir / "persistence-metrics" / f"{field}.nc"
-        persistence = xr.open_dataset(path).sel(fhr=FHR["baseline"], source="pooled", drop=True)
+        persistence = xr.open_dataset(path).sel(fhr=PERSISTENCE_FHR, source="pooled", drop=True)
         return persistence[METRICS].reset_coords(drop=True).load()
 
     return xr.concat(
@@ -125,8 +127,8 @@ def place_legend(ax):
     handles = [*legend.legend_handles,
                *(Patch(facecolor=color, edgecolor="0.4") for _, color in PERSISTENCE.values())]
     labels = [*version_labels(),
-              *(f"{prettify(PERSISTENCE_LABEL)} {resolution}" if len(PERSISTENCE) > 1
-                else prettify(PERSISTENCE_LABEL) for resolution in PERSISTENCE)]
+              *(f"{prettify(PERSISTENCE_LABEL)} {resolution} (fhr {PERSISTENCE_FHR})" if len(PERSISTENCE) > 1
+                else f"{prettify(PERSISTENCE_LABEL)} (fhr {PERSISTENCE_FHR})" for resolution in PERSISTENCE)]
     ax.legend(handles, labels, loc="center left", bbox_to_anchor=(1, 0.5), title="Version", frameon=False)
 
 
