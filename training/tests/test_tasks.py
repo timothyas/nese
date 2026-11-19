@@ -11,6 +11,7 @@ from omegaconf import OmegaConf
 from nese_training.methods import MaskedInputTraining
 from nese_training.tasks import KnownForcingForecaster
 from nese_training.tasks import MaskedStateEstimator
+from nese_training.tasks import hide_observed
 
 DAY = datetime.timedelta(days=1)
 
@@ -62,8 +63,8 @@ def indices() -> dict[str, IndexCollection]:
 @pytest.fixture
 def batch() -> dict[str, torch.Tensor]:
     torch.manual_seed(0)
-    data = torch.randn(1, 3, 1, N_GRID, len(VARIABLES))
-    data[..., COUNTS] = 1.0
+    data = torch.randn(2, 3, 1, N_GRID, len(VARIABLES))
+    data[..., COUNTS] = (torch.rand(2, 3, 1, N_GRID, len(COUNTS)) < 0.3).float()
     return {"ocean": data}
 
 
@@ -71,8 +72,12 @@ def estimator(**kwargs) -> MaskedStateEstimator:
     return MaskedStateEstimator(timestep="24h", fields=SPEC, **kwargs)
 
 
+def observed(batch: dict[str, torch.Tensor]) -> torch.Tensor:
+    return (batch["ocean"][..., COUNTS] > 0).any(-1)
+
+
 def hidden(x: dict[str, torch.Tensor]) -> torch.Tensor:
-    return x["ocean"][..., COUNTS] == 0
+    return (x["ocean"][..., COUNTS] == 0).all(-1)
 
 
 def test_estimates_the_input_times():
@@ -82,11 +87,19 @@ def test_estimates_the_input_times():
     assert task._get_timestep_for_metadata() == "1d"
 
 
-def test_hides_the_mask_fraction_of_every_group_together(batch, indices):
+def test_hides_exactly_the_mask_fraction_of_observed_cells_every_group_together(batch, indices):
+    seen = observed(batch)
     x = estimator(mask_fraction=0.25).get_inputs(batch, indices)
-    mask = hidden(x)
-    assert torch.equal(mask[..., 0], mask[..., 1])
-    assert mask[..., 0].float().mean().item() == pytest.approx(0.25, abs=0.01)
+    newly_hidden = seen & hidden(x)
+    assert torch.equal((x["ocean"][..., COUNTS] > 0).any(-1), seen & ~newly_hidden)
+    torch.testing.assert_close(newly_hidden.sum(-1), torch.round(0.25 * seen.sum(-1)).long())
+
+
+def test_hide_observed_never_hides_an_unobserved_cell():
+    observed_cells = torch.tensor([[True, False, True, True], [False, False, False, False]])
+    hidden_cells = hide_observed(observed_cells, 0.5, torch.Generator().manual_seed(0))
+    assert not (hidden_cells & ~observed_cells).any()
+    assert hidden_cells.sum(-1).tolist() == [2, 0]
 
 
 def test_only_counts_change_and_targets_keep_every_observation(batch, indices):

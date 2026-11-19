@@ -9,8 +9,8 @@ Rolling out would roll that slot into the past, so it is refused.
 
 ``MaskedStateEstimator`` estimates the states at ``[-dt, 0, +dt]`` from the observations at
 those same times. ``FieldEncoder`` treats a cell as observed exactly where its count is above
-zero, so zeroing every field's counts at a random fraction of ``(cell, time)`` hides all
-missions there. ``get_inputs`` indexes a copy, so the targets keep every observation.
+zero, so zeroing every field's counts at a cell and time hides all missions there. Exactly
+``mask_fraction`` of each sample's observed cells is hidden at each input time. ``get_inputs`` indexes a copy, so the targets keep every observation.
 ``get_inputs`` has no mode argument: ``nese_training.methods.MaskedInputTraining`` sets
 ``validation_mode`` and resets the seeded validation mask each validation epoch.
 """
@@ -90,7 +90,16 @@ class MaskedStateEstimator(BaseSingleStepTask):
         x = super().get_inputs(batch, data_indices, **kwargs)
         for dataset_name, inputs in x.items():
             counts = self.count_columns(data_indices[dataset_name].model.input.name_to_index)
-            draw = torch.rand(inputs.shape[:-1], generator=self._generator(inputs.device), device=inputs.device)
-            hidden = (draw < self.mask_fraction).unsqueeze(-1)
-            inputs[..., counts] = inputs[..., counts].masked_fill(hidden, 0)
+            observed = (inputs[..., counts] > 0).any(-1)
+            hidden = hide_observed(observed, self.mask_fraction, self._generator(inputs.device))
+            inputs[..., counts] = inputs[..., counts].masked_fill(hidden.unsqueeze(-1), 0)
         return x
+
+
+def hide_observed(observed: torch.Tensor, fraction: float, generator: torch.Generator | None) -> torch.Tensor:
+    """Exactly ``round(fraction * n)`` of the ``n`` observed cells along the last dim of
+    ``observed``, chosen uniformly at random in each row."""
+    draw = torch.rand(observed.shape, generator=generator, device=observed.device).masked_fill(~observed, 2.0)
+    k = torch.round(fraction * observed.sum(-1, keepdim=True)).long()
+    threshold = draw.sort(-1).values.gather(-1, (k - 1).clamp(min=0))
+    return (draw <= threshold) & (k > 0)
