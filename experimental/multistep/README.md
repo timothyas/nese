@@ -98,3 +98,43 @@ Possible paths forward, after fixing the masking:
 * If not, I need to think about why this is so different from the forecasting
   setup.
 * Or, is it really time to add a Matern-type regularization here?
+
+### Version 1
+
+Now, only observed locations are masked.
+Broadly speaking, this didn't change the results or character of the solutions,
+but it feels a bit better.
+
+I trained two models:
+* v1.25: `mask_fraction = 0.25` (repeat of v0 basically)
+* v1.75: `mask_fraction = 0.75`
+The latter hides much more information from the training.
+I then ran inference with v1.75 using mask fraction of 0.25.
+
+
+#### RMSE:
+* v1.25 matches v0, essentially
+* v1.25 has better scores than v1.75
+* But, when v1.75 is run with .25 during inference, it's much more equal (v1.25
+  is slightly better, but maybe not significantly and within measurement noise).
+
+#### Extrema
+* No big differences here, except that v1.75 with i.25 looks closer to v1.25
+
+#### Qualtatively
+* v1.25 is very noisy
+* v1.75 and v1.75i.25 have similar noise levels: rippling along the data streams
+  is still present, but less so than v1.25.
+* Visually, it's the same rippling, but 1.75i.25 fits the unseen and
+  previous/after center time observations better.
+* Actually, v1.75i.25 has slightly better unseen RMSE than v1.25
+
+Takeaway: advantageous to train with higher mask fractions (more data hidden
+during training). Then run inference without any.
+
+Still to do: address the rippling.
+* Staged training with even lower mask fractions toward the end
+* Matern loss
+* Incorporate observation error
+* Other constraints?
+
