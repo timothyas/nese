@@ -36,3 +36,14 @@ applications that roll out over many timesteps.
 
 Supporting rollout would mean writing the forcings for each new target time into the future
 slot at every step, in both the training task's `advance_input` and the inference runner.
+
+## Results
+
+### v0
+
+This design is cleaner and makes me feel good, but it doesn't meaningfully
+change anything in terms of performance.
+RMSE is less than 1% different, and the fields look qualitatively the same.
+
+Conclusion: this may matter more for a model setup with more important forcings,
+but for now it's no big deal.

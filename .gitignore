@@ -15,6 +15,7 @@
 *.jpg
 *.gif
 *.mp4
+demo-media
 
 # -- latex
 ## Core latex/pdflatex auxiliary files:
