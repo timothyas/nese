@@ -1,5 +1,5 @@
 debugging_info:
-  root_dir: runs/v1.75
+  root_dir: runs/v1.95
   run_id: ${oc.env:NESE_RUN_ID}  # set by nese-submit
 checkpoint: ${debugging_info.root_dir}/checkpoint/${debugging_info.run_id}/inference-last.ckpt
 
@@ -17,7 +17,7 @@ output:
 # Hides observations as training did, so verification can score where the model saw nothing
 runner:
   state_estimation:
-    mask_fraction: 0.75
+    mask_fraction: 0.25
     mask_seed: 0
 lead_time: 0h
 write_initial_state: false
