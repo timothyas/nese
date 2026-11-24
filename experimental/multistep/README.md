@@ -108,6 +108,7 @@ but it feels a bit better.
 I trained two models:
 * v1.25: `mask_fraction = 0.25` (repeat of v0 basically)
 * v1.75: `mask_fraction = 0.75`
+* v1.95: `mask_fraction = 0.95` (only ran inference at 0.25)
 The latter hides much more information from the training.
 I then ran inference with v1.75 using mask fraction of 0.25.
 
@@ -117,17 +118,24 @@ I then ran inference with v1.75 using mask fraction of 0.25.
 * v1.25 has better scores than v1.75
 * But, when v1.75 is run with .25 during inference, it's much more equal (v1.25
   is slightly better, but maybe not significantly and within measurement noise).
+* v1.95 is too extreme. Even when running inference with a mask fraction at
+  0.25, all error increases significantly, getting to the persistence forecast
+  except for the observations of the day.
+
 
 #### Extrema
 * No big differences here, except that v1.75 with i.25 looks closer to v1.25
+* 0.95 gets significantly more peaked though.
 
-#### Qualtatively
+#### Qualitatively
 * v1.25 is very noisy
 * v1.75 and v1.75i.25 have similar noise levels: rippling along the data streams
   is still present, but less so than v1.25.
 * Visually, it's the same rippling, but 1.75i.25 fits the unseen and
   previous/after center time observations better.
 * Actually, v1.75i.25 has slightly better unseen RMSE than v1.25
+* v1.95 has slightly less noise/rippling but magnitudes are also noticeably
+  smaller. Maybe that goes hand in hand.
 
 Takeaway: advantageous to train with higher mask fractions (more data hidden
 during training). Then run inference without any.
@@ -137,4 +145,6 @@ Still to do: address the rippling.
 * Matern loss
 * Incorporate observation error
 * Other constraints?
+
+
 

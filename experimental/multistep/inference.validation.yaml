@@ -12,7 +12,7 @@ date_range:
   freq: 24h
 
 output:
-  nese-zarr: ${debugging_info.root_dir}/inference-validation
+  nese-zarr: ${debugging_info.root_dir}/inference-validation-0.25
 # Only the center estimate is kept, at the date itself, see nese-inference docs/runners.md
 # Hides observations as training did, so verification can score where the model saw nothing
 runner:

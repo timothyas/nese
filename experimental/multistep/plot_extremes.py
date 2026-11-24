@@ -33,8 +33,8 @@ FHR = {"baseline": 0, "experiment": 0}
 BASELINE_DIR = "runs/v1.25/inference-validation"
 BASELINE_LABEL = "State Estimation (multistep-v1.25)"
 
-EXPERIMENT_DIR = "runs/v1.75/inference-validation-0.25"
-EXPERIMENT_LABEL = "State Estimation (multistep-v1.75-i0.25)"
+EXPERIMENT_DIR = "runs/v1.95/inference-validation-0.25"
+EXPERIMENT_LABEL = "State Estimation (multistep-v1.95-i0.25)"
 OBSERVATIONS_LABEL = "observations"
 CELLS = ["All cells", "Observed cells"]
 
